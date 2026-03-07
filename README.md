@@ -208,7 +208,6 @@ Tested on Qualcomm A/B devices:
 | Device | Model | Status |
 |--------|-------|--------|
 | Realme GT Neo 5 | RMX3709 | ✅ Working |
-| OnePlus | CPH2653 | ✅ Working |
 
 Other OnePlus / OPPO / Realme devices with Qualcomm SoC and A/B layout should work.  
 If your device works (or doesn't) — open an issue!
