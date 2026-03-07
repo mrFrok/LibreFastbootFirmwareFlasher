@@ -175,13 +175,34 @@ def _fetch_latest_pdg_release() -> dict | None:
         return None
 
 
+def _pdg_is_runnable() -> bool:
+    """Return True if the installed payload-dumper-go actually executes on this platform."""
+    binary = shutil.which(_PDG_BINARY)
+    if not binary:
+        return False
+    try:
+        proc = subprocess.run(
+            [binary, "--help"],
+            capture_output=True,
+            timeout=5,
+        )
+        # Any exit code is fine as long as the OS could exec it.
+        # "cannot execute binary file" -> OSError / non-zero with specific stderr.
+        return b"cannot execute" not in proc.stderr and proc.returncode != 126
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _install_payload_dumper_go() -> DepResult:
     """Download and install payload-dumper-go from GitHub releases."""
     result = DepResult(tool="payload-dumper-go")
 
-    if shutil.which(_PDG_BINARY):
+    if _pdg_is_runnable():
         result.already_installed = True
         return result
+
+    if shutil.which(_PDG_BINARY):
+        print("  ⚠  payload-dumper-go found but not runnable on this platform — reinstalling ...")
 
     print("  Fetching latest payload-dumper-go release from GitHub ...")
     release = _fetch_latest_pdg_release()
