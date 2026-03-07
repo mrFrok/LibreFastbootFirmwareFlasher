@@ -192,8 +192,7 @@ lfff deps fastboot     # install only fastboot
 Tested on **OnePlus / OPPO / Realme** devices with Qualcomm SoC and A/B partition layout.
 
 Known working:
-- RMX3709 (Realme GT3 Neo 5)
-- CPH2653 (OnePlus ...)
+- RMX3706/RMX3708/RMX3709 (Realme GT3/Neo 5)
 
 Support for other A/B Qualcomm devices is likely but untested.  
 If your device works (or doesn't), open an issue!
@@ -244,4 +243,4 @@ LibreFastbootFirmwareFlasher/
 
 ## License
 
-[MIT](LICENSE)
+[GPL3](LICENSE)
