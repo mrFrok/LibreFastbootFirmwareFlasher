@@ -193,6 +193,33 @@ def _pdg_is_runnable() -> bool:
         return False
 
 
+def _install_pdg_via_aur(helper: str) -> DepResult:
+    """Install payload-dumper-go via AUR helper (yay/paru)."""
+    result = DepResult(tool="payload-dumper-go")
+    print(f"  Installing payload-dumper-go via {helper} (AUR) ...")
+    proc = subprocess.run(
+        [helper, "-S", "--noconfirm", "payload-dumper-go"],
+        capture_output=True, text=True
+    )
+    if proc.returncode == 0 and shutil.which(_PDG_BINARY):
+        result.installed = True
+    else:
+        result.error = proc.stderr.strip() or f"{helper} install failed"
+    return result
+
+
+def _install_pdg_via_brew() -> DepResult:
+    """Install payload-dumper-go via Homebrew (macOS preferred path)."""
+    result = DepResult(tool="payload-dumper-go")
+    print("  Installing payload-dumper-go via Homebrew ...")
+    proc = subprocess.run(["brew", "install", "payload-dumper-go"], capture_output=True, text=True)
+    if proc.returncode == 0 and shutil.which(_PDG_BINARY):
+        result.installed = True
+    else:
+        result.error = proc.stderr.strip() or "brew install failed"
+    return result
+
+
 def _install_payload_dumper_go() -> DepResult:
     """Download and install payload-dumper-go from GitHub releases."""
     result = DepResult(tool="payload-dumper-go")
@@ -203,6 +230,16 @@ def _install_payload_dumper_go() -> DepResult:
 
     if shutil.which(_PDG_BINARY):
         print("  ⚠  payload-dumper-go found but not runnable on this platform — reinstalling ...")
+
+    # On macOS prefer Homebrew — avoids Gatekeeper quarantine issues
+    if platform.system().lower() == "darwin" and shutil.which("brew"):
+        return _install_pdg_via_brew()
+
+    # On Arch/Manjaro prefer AUR helper — package is already there
+    if platform.system().lower() == "linux":
+        for aur_helper in ("yay", "paru"):
+            if shutil.which(aur_helper):
+                return _install_pdg_via_aur(aur_helper)
 
     print("  Fetching latest payload-dumper-go release from GitHub ...")
     release = _fetch_latest_pdg_release()
@@ -259,6 +296,11 @@ def _install_payload_dumper_go() -> DepResult:
                 return result
 
             binary.chmod(0o755)
+
+            # Remove macOS Gatekeeper quarantine flag if present
+            if platform.system().lower() == "darwin":
+                subprocess.run(["xattr", "-d", "com.apple.quarantine", str(binary)],
+                               capture_output=True)
 
             # Install
             dest = _PDG_INSTALL

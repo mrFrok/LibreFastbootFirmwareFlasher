@@ -92,19 +92,19 @@ if [ "$PLATFORM" = "linux" ]; then
             ATOMIC=1 ;;
     esac
 
-    # 2. ostree deployment layout
+    # 2. ostree deployment layout (Fedora Silverblue, Bazzite etc.)
     if [ "$ATOMIC" -eq 0 ] && [ -d /ostree ]; then
         ATOMIC=1
     fi
 
-    # 3. /usr is read-only (strongest signal — catches anything we missed)
-    if [ "$ATOMIC" -eq 0 ]; then
-        if ! touch /usr/.lfff_write_test 2>/dev/null; then
-            ATOMIC=1
-        else
-            rm -f /usr/.lfff_write_test
-        fi
+    # 3. NixOS-specific marker
+    if [ "$ATOMIC" -eq 0 ] && [ -f /etc/NIXOS ]; then
+        ATOMIC=1
     fi
+
+    # NOTE: We intentionally do NOT test if /usr is writable — that check
+    # produces false positives on distros like CachyOS that mount /usr
+    # read-only for performance/safety but are not immutable.
 fi
 
 # ── Decide install paths ──────────────────────────────────────────────────────
