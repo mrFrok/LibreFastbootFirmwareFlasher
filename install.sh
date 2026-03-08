@@ -70,15 +70,17 @@ ${O} ╚══════╝${R}${O}╚═╝     ${R}${O}╚═╝     ${R}${O
 MODE="build"
 for arg in "$@"; do
     case "$arg" in
-        --prebuilt|-p)  MODE="prebuilt" ;;
-        --uninstall|-r) MODE="uninstall" ;;
-        --update|-u)    MODE="update" ;;
+        --prebuilt|-p)   MODE="prebuilt" ;;
+        --uninstall|-r)  MODE="uninstall" ;;
+        --update|-u)     MODE="update" ;;
+        --reinstall|-i)  MODE="reinstall" ;;
         --help|-h)
             echo "Usage: $0 [options]"
             echo ""
             echo "  (no flag)              build from source and install"
             echo "  --prebuilt,  -p        install existing dist/lfff/ without building"
             echo "  --update,    -u        pull latest changes from git and reinstall"
+            echo "  --reinstall, -i        uninstall and reinstall from scratch"
             echo "  --uninstall, -r        remove lfff from the system"
             echo "  --help,      -h        show this help"
             exit 0 ;;
@@ -217,6 +219,22 @@ ${G}━━━━━━━━━━━━━━━━━━━━━━━━━�
     MODE="build"
 fi
 
+# ── Reinstall ────────────────────────────────────────────────────────────────
+if [ "$MODE" = "reinstall" ]; then
+    hdr "Reinstalling lfff"
+
+    # Remove existing installation silently
+    for try_bin in "/usr/local/bin/${BINARY_NAME}" "${HOME}/.local/bin/${BINARY_NAME}"; do
+        [ -f "$try_bin" ] && { [[ "$try_bin" == /usr/* ]] && sudo rm -f "$try_bin" || rm -f "$try_bin"; ok "Removed $try_bin"; }
+    done
+    for try_lib in "/usr/local/lib/lfff" "${HOME}/.local/lib/lfff"; do
+        [ -d "$try_lib" ] && { [[ "$try_lib" == /usr/* ]] && sudo rm -rf "$try_lib" || rm -rf "$try_lib"; ok "Removed $try_lib"; }
+    done
+
+    info "Proceeding with fresh install ..."
+    MODE="build"
+fi
+
 # ── Check project root ────────────────────────────────────────────────────────
 [ -f "main.py" ] || die \
     "main.py not found in current directory." \
@@ -245,7 +263,7 @@ install_hint() {
                 esac
             elif command -v pacman &>/dev/null; then
                 case "$cmd" in
-                    python3|pip3) echo "sudo pacman -S python python-pip" ;;
+                    python3|pip3) echo "sudo pacman -S python" ;;
                     make)         echo "sudo pacman -S base-devel" ;;
                     *)            echo "sudo pacman -S $cmd" ;;
                 esac
@@ -309,15 +327,12 @@ ok "Python $PY_VER"
 if [ "$MODE" = "build" ]; then
     hdr "Building lfff"
 
-    info "Installing Python dependencies ..."
-    if ! make install 2>&1 | grep -v "^$" | sed 's/^/     /'; then
+    info "Running make rebuild ..."
+    if ! make rebuild 2>&1 | grep -v "^$" | sed 's/^/     /'; then
         die \
-            "Failed to install Python dependencies." \
-            "Try running manually:\n  ${BOLD}make install${R}\nand check the error output above."
+            "make rebuild failed." \
+            "Run manually to see full output:\n  ${BOLD}make rebuild${R}"
     fi
-
-    info "Building binary with cx_Freeze ..."
-    make build 2>&1 | grep -E "(✓|✗|error|Error|warning)" | sed 's/^/     /' || true
 
     if [ ! -f "${DIST_DIR}/${BINARY_NAME}" ]; then
         FOUND=$(find dist/ -name "$BINARY_NAME" -type f 2>/dev/null | head -1)
@@ -326,7 +341,7 @@ if [ "$MODE" = "build" ]; then
         else
             die \
                 "Build failed — binary not found in dist/" \
-                "Run the build manually to see full output:\n  ${BOLD}make build${R}"
+                "Run the build manually to see full output:\n  ${BOLD}make rebuild${R}"
         fi
     fi
     ok "Build complete → ${DIST_DIR}/${BINARY_NAME}"

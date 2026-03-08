@@ -19,9 +19,9 @@ from dataclasses import dataclass, field
 
 from flasher.device import run_pre_flash_checks
 from flasher.arb import (
+    ArbInfo,
     find_xbl_image,
     extract_arb_from_xbl,
-    get_device_arb_version,
     compare_arb_versions,
     arb_confirmation_gate,
 )
@@ -531,17 +531,17 @@ def run_flash_session(
         size_mb  = path.stat().st_size / 1024 / 1024
         print(f"  {name:<30} {size_mb:>7.1f} MB  ({mode_tag}){crit_tag}")
 
-    # ── ARB check ───────────────────────────────────────────────────────
+    # ── ARB check (firmware only — no device query) ─────────────────────
     xbl_path = find_xbl_image(firmware_dir)
     if xbl_path:
         firmware_arb = extract_arb_from_xbl(xbl_path)
-        device_arb   = get_device_arb_version(serial)
+        device_arb   = ArbInfo(version=None, source="not checked")
         arb_result   = compare_arb_versions(firmware_arb, device_arb)
-        if not arb_confirmation_gate(arb_result):
+        if not arb_confirmation_gate(arb_result, "none"):
             print("Aborted by user (ARB check).")
             sys.exit(0)
     else:
-        log.warning("xbl.img not found — ARB check skipped")
+        log.warning("xbl_config.img not found in firmware — ARB check skipped")
 
     if dry_run:
         print("\n[dry-run] No partitions were flashed.")

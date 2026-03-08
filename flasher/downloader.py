@@ -119,6 +119,39 @@ def download_firmware(
 
     print(f"  CDN URL      : {cdn_url}")
 
+    # Show link expiry if present in query string (e.g. ?X-Amz-Expires=... or ?e=...)
+    try:
+        import urllib.parse, datetime
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(cdn_url).query)
+        # AWS-style: X-Amz-Date + X-Amz-Expires
+        if "X-Amz-Date" in qs and "X-Amz-Expires" in qs:
+            amz_date = qs["X-Amz-Date"][0]  # e.g. 20240101T120000Z
+            expires_s = int(qs["X-Amz-Expires"][0])
+            created = datetime.datetime.strptime(amz_date, "%Y%m%dT%H%M%SZ").replace(
+                tzinfo=datetime.timezone.utc
+            )
+            expires_at = created + datetime.timedelta(seconds=expires_s)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            remaining = expires_at - now
+            if remaining.total_seconds() > 0:
+                h, m = divmod(int(remaining.total_seconds()) // 60, 60)
+                print(f"  Link expires : {expires_at.strftime('%Y-%m-%d %H:%M UTC')}  ({h}h {m}m remaining)")
+            else:
+                print(f"  Link expires : EXPIRED ({expires_at.strftime('%Y-%m-%d %H:%M UTC')})")
+        # Generic Unix timestamp: ?e=1234567890
+        elif "e" in qs:
+            ts = int(qs["e"][0])
+            expires_at = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            remaining = expires_at - now
+            if remaining.total_seconds() > 0:
+                h, m = divmod(int(remaining.total_seconds()) // 60, 60)
+                print(f"  Link expires : {expires_at.strftime('%Y-%m-%d %H:%M UTC')}  ({h}h {m}m remaining)")
+            else:
+                print(f"  Link expires : EXPIRED ({expires_at.strftime('%Y-%m-%d %H:%M UTC')})")
+    except Exception:
+        pass
+
     # Step 3: download via aria2c
     cmd = [
         "aria2c",

@@ -183,15 +183,21 @@ def _run_payload_dumper(
         cmd += ["-p", ",".join(partitions)]
     cmd.append(str(payload_path))
 
-    log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
-    for line in result.stdout.splitlines():
-        log.info(line)
-    for line in result.stderr.splitlines():
-        log.warning(line)
-
-    return result.returncode == 0
+    log.debug(f"Running: {' '.join(cmd)}")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    assert proc.stdout
+    for line in proc.stdout:
+        line = line.rstrip()
+        if line:
+            print(f"  {line}")
+    proc.wait()
+    return proc.returncode == 0
 
 
 # ---------------------------------------------------------------------------
