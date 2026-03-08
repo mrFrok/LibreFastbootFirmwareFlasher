@@ -325,13 +325,13 @@ def _report_failure(result: FlashResult) -> None:
     print()
     print(f"{RED}{'━' * 60}{R}")
     print(f"  {RED}{BOLD}✗  FAILED{R}  {BOLD}{result.partition}_{result.slot}{R}")
-    print(f"  {GRAY()}{result.error}{R}")
+    print(f"  {_GRAY()}{result.error}{R}")
     print()
 
     if "resize" in err_lower or "not enough space" in err_lower:
         print(f"  {ORANGE}Cause:{R} Dynamic partition resize failed.")
         print(f"  {CYAN}Fix  :{R} Make sure the device is in {BOLD}fastbootd{R} and retry.")
-        print(f"         {GRAY()}fastboot reboot fastboot{R}")
+        print(f"         {_GRAY()}fastboot reboot fastboot{R}")
     elif "does not exist" in err_lower or "not found" in err_lower:
         print(f"  {ORANGE}Cause:{R} Partition not present on this device.")
         print(f"  {CYAN}Fix  :{R} This image may not be compatible with your device variant.")
@@ -343,10 +343,10 @@ def _report_failure(result: FlashResult) -> None:
         print(f"  {CYAN}Fix  :{R} Try a different cable or USB 3.0 port.")
     else:
         print(f"  {ORANGE}Possible causes:{R}")
-        print(f"    {GRAY()}•{R} Faulty USB cable — try a different one")
-        print(f"    {GRAY()}•{R} Bootloader is locked  →  {BOLD}fastboot flashing unlock{R}")
-        print(f"    {GRAY()}•{R} Corrupted image — re-download the firmware")
-        print(f"    {GRAY()}•{R} Low battery during flash")
+        print(f"    {_GRAY()}•{R} Faulty USB cable — try a different one")
+        print(f"    {_GRAY()}•{R} Bootloader is locked  →  {BOLD}fastboot flashing unlock{R}")
+        print(f"    {_GRAY()}•{R} Corrupted image — re-download the firmware")
+        print(f"    {_GRAY()}•{R} Low battery during flash")
 
     if is_critical:
         print()
