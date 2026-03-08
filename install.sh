@@ -3,10 +3,11 @@
 # install.sh — LibreFastbootFirmwareFlasher installer
 # =============================================================================
 # Usage:
-#   ./install.sh              — auto-detect environment, build and install
-#   ./install.sh --prebuilt   — install pre-built dist/lfff/ (skip build)
-#   ./install.sh --update     — pull latest changes and reinstall
-#   ./install.sh --uninstall  — remove lfff from the system
+#   ./install.sh                      — auto-detect environment, build and install
+#   ./install.sh --prebuilt  | -p     — install pre-built dist/lfff/ (skip build)
+#   ./install.sh --update    | -u     — pull latest changes and reinstall
+#   ./install.sh --uninstall | -r     — remove lfff from the system
+#   ./install.sh --help      | -h     — show this help
 # =============================================================================
 
 set -euo pipefail
@@ -69,15 +70,17 @@ ${O} ╚══════╝${R}${O}╚═╝     ${R}${O}╚═╝     ${R}${O
 MODE="build"
 for arg in "$@"; do
     case "$arg" in
-        --prebuilt)  MODE="prebuilt" ;;
-        --uninstall) MODE="uninstall" ;;
-        --update)    MODE="update" ;;
+        --prebuilt|-p)  MODE="prebuilt" ;;
+        --uninstall|-r) MODE="uninstall" ;;
+        --update|-u)    MODE="update" ;;
         --help|-h)
-            echo "Usage: $0 [--prebuilt] [--update] [--uninstall]"
-            echo "  (no flag)    build from source, then install"
-            echo "  --prebuilt   install existing dist/lfff/ without building"
-            echo "  --update     pull latest changes from git and reinstall"
-            echo "  --uninstall  remove lfff from the system"
+            echo "Usage: $0 [options]"
+            echo ""
+            echo "  (no flag)              build from source and install"
+            echo "  --prebuilt,  -p        install existing dist/lfff/ without building"
+            echo "  --update,    -u        pull latest changes from git and reinstall"
+            echo "  --uninstall, -r        remove lfff from the system"
+            echo "  --help,      -h        show this help"
             exit 0 ;;
         *) die "Unknown argument: $arg" "Run: $0 --help" ;;
     esac
@@ -242,7 +245,7 @@ install_hint() {
                 esac
             elif command -v pacman &>/dev/null; then
                 case "$cmd" in
-                    python3|pip3) echo "sudo pacman -S python python-pip" ;;
+                    python3|pip3) echo "sudo pacman -S python" ;;
                     make)         echo "sudo pacman -S base-devel" ;;
                     *)            echo "sudo pacman -S $cmd" ;;
                 esac
