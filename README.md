@@ -255,7 +255,6 @@ LibreFastbootFirmwareFlasher/
 
 | | |
 |---|---|
-| 💻 GitHub | [github.com/mrFrok/LibreFastbootFirmwareFlasher](https://github.com/mrFrok/LibreFastbootFirmwareFlasher) |
 | ✈️ Author | [t.me/mrFrok228](https://t.me/mrFrok228) |
 | 👥 Community | [t.me/gt3neo5hub](https://t.me/gt3neo5hub) |
 | 🪟 Windows version | [NeFeroN](https://t.me/NeFeroN) |
