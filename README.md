@@ -67,18 +67,17 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer:
-1. Checks system dependencies (`python3 ≥ 3.10`, `make`)
-2. Builds a standalone binary via `cx_Freeze`
-3. Installs the bundle to `/usr/local/lib/lfff/`
-4. Creates a launcher at `/usr/local/bin/lfff`
+The installer detects your environment, builds a standalone binary via `cx_Freeze`, and installs it to `/usr/local/bin/lfff` (or `~/.local/bin/lfff` on atomic/immutable distros).
 
-```bash
-./install.sh --prebuilt    # skip build, install existing dist/lfff/
-./install.sh --uninstall   # remove lfff from the system
-```
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--prebuilt`  | `-p` | Skip build, install existing `dist/lfff/` |
+| `--update`    | `-u` | Checkout latest stable release tag and reinstall |
+| `--nightly`   | `-n` | Checkout HEAD of main branch (may be unstable) |
+| `--reinstall` | `-i` | Uninstall and reinstall from scratch |
+| `--uninstall` | `-r` | Remove lfff from the system |
 
----
+------
 
 ## Quick Start
 

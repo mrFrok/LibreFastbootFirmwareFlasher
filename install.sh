@@ -74,6 +74,7 @@ for arg in "$@"; do
         --uninstall|-r)  MODE="uninstall" ;;
         --update|-u)     MODE="update" ;;
         --reinstall|-i)  MODE="reinstall" ;;
+        --nightly|-n)    MODE="nightly" ;;
         --help|-h)
             echo "Usage: $0 [options]"
             echo ""
@@ -81,6 +82,7 @@ for arg in "$@"; do
             echo "  --prebuilt,  -p        install existing dist/lfff/ without building"
             echo "  --update,    -u        pull latest changes from git and reinstall"
             echo "  --reinstall, -i        uninstall and reinstall from scratch"
+            echo "  --nightly,   -n        install latest nightly (HEAD, may be unstable)"
             echo "  --uninstall, -r        remove lfff from the system"
             echo "  --help,      -h        show this help"
             exit 0 ;;
@@ -188,33 +190,85 @@ if [ "$MODE" = "update" ]; then
         die             "Not a git repository."             "Clone the repo first:\n  ${BOLD}git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher${R}"
     fi
 
-    CURRENT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    info "Current version: ${CURRENT}"
-
-    info "Fetching latest changes ..."
-    if ! git fetch origin 2>&1 | sed 's/^/     /'; then
-        die             "git fetch failed."             "Check your internet connection and try again."
+    info "Fetching tags ..."
+    if ! git fetch --tags origin 2>&1 | sed 's/^/     /'; then
+        die "git fetch failed." "Check your internet connection and try again."
     fi
 
-    BEHIND=$(git rev-list HEAD..origin/$(git branch --show-current) --count 2>/dev/null || echo "0")
+    # Current installed tag (or commit if not on a tag)
+    CURRENT_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null || echo "")
+    CURRENT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    if [ -n "$CURRENT_TAG" ]; then
+        info "Current version: ${CURRENT_TAG}"
+    else
+        info "Current version: ${CURRENT_COMMIT} (untagged)"
+    fi
 
-    if [ "$BEHIND" -eq 0 ]; then
+    # Latest stable tag
+    LATEST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1)
+
+    if [ -z "$LATEST_TAG" ]; then
+        die "No release tags found in repository." \
+            "The repository may not have any stable releases yet."
+    fi
+
+    info "Latest stable release: ${LATEST_TAG}"
+
+    if [ "$CURRENT_TAG" = "$LATEST_TAG" ]; then
+        echo -e "\n${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+        echo -e "  ${G}${BOLD}✓  Already up to date${R}  ${GR}(${LATEST_TAG})${R}"
+        echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}\n"
+        exit 0
+    fi
+
+    info "Checking out ${LATEST_TAG} ..."
+    if ! git checkout "$LATEST_TAG" 2>&1 | sed 's/^/     /'; then
+        die "git checkout ${LATEST_TAG} failed." \
+            "You may have local changes. Stash them:\n  ${BOLD}git stash && ./install.sh --update${R}"
+    fi
+
+    ok "Updated: ${CURRENT_TAG:-${CURRENT_COMMIT}} → ${LATEST_TAG}"
+
+    info "Rebuilding and reinstalling ..."
+    MODE="build"
+fi
+
+# ── Nightly ──────────────────────────────────────────────────────────────────
+if [ "$MODE" = "nightly" ]; then
+    hdr "Installing nightly (HEAD)"
+
+    if ! git rev-parse --git-dir &>/dev/null; then
+        die             "Not a git repository."             "Clone the repo first:\n  ${BOLD}git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher${R}"
+    fi
+
+    info "Fetching latest commits ..."
+    if ! git fetch origin 2>&1 | sed 's/^/     /'; then
+        die "git fetch failed." "Check your internet connection and try again."
+    fi
+
+    BRANCH=$(git remote show origin 2>/dev/null | grep "HEAD branch" | awk '{print $NF}')
+    BRANCH="${BRANCH:-main}"
+
+    CURRENT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    LATEST=$(git rev-parse --short "origin/${BRANCH}" 2>/dev/null || echo "unknown")
+
+    if [ "$CURRENT" = "$LATEST" ]; then
         echo -e "
 ${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
-        echo -e "  ${G}${BOLD}✓  Already up to date${R}  ${GR}(${CURRENT})${R}"
+        echo -e "  ${G}${BOLD}✓  Already on latest nightly${R}  ${GR}(${CURRENT})${R}"
         echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}
 "
         exit 0
     fi
 
-    info "${BEHIND} new commit(s) available — pulling ..."
-    if ! git pull --ff-only 2>&1 | sed 's/^/     /'; then
-        die             "git pull failed."             "You may have local changes. Stash or reset them:\n  ${BOLD}git stash && ./install.sh --update${R}"
+    warn "Nightly builds may be unstable. Use --update for the latest stable release."
+    echo ""
+
+    if ! git checkout "origin/${BRANCH}" --detach 2>&1 | sed 's/^/     /'; then
+        die "git checkout failed."             "You may have local changes. Stash them:\n  ${BOLD}git stash && ./install.sh --nightly${R}"
     fi
 
-    NEW=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    ok "Updated: ${CURRENT} → ${NEW}"
-
+    ok "Switched to nightly: ${CURRENT} → ${LATEST}"
     info "Rebuilding and reinstalling ..."
     MODE="build"
 fi
