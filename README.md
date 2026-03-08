@@ -50,6 +50,7 @@ LFFF is a command-line tool for flashing Android firmware on **OnePlus / OPPO / 
 | `adb` | Device detection & reboot | ✓ |
 | `payload-dumper-go` | OTA zip extraction | ✓ |
 | `aria2c` | Multi-connection download | ✓ |
+| `python3 + pip3` | Python | ✓ | 
 
 ```bash
 lfff deps   # installs everything automatically
