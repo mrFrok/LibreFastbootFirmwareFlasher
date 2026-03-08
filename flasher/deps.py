@@ -587,6 +587,20 @@ def install_dependencies(
                 print(f"     {CYAN}Try installing manually:{R}")
                 print(f"     {BOLD}https://github.com/{_PDG_REPO}/releases{R}")
             print()
+
+        # If on atomic distro and brew is not installed — suggest it
+        if _is_atomic_distro() and not shutil.which("brew"):
+            BREW_URL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
+            print(f"  {YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{R}")
+            print(f"  {YELLOW}⚠  You appear to be on an atomic/immutable distro.{R}")
+            print(f"  {GRAY}System package managers require a reboot to take effect.{R}")
+            print()
+            print(f"  {CYAN}Install Homebrew on Linux for instant user-space package management:{R}")
+            print(f"  {BOLD}" + '/bin/bash -c "$(curl -fsSL ' + '{BREW_URL})"' + f"{R}")
+            print()
+            print(f"  {GRAY}Then re-run:  {BOLD}lfff deps{R}")
+            print(f"  {YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{R}")
+            print()
     else:
         all_ok = all(r.ok for r in report.results)
         if all_ok:
