@@ -112,11 +112,57 @@ class DepsReport:
 # Package manager detection
 # ---------------------------------------------------------------------------
 
+def _is_atomic_distro() -> bool:
+    """
+    Return True if running on an atomic/immutable Linux distro where
+    the system package manager cannot install packages in the current session.
+
+    Detection is conservative — only explicit signals, no /usr write test.
+    """
+    if platform.system().lower() != "linux":
+        return False
+
+    atomic_ids = {
+        "silverblue", "kinoite", "sericea", "onyx",
+        "bazzite", "aurora", "bluefin",
+        "nixos", "guix", "vanillaos", "carbonos", "steamos",
+    }
+
+    os_release = Path("/etc/os-release")
+    if os_release.exists():
+        for line in os_release.read_text().splitlines():
+            if line.startswith("ID="):
+                distro_id = line.split("=", 1)[1].strip().strip('"').lower()
+                if distro_id in atomic_ids:
+                    return True
+
+    if Path("/ostree").is_dir():
+        return True
+
+    if Path("/etc/NIXOS").exists():
+        return True
+
+    return False
+
+
 def _detect_pkg_manager() -> str | None:
-    """Return the name of the available package manager, or None."""
+    """
+    Return the name of the best available package manager, or None.
+
+    On atomic distros, system package managers (rpm-ostree, apt) are skipped
+    because they require a reboot to take effect. Homebrew on Linux is
+    preferred instead as it installs to user space immediately.
+    """
+    atomic = _is_atomic_distro()
+
+    if atomic:
+        # On atomic distros only use brew (Homebrew on Linux) or skip
+        if shutil.which("brew"):
+            return "brew"
+        return None
+
     for pm in ("pacman", "apt", "apt-get", "dnf", "zypper", "emerge", "brew"):
         if shutil.which(pm):
-            # Normalise apt-get -> apt
             return "apt" if pm == "apt-get" else pm
     return None
 
@@ -420,11 +466,24 @@ def install_dependencies(
     print("\n── Dependency check ─────────────────────────────────────")
 
     if pm is None and not dry_run:
-        print("  ✗ No supported package manager found.")
-        print("    Install manually: fastboot, adb, aria2c, payload-dumper-go")
+        if _is_atomic_distro():
+            print("  ⚠  Atomic/immutable distro detected.")
+            print("  System package manager cannot install packages in the current session.")
+            print()
+            print("  Recommended: install Homebrew on Linux, then re-run 'lfff deps'")
+            BREW_INSTALL = 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
+            print(f'    /bin/bash -c "$(curl -fsSL {BREW_INSTALL})"')
+            print()
+            print("  Or install manually:")
+            print("    fastboot / adb  : via your distro's layering tool (rpm-ostree, nix, etc.)")
+            print("    aria2c          : same")
+            print("    payload-dumper-go: lfff deps will download it automatically")
+        else:
+            print("  ✗ No supported package manager found.")
+            print("    Install manually: fastboot, adb, aria2c, payload-dumper-go")
         for t in tools:
             report.results.append(DepResult(tool=t, skipped=True,
-                                             error="No package manager"))
+                                             error="No package manager available"))
         print("────────────────────────────────────────────────────────")
         return report
 
@@ -467,17 +526,74 @@ def install_dependencies(
         else:
             report.results.append(_install_payload_dumper_go())
 
-    # Print summary
+    # ── Print summary ────────────────────────────────────────────────────
+    import sys
+    tty = sys.stdout.isatty()
+    def c(code): return code if tty else ""
+
+    R      = c("[0m");  BOLD  = c("[1m")
+    GREEN  = c("[38;5;78m");  RED   = c("[38;5;203m")
+    YELLOW = c("[38;5;220m"); GRAY  = c("[38;5;244m")
+    CYAN   = c("[38;5;117m"); ORANGE = c("[38;5;208m")
+
     print()
+    has_failures = any(not r.ok and not r.skipped for r in report.results)
+
     for r in report.results:
         if r.already_installed:
-            print(f"  ✓  {r.tool:<25} already installed")
+            print(f"  {GREEN}✓{R}  {r.tool:<25} {GRAY}already installed{R}")
         elif r.installed:
-            print(f"  ✓  {r.tool:<25} installed")
+            print(f"  {GREEN}✓{R}  {BOLD}{r.tool:<25}{R} {GREEN}installed{R}")
         elif r.skipped:
-            print(f"  -  {r.tool:<25} skipped  ({r.error})")
+            print(f"  {GRAY}-{R}  {r.tool:<25} {GRAY}skipped{R}")
         else:
-            print(f"  ✗  {r.tool:<25} FAILED   ({r.error})")
+            print(f"  {RED}✗{R}  {BOLD}{r.tool:<25}{R} {RED}FAILED{R}")
+            print(f"     {GRAY}{r.error}{R}")
 
-    print("────────────────────────────────────────────────────────")
+    print()
+
+    if has_failures:
+        failed = [r for r in report.results if not r.ok and not r.skipped]
+        print(f"{RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{R}")
+        print(f"  {RED}{BOLD}✗  Some dependencies failed to install{R}")
+        print(f"{RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{R}")
+        print()
+        for r in failed:
+            print(f"  {ORANGE}●  {r.tool}{R}")
+            # Per-tool actionable hint
+            if r.tool in ("fastboot", "adb"):
+                print(f"     {CYAN}Install android-tools via your package manager:{R}")
+                if shutil.which("apt"):
+                    print(f"     {BOLD}sudo apt install android-tools-fastboot android-tools-adb{R}")
+                elif shutil.which("pacman"):
+                    print(f"     {BOLD}sudo pacman -S android-tools{R}")
+                elif shutil.which("dnf"):
+                    print(f"     {BOLD}sudo dnf install android-tools{R}")
+                elif shutil.which("brew"):
+                    print(f"     {BOLD}brew install android-platform-tools{R}")
+                else:
+                    print(f"     {BOLD}https://developer.android.com/tools/releases/platform-tools{R}")
+            elif r.tool == "aria2c":
+                print(f"     {CYAN}Install aria2:{R}")
+                if shutil.which("apt"):
+                    print(f"     {BOLD}sudo apt install aria2{R}")
+                elif shutil.which("pacman"):
+                    print(f"     {BOLD}sudo pacman -S aria2{R}")
+                elif shutil.which("dnf"):
+                    print(f"     {BOLD}sudo dnf install aria2{R}")
+                elif shutil.which("brew"):
+                    print(f"     {BOLD}brew install aria2{R}")
+            elif r.tool == "payload-dumper-go":
+                print(f"     {CYAN}Try installing manually:{R}")
+                print(f"     {BOLD}https://github.com/{_PDG_REPO}/releases{R}")
+            print()
+    else:
+        all_ok = all(r.ok for r in report.results)
+        if all_ok:
+            print(f"{GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{R}")
+            print(f"  {GREEN}{BOLD}✓  All dependencies are ready{R}")
+            print(f"{GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{R}")
+            print()
+
+    print(f"{GRAY}────────────────────────────────────────────────────────{R}")
     return report

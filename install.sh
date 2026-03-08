@@ -5,6 +5,7 @@
 # Usage:
 #   ./install.sh              — auto-detect environment, build and install
 #   ./install.sh --prebuilt   — install pre-built dist/lfff/ (skip build)
+#   ./install.sh --update     — pull latest changes and reinstall
 #   ./install.sh --uninstall  — remove lfff from the system
 # =============================================================================
 
@@ -14,8 +15,6 @@ set -euo pipefail
 BINARY_NAME="lfff"
 DIST_DIR="dist/lfff"
 REPO_URL="https://github.com/mrFrok/LibreFastbootFirmwareFlasher"
-
-# Install paths — resolved after distro detection
 INSTALL_DIR=""
 LIB_DIR=""
 USE_SUDO=1
@@ -23,19 +22,35 @@ USE_SUDO=1
 # ── Colours ───────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
     R="\033[0m"; BOLD="\033[1m"
-    O="\033[38;5;208m"; G="\033[38;5;78m"
+    O="\033[38;5;208m";   G="\033[38;5;78m"
     RED="\033[38;5;203m"; GR="\033[38;5;244m"
-    YEL="\033[38;5;220m"
+    YEL="\033[38;5;220m"; CYN="\033[38;5;117m"
 else
-    R=""; BOLD=""; O=""; G=""; RED=""; GR=""; YEL=""
+    R=""; BOLD=""; O=""; G=""; RED=""; GR=""; YEL=""; CYN=""
 fi
 
 ok()   { echo -e "  ${G}✓${R}  $*"; }
-err()  { echo -e "  ${RED}✗${R}  $*" >&2; }
+fail() { echo -e "  ${RED}✗${R}  $*" >&2; }
 info() { echo -e "  ${GR}·${R}  $*"; }
 warn() { echo -e "  ${YEL}⚠${R}  $*"; }
-hdr()  { echo -e "\n${BOLD}${O}$*${R}"; }
-die()  { err "$*"; exit 1; }
+hdr()  { echo -e "\n${BOLD}${O}── $* ${R}"; }
+
+# Pretty error block — shows what went wrong and what to do
+die() {
+    local msg="$1"
+    local hint="${2:-}"
+    echo -e "\n${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}" >&2
+    echo -e "  ${RED}${BOLD}✗  Installation failed${R}" >&2
+    echo -e "  ${RED}${msg}${R}" >&2
+    if [ -n "$hint" ]; then
+        echo -e "" >&2
+        echo -e "  ${CYN}What to do:${R}" >&2
+        echo -e "  ${hint}" >&2
+    fi
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}" >&2
+    echo -e "" >&2
+    exit 1
+}
 
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo -e "
@@ -56,18 +71,20 @@ for arg in "$@"; do
     case "$arg" in
         --prebuilt)  MODE="prebuilt" ;;
         --uninstall) MODE="uninstall" ;;
+        --update)    MODE="update" ;;
         --help|-h)
-            echo "Usage: $0 [--prebuilt] [--uninstall]"
+            echo "Usage: $0 [--prebuilt] [--update] [--uninstall]"
             echo "  (no flag)    build from source, then install"
             echo "  --prebuilt   install existing dist/lfff/ without building"
+            echo "  --update     pull latest changes from git and reinstall"
             echo "  --uninstall  remove lfff from the system"
             exit 0 ;;
-        *) die "Unknown argument: $arg" ;;
+        *) die "Unknown argument: $arg" "Run: $0 --help" ;;
     esac
 done
 
 # ── OS / distro detection ─────────────────────────────────────────────────────
-hdr "Detecting environment ..."
+hdr "Detecting environment"
 
 OS="$(uname -s)"
 case "$OS" in
@@ -85,26 +102,14 @@ if [ "$PLATFORM" = "linux" ]; then
         DISTRO="${ID:-}"
     fi
 
-    # 1. Known atomic distro IDs
     case "${DISTRO}" in
         silverblue|kinoite|sericea|onyx|bazzite|aurora|bluefin|\
         nixos|guix|vanillaos|carbonos|steamos)
             ATOMIC=1 ;;
     esac
 
-    # 2. ostree deployment layout (Fedora Silverblue, Bazzite etc.)
-    if [ "$ATOMIC" -eq 0 ] && [ -d /ostree ]; then
-        ATOMIC=1
-    fi
-
-    # 3. NixOS-specific marker
-    if [ "$ATOMIC" -eq 0 ] && [ -f /etc/NIXOS ]; then
-        ATOMIC=1
-    fi
-
-    # NOTE: We intentionally do NOT test if /usr is writable — that check
-    # produces false positives on distros like CachyOS that mount /usr
-    # read-only for performance/safety but are not immutable.
+    if [ "$ATOMIC" -eq 0 ] && [ -d /ostree ]; then ATOMIC=1; fi
+    if [ "$ATOMIC" -eq 0 ] && [ -f /etc/NIXOS ]; then ATOMIC=1; fi
 fi
 
 # ── Decide install paths ──────────────────────────────────────────────────────
@@ -112,46 +117,38 @@ if [ "$PLATFORM" = "macos" ]; then
     INSTALL_DIR="/usr/local/bin"
     LIB_DIR="/usr/local/lib/lfff"
     USE_SUDO=1
-    info "macOS detected → ${INSTALL_DIR}"
+    ok "macOS → ${INSTALL_DIR}"
 
 elif [ "$ATOMIC" -eq 1 ]; then
     INSTALL_DIR="${HOME}/.local/bin"
     LIB_DIR="${HOME}/.local/lib/lfff"
     USE_SUDO=0
-    warn "Atomic/immutable distro detected (${DISTRO:-unknown}) — /usr is read-only"
-    info "Installing to ${INSTALL_DIR}  (user-local, no sudo required)"
+    warn "Atomic/immutable distro (${DISTRO:-unknown}) — installing to user home"
+    info "Install dir: ${INSTALL_DIR}"
 
     if [[ ":$PATH:" != *":${HOME}/.local/bin:"* ]]; then
         warn "${HOME}/.local/bin is not in PATH yet"
-        info "Add it after install:"
-        info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
-        info "  (use ~/.zshrc or ~/.config/fish/config.fish for other shells)"
+        info "After install, add it:"
+        info "  ${BOLD}echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc${R}"
+        info "  (or ~/.zshrc / ~/.config/fish/config.fish)"
     fi
 
 else
     INSTALL_DIR="/usr/local/bin"
     LIB_DIR="/usr/local/lib/lfff"
     USE_SUDO=1
-    info "Standard Linux detected → ${INSTALL_DIR}"
+    ok "Linux → ${INSTALL_DIR}"
 fi
 
-# ── Helper: run with or without sudo ─────────────────────────────────────────
 maybe_sudo() {
-    if [ "$USE_SUDO" -eq 1 ]; then
-        sudo "$@"
-    else
-        "$@"
-    fi
+    if [ "$USE_SUDO" -eq 1 ]; then sudo "$@"; else "$@"; fi
 }
 
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 if [ "$MODE" = "uninstall" ]; then
-    hdr "Uninstalling lfff ..."
+    hdr "Uninstalling lfff"
     REMOVED=0
-
-    for try_bin in \
-        "/usr/local/bin/${BINARY_NAME}" \
-        "${HOME}/.local/bin/${BINARY_NAME}"; do
+    for try_bin in "/usr/local/bin/${BINARY_NAME}" "${HOME}/.local/bin/${BINARY_NAME}"; do
         if [ -f "$try_bin" ]; then
             if [[ "$try_bin" == /usr/* ]]; then sudo rm -f "$try_bin"
             else rm -f "$try_bin"; fi
@@ -159,7 +156,6 @@ if [ "$MODE" = "uninstall" ]; then
             REMOVED=1
         fi
     done
-
     for try_lib in "/usr/local/lib/lfff" "${HOME}/.local/lib/lfff"; do
         if [ -d "$try_lib" ]; then
             if [[ "$try_lib" == /usr/* ]]; then sudo rm -rf "$try_lib"
@@ -168,20 +164,63 @@ if [ "$MODE" = "uninstall" ]; then
             REMOVED=1
         fi
     done
-
     if [ "$REMOVED" -eq 0 ]; then
         info "lfff was not installed — nothing to remove."
     else
-        ok "Uninstall complete."
+        echo -e "\n${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+        echo -e "  ${G}${BOLD}✓  Uninstall complete${R}"
+        echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}\n"
     fi
     exit 0
 fi
 
-# ── Check we're in the project root ──────────────────────────────────────────
-[ -f "main.py" ] || die "Run this script from the project root (where main.py lives)."
+# ── Update ───────────────────────────────────────────────────────────────────
+if [ "$MODE" = "update" ]; then
+    hdr "Updating lfff"
+
+    # Must be inside a git repo
+    if ! git rev-parse --git-dir &>/dev/null; then
+        die             "Not a git repository."             "Clone the repo first:\n  ${BOLD}git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher${R}"
+    fi
+
+    CURRENT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    info "Current version: ${CURRENT}"
+
+    info "Fetching latest changes ..."
+    if ! git fetch origin 2>&1 | sed 's/^/     /'; then
+        die             "git fetch failed."             "Check your internet connection and try again."
+    fi
+
+    BEHIND=$(git rev-list HEAD..origin/$(git branch --show-current) --count 2>/dev/null || echo "0")
+
+    if [ "$BEHIND" -eq 0 ]; then
+        echo -e "
+${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+        echo -e "  ${G}${BOLD}✓  Already up to date${R}  ${GR}(${CURRENT})${R}"
+        echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}
+"
+        exit 0
+    fi
+
+    info "${BEHIND} new commit(s) available — pulling ..."
+    if ! git pull --ff-only 2>&1 | sed 's/^/     /'; then
+        die             "git pull failed."             "You may have local changes. Stash or reset them:\n  ${BOLD}git stash && ./install.sh --update${R}"
+    fi
+
+    NEW=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    ok "Updated: ${CURRENT} → ${NEW}"
+
+    info "Rebuilding and reinstalling ..."
+    MODE="build"
+fi
+
+# ── Check project root ────────────────────────────────────────────────────────
+[ -f "main.py" ] || die \
+    "main.py not found in current directory." \
+    "Run this script from the project root:\n  ${BOLD}cd LibreFastbootFirmwareFlasher && ./install.sh${R}"
 
 # ── Dependency check ─────────────────────────────────────────────────────────
-hdr "Checking system dependencies ..."
+hdr "Checking system dependencies"
 
 install_hint() {
     local cmd="$1"
@@ -203,7 +242,7 @@ install_hint() {
                 esac
             elif command -v pacman &>/dev/null; then
                 case "$cmd" in
-                    python3|pip3) echo "sudo pacman -S python python-pip" ;;
+                    python3|pip3) echo "sudo pacman -S python" ;;
                     make)         echo "sudo pacman -S base-devel" ;;
                     *)            echo "sudo pacman -S $cmd" ;;
                 esac
@@ -223,91 +262,126 @@ install_hint() {
     esac
 }
 
+MISSING_DEPS=0
+missing_list=""
 need_cmd() {
     if command -v "$1" &>/dev/null; then
-        ok "$1  ($(command -v "$1"))"
+        ok "$1  ${GR}($(command -v "$1"))${R}"
     else
-        err "$1 not found"
-        info "Install with: $(install_hint "$1")"
+        fail "$1 not found"
+        info "  → $(install_hint "$1")"
         MISSING_DEPS=1
+        missing_list="${missing_list} $1"
     fi
 }
 
-MISSING_DEPS=0
 need_cmd python3
 need_cmd pip3
 need_cmd make
 
 if [ "$PLATFORM" = "macos" ] && ! command -v brew &>/dev/null; then
-    warn "Homebrew not found — recommended for easy dependency management."
+    warn "Homebrew not found — recommended for easy dependency management"
     BREW_URL='https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh'
     info "Install: /bin/bash -c \"\$(curl -fsSL $BREW_URL)\""
 fi
 
-[ "$MISSING_DEPS" -ne 0 ] && die "Please install the missing dependencies above and re-run."
+if [ "$MISSING_DEPS" -ne 0 ]; then
+    die \
+        "Missing required tools:${missing_list}" \
+        "Install them using the commands shown above, then re-run:\n  ${BOLD}./install.sh${R}"
+fi
 
-# Python version check (≥ 3.10 required for union types and match)
+# Python version check
 PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
 PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
 if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
-    die "Python 3.10+ required (found $PY_VER)"
+    die \
+        "Python 3.10+ required, found $PY_VER" \
+        "Install a newer Python:\n  ${BOLD}$(install_hint python3)${R}"
 fi
 ok "Python $PY_VER"
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 if [ "$MODE" = "build" ]; then
-    hdr "Building lfff ..."
+    hdr "Building lfff"
 
     info "Installing Python dependencies ..."
-    make install 2>&1 | grep -v "^$" | sed 's/^/     /' || true
+    if ! make install 2>&1 | grep -v "^$" | sed 's/^/     /'; then
+        die \
+            "Failed to install Python dependencies." \
+            "Try running manually:\n  ${BOLD}make install${R}\nand check the error output above."
+    fi
 
     info "Building binary with cx_Freeze ..."
     make build 2>&1 | grep -E "(✓|✗|error|Error|warning)" | sed 's/^/     /' || true
 
     if [ ! -f "${DIST_DIR}/${BINARY_NAME}" ]; then
         FOUND=$(find dist/ -name "$BINARY_NAME" -type f 2>/dev/null | head -1)
-        [ -n "$FOUND" ] && DIST_DIR="$(dirname "$FOUND")" \
-            || die "Build failed — binary not found in dist/"
+        if [ -n "$FOUND" ]; then
+            DIST_DIR="$(dirname "$FOUND")"
+        else
+            die \
+                "Build failed — binary not found in dist/" \
+                "Run the build manually to see full output:\n  ${BOLD}make build${R}"
+        fi
     fi
     ok "Build complete → ${DIST_DIR}/${BINARY_NAME}"
 fi
 
-# ── Verify dist exists ────────────────────────────────────────────────────────
-[ -f "${DIST_DIR}/${BINARY_NAME}" ] || \
-    die "Binary not found at ${DIST_DIR}/${BINARY_NAME} — run 'make build' first or use --prebuilt."
+# ── Verify dist ───────────────────────────────────────────────────────────────
+[ -f "${DIST_DIR}/${BINARY_NAME}" ] || die \
+    "Binary not found at ${DIST_DIR}/${BINARY_NAME}" \
+    "Build it first:\n  ${BOLD}make build${R}\nOr use a pre-built bundle:\n  ${BOLD}./install.sh --prebuilt${R}"
 
 # ── Install ───────────────────────────────────────────────────────────────────
-hdr "Installing lfff ..."
+hdr "Installing lfff"
 
 info "Copying runtime bundle to ${LIB_DIR} ..."
-maybe_sudo mkdir -p "${LIB_DIR}"
-maybe_sudo cp -r "${DIST_DIR}/." "${LIB_DIR}/"
-ok "Bundle installed  →  ${LIB_DIR}"
+if ! maybe_sudo mkdir -p "${LIB_DIR}" || ! maybe_sudo cp -r "${DIST_DIR}/." "${LIB_DIR}/"; then
+    die \
+        "Failed to copy files to ${LIB_DIR}" \
+        "Check permissions or run as root:\n  ${BOLD}sudo ./install.sh${R}"
+fi
+ok "Bundle installed → ${LIB_DIR}"
 
 info "Creating launcher at ${INSTALL_DIR}/${BINARY_NAME} ..."
 mkdir -p "${INSTALL_DIR}"
-maybe_sudo tee "${INSTALL_DIR}/${BINARY_NAME}" > /dev/null << WRAPPER
+if ! maybe_sudo tee "${INSTALL_DIR}/${BINARY_NAME}" > /dev/null << WRAPPER
 #!/usr/bin/env bash
 exec "${LIB_DIR}/${BINARY_NAME}" "\$@"
 WRAPPER
+then
+    die \
+        "Failed to create launcher at ${INSTALL_DIR}/${BINARY_NAME}" \
+        "Check write permissions for ${INSTALL_DIR}"
+fi
 maybe_sudo chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-ok "Launcher created  →  ${INSTALL_DIR}/${BINARY_NAME}"
+ok "Launcher created → ${INSTALL_DIR}/${BINARY_NAME}"
 
 # ── Smoke test ────────────────────────────────────────────────────────────────
-hdr "Verifying installation ..."
+hdr "Verifying installation"
 if command -v "$BINARY_NAME" &>/dev/null; then
-    ok "lfff is available at $(command -v "$BINARY_NAME")"
+    ok "lfff found at $(command -v "$BINARY_NAME")"
+    PATH_OK=1
 else
-    warn "lfff installed but ${INSTALL_DIR} is not in PATH yet."
-    info "Add to PATH:"
-    info "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
+    warn "lfff installed but ${INSTALL_DIR} is not in PATH yet"
+    info "Add it by running:"
+    info "  ${BOLD}echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bashrc && source ~/.bashrc${R}"
+    PATH_OK=0
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
-echo -e "
-  ${G}${BOLD}Installation complete!${R}
-
-  Run ${O}lfff${R} to get started.
-  Uninstall anytime: ${GR}./install.sh --uninstall${R}
-"
+echo -e "\n${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+echo -e "  ${G}${BOLD}✓  Installation complete!${R}"
+echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}"
+echo -e "  ${GR}Binary  :${R}  ${LIB_DIR}/${BINARY_NAME}"
+echo -e "  ${GR}Launcher:${R}  ${INSTALL_DIR}/${BINARY_NAME}"
+echo -e ""
+if [ "$PATH_OK" -eq 1 ]; then
+    echo -e "  Run ${O}${BOLD}lfff${R} to get started."
+else
+    echo -e "  After adding to PATH, run ${O}${BOLD}lfff${R} to get started."
+fi
+echo -e "  Uninstall: ${GR}./install.sh --uninstall${R}"
+echo -e "${G}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${R}\n"

@@ -293,6 +293,25 @@ def flash_partition(
 
 
 # ---------------------------------------------------------------------------
+# Colour helpers (auto-disabled when stdout is not a TTY)
+# ---------------------------------------------------------------------------
+
+def _c(code: str) -> str:
+    """Return ANSI escape code only when stdout is a TTY."""
+    import sys
+    return code if sys.stdout.isatty() else ""
+
+def _RED()    -> str: return _c("[38;5;203m")
+def _ORANGE() -> str: return _c("[38;5;208m")
+def _GREEN()  -> str: return _c("[38;5;78m")
+def _YELLOW() -> str: return _c("[38;5;220m")
+def _CYAN()   -> str: return _c("[38;5;117m")
+def _GRAY()   -> str: return _c("[38;5;244m")
+def _BOLD()   -> str: return _c("[1m")
+def _R()      -> str: return _c("[0m")
+
+
+# ---------------------------------------------------------------------------
 # Error reporting
 # ---------------------------------------------------------------------------
 
@@ -300,35 +319,39 @@ def _report_failure(result: FlashResult) -> None:
     is_critical = result.partition in CRITICAL_PARTITIONS
     err_lower   = (result.error or "").lower()
 
+    R = _R(); RED = _RED(); ORANGE = _ORANGE()
+    YELLOW = _YELLOW(); CYAN = _CYAN(); BOLD = _BOLD()
+
     print()
-    print("!" * 60)
-    print(f"  FAILED to flash {result.partition}_{result.slot}")
-    print(f"  Error : {result.error}")
+    print(f"{RED}{'━' * 60}{R}")
+    print(f"  {RED}{BOLD}✗  FAILED{R}  {BOLD}{result.partition}_{result.slot}{R}")
+    print(f"  {GRAY()}{result.error}{R}")
     print()
 
     if "resize" in err_lower or "not enough space" in err_lower:
-        print("  Cause: Dynamic partition resize failed.")
-        print("  Fix  : Make sure device is in fastbootd and retry.")
-        print("         fastboot reboot fastboot")
+        print(f"  {ORANGE}Cause:{R} Dynamic partition resize failed.")
+        print(f"  {CYAN}Fix  :{R} Make sure the device is in {BOLD}fastbootd{R} and retry.")
+        print(f"         {GRAY()}fastboot reboot fastboot{R}")
     elif "does not exist" in err_lower or "not found" in err_lower:
-        print("  Cause: Partition not present — incompatible firmware variant.")
+        print(f"  {ORANGE}Cause:{R} Partition not present on this device.")
+        print(f"  {CYAN}Fix  :{R} This image may not be compatible with your device variant.")
     elif "permission denied" in err_lower or "not allowed" in err_lower:
-        print("  Cause: Bootloader is locked.")
-        print("  Fix  : fastboot flashing unlock")
+        print(f"  {ORANGE}Cause:{R} Bootloader is locked.")
+        print(f"  {CYAN}Fix  :{R} {BOLD}fastboot flashing unlock{R}")
     elif "timeout" in err_lower:
-        print("  Cause: USB timeout.")
-        print("  Fix  : Try a different cable or USB port.")
+        print(f"  {ORANGE}Cause:{R} USB timeout.")
+        print(f"  {CYAN}Fix  :{R} Try a different cable or USB 3.0 port.")
     else:
-        print("  Possible causes:")
-        print("    • Faulty USB cable — try a different one")
-        print("    • Bootloader is locked — fastboot flashing unlock")
-        print("    • Image is corrupted — re-download the firmware")
-        print("    • Low battery during flash")
+        print(f"  {ORANGE}Possible causes:{R}")
+        print(f"    {GRAY()}•{R} Faulty USB cable — try a different one")
+        print(f"    {GRAY()}•{R} Bootloader is locked  →  {BOLD}fastboot flashing unlock{R}")
+        print(f"    {GRAY()}•{R} Corrupted image — re-download the firmware")
+        print(f"    {GRAY()}•{R} Low battery during flash")
 
     if is_critical:
         print()
-        print("  ⚠  CRITICAL partition — do NOT reboot or unplug until resolved.")
-    print("!" * 60)
+        print(f"  {RED}{BOLD}⚠  CRITICAL partition{R}{RED} — do NOT reboot or unplug until resolved.{R}")
+    print(f"{RED}{'━' * 60}{R}")
     print()
 
 
@@ -605,7 +628,8 @@ def run_flash_session(
                         return session
                     result = _flash_with_progress(image_path, partition, slot, serial,
                                                   done_ops - 1, total_ops, flash_start)
-                    session.results.append(result)
+                    # Replace the failed result instead of appending — keeps summary clean
+                    session.results[-1] = result
                     if not result.success:
                         print()
                         print("✗ Retry failed. Aborting.")
@@ -629,7 +653,7 @@ def run_flash_session(
                         return session
                     result = _flash_with_progress(image_path, partition, active_slot, serial,
                                                   done_ops - 1, total_ops, flash_start)
-                    session.results.append(result)
+                    session.results[-1] = result
                     if not result.success:
                         print()
                         print("✗ Retry failed. Aborting.")
@@ -672,7 +696,7 @@ def run_flash_session(
                         return session
                     result = _flash_with_progress(image_path, partition, slot, serial,
                                                   done_ops2 - 1, total_ops2, flash_start2)
-                    session.results.append(result)
+                    session.results[-1] = result
                     if not result.success:
                         print()
                         print("✗ Retry failed. Aborting.")
@@ -792,39 +816,74 @@ def _print_summary(session: FlashSession) -> None:
     ok     = len(session.succeeded)
     failed = len(session.failed)
 
-    print("\n── Flash session summary ───────────────────────────────")
-    print(f"  Total    : {total}")
-    print(f"  ✓ OK     : {ok}")
-    print(f"  ✗ Failed : {failed}")
+    R = _R(); BOLD = _BOLD()
+    RED = _RED(); GREEN = _GREEN(); ORANGE = _ORANGE()
+    YELLOW = _YELLOW(); GRAY = _GRAY(); CYAN = _CYAN()
+
+    # ── Summary table ────────────────────────────────────────────────────
+    print(f"\n{GRAY}── Flash session summary {'─' * 31}{R}")
+    print(f"  Total      {GRAY}:{R}  {total}")
+    print(f"  {GREEN}✓ OK{R}       {GRAY}:{R}  {GREEN}{ok}{R}")
+    if failed:
+        print(f"  {RED}✗ Failed{R}   {GRAY}:{R}  {RED}{failed}{R}")
 
     if session.failed:
-        print("\n  Failed partitions:")
+        print(f"\n  {RED}Failed partitions:{R}")
         for r in session.failed:
-            crit = " [CRITICAL]" if r.partition in CRITICAL_PARTITIONS else ""
-            print(f"    ✗ {r.partition}_{r.slot}{crit}")
-            print(f"      {r.error}")
+            crit = f"  {RED}[CRITICAL]{R}" if r.partition in CRITICAL_PARTITIONS else ""
+            print(f"    {RED}✗{R}  {BOLD}{r.partition}_{r.slot}{R}{crit}")
+            print(f"       {GRAY}{r.error}{R}")
 
     print()
-    if not session.failed:
-        print("  ✓ All partitions flashed successfully.")
-    elif session.critical_failed:
-        print("  ✗ One or more CRITICAL partitions failed.")
-        print("    The device may not boot. Do NOT unplug until resolved.")
-    else:
-        print("  ⚠  Some non-critical partitions failed.")
-        print("     The device should still boot — re-flash the failed partitions.")
-    print("────────────────────────────────────────────────────────\n")
 
-    if not session.failed:
-        _offer_wipe(session)
-    elif not session.critical_failed:
-        print("  Skipping userdata wipe — re-flash failed partitions first.")
-
-    # Reboot only on full success
+    # ── Outcome message ──────────────────────────────────────────────────
     if not session.failed and not session.aborted:
-        print("\n  Rebooting to system ...")
+        # ── BIG SUCCESS BANNER ───────────────────────────────────────────
+        print(f"{GREEN}{'━' * 60}{R}")
+        print(f"  {GREEN}{BOLD}✓  Flash complete!{R}")
+        print(f"{GREEN}{'━' * 60}{R}")
+        print(f"  {GRAY}Partitions flashed :{R}  {GREEN}{ok}{R}")
+        elapsed_total = sum(r.duration_s for r in session.succeeded)
+        mins, secs = divmod(int(elapsed_total), 60)
+        time_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+        print(f"  {GRAY}Total flash time   :{R}  {time_str}")
+        print(f"{GREEN}{'━' * 60}{R}")
+        print()
+
+    elif session.critical_failed:
+        print(f"{RED}{'━' * 60}{R}")
+        print(f"  {RED}{BOLD}✗  Critical failure{R}")
+        print(f"  {RED}One or more CRITICAL partitions failed to flash.{R}")
+        print(f"  {RED}The device may not boot.{R}")
+        print(f"  {YELLOW}Do NOT reboot or unplug until resolved.{R}")
+        print(f"{RED}{'━' * 60}{R}")
+        print()
+
+    elif session.failed:
+        print(f"{YELLOW}{'━' * 60}{R}")
+        print(f"  {YELLOW}{BOLD}⚠  Flash completed with errors{R}")
+        print(f"  {GRAY}Non-critical partitions failed — device should still boot.{R}")
+        print(f"  {CYAN}Re-flash the failed partitions to complete the update.{R}")
+        print(f"{YELLOW}{'━' * 60}{R}")
+        print()
+
+    elif session.aborted:
+        print(f"{YELLOW}{'━' * 60}{R}")
+        print(f"  {YELLOW}{BOLD}⚠  Flash was aborted{R}")
+        print(f"{YELLOW}{'━' * 60}{R}")
+        print()
+
+    # ── Wipe offer ───────────────────────────────────────────────────────
+    if not session.failed and not session.aborted:
+        _offer_wipe(session)
+    elif not session.critical_failed and session.failed:
+        print(f"  {GRAY}Skipping userdata wipe — re-flash failed partitions first.{R}")
+
+    # ── Reboot ───────────────────────────────────────────────────────────
+    if not session.failed and not session.aborted:
+        print(f"\n  {CYAN}Rebooting to system ...{R}")
         _fastboot(*(["-s", session.serial] if session.serial else []), "reboot", timeout=30)
     elif session.aborted:
-        print("\n  Flash was aborted — device not rebooted.")
+        print(f"\n  {YELLOW}Flash was aborted — device not rebooted.{R}")
     else:
-        print("\n  Flash had errors — device not rebooted. Fix issues and re-flash.")
+        print(f"\n  {RED}Flash had errors — device not rebooted. Fix issues and re-flash.{R}")
