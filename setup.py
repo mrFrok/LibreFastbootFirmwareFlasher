@@ -36,7 +36,7 @@ build_exe_options = {
 
 setup(
     name="LibreFastbootFirmwareFlasher",
-    version="0.1.2",
+    version="0.1.4",
     description="CLI tool for extracting and flashing Android firmware via fastboot",
     executables=[
         Executable(

@@ -14,12 +14,9 @@ from flasher.arb import (
     ArbInfo,
     extract_arb_from_xbl,
     find_xbl_image,
-    arb_confirmation_gate,
-    compare_arb_versions,
-    ArbCheckResult,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -184,18 +181,9 @@ def _run_payload_dumper(
     cmd.append(str(payload_path))
 
     log.debug(f"Running: {' '.join(cmd)}")
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-    assert proc.stdout
-    for line in proc.stdout:
-        line = line.rstrip()
-        if line:
-            print(f"  {line}")
+    # Let payload-dumper-go write directly to the terminal so its
+    # \r-based progress bars work natively without any interception.
+    proc = subprocess.Popen(cmd)
     proc.wait()
     return proc.returncode == 0
 

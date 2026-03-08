@@ -25,11 +25,12 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 def _setup_logging(verbose: bool) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(levelname)s: %(message)s",
-    )
+    if verbose:
+        # Verbose: show DEBUG with full prefix
+        logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
+    else:
+        # Normal: suppress INFO/DEBUG entirely — only WARNING+ shown
+        logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
 
 # ---------------------------------------------------------------------------
@@ -665,7 +666,7 @@ def _print_welcome() -> None:
     for line in logo:
         print(" " + line)
     print()
-    print(f" {B(W('LibreFastbootFirmwareFlasher'))}  {DM(G('v0.1.2'))}")
+    print(f" {B(W('LibreFastbootFirmwareFlasher'))}  {DM(G('v0.1.4'))}")
     print(f" {DM(G('Flash Android firmware via fastboot — free, open, no bloat.'))}")
     print()
 
