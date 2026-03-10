@@ -317,7 +317,8 @@ install_hint() {
                 esac
             elif command -v pacman &>/dev/null; then
                 case "$cmd" in
-                    python3|pip3) echo "sudo pacman -S python" ;;
+                    python3)      echo "sudo pacman -S python" ;;
+                    pip3)         echo "sudo pacman -S python-pip" ;;
                     make)         echo "sudo pacman -S base-devel" ;;
                     *)            echo "sudo pacman -S $cmd" ;;
                 esac
