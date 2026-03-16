@@ -156,8 +156,10 @@ fn needs_sudo(pm: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// payload_dumper installer (via cargo install)
+// payload_dumper installer (GitHub releases binary)
 // ---------------------------------------------------------------------------
+
+const PDG_REPO: &str = "rhythmcache/payload-dumper-rust";
 
 /// Check if payload_dumper is runnable.
 fn pdg_is_runnable() -> bool {
@@ -171,7 +173,26 @@ fn pdg_is_runnable() -> bool {
         .unwrap_or(false)
 }
 
-/// Install payload_dumper via `cargo install payload_dumper`.
+/// Pick the correct asset name for the current platform.
+///
+/// Asset naming: `payload_dumper-{os}-{arch}.zip`
+/// Examples: payload_dumper-linux-x86_64.zip, payload_dumper-macos-aarch64.zip
+fn pdg_asset_name() -> Option<String> {
+    let os = match std::env::consts::OS {
+        "linux" => "linux",
+        "macos" => "macos",
+        _ => return None,
+    };
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x86_64",
+        "aarch64" => "aarch64",
+        "arm" => "armv7",
+        _ => return None,
+    };
+    Some(format!("payload_dumper-{}-{}.zip", os, arch))
+}
+
+/// Install payload_dumper from GitHub releases.
 fn install_payload_dumper() -> DepResult {
     let mut result = DepResult {
         tool: PDG_BINARY.into(),
@@ -186,36 +207,156 @@ fn install_payload_dumper() -> DepResult {
         return result;
     }
 
-    // Need cargo to install
-    if which::which("cargo").is_err() {
-        result.error = "cargo not found. Install Rust: https://rustup.rs".into();
+    let asset_name = match pdg_asset_name() {
+        Some(n) => n,
+        None => {
+            result.error = format!(
+                "No prebuilt binary for {}/{}. Install manually: cargo install payload_dumper",
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            );
+            return result;
+        }
+    };
+
+    // Fetch latest release tag from GitHub API
+    println!("  Fetching latest payload_dumper release from GitHub ...");
+    let api_result = Command::new("curl")
+        .args([
+            "-sL",
+            &format!("https://api.github.com/repos/{}/releases/latest", PDG_REPO),
+            "-H",
+            "User-Agent: lfff/0.2",
+        ])
+        .output();
+
+    let tag = match api_result {
+        Ok(output) if output.status.success() => {
+            let json = String::from_utf8_lossy(&output.stdout);
+            // JSON line:   "tag_name": "payload-dumper-rust-v0.8.2",
+            // Find the value between the last pair of quotes on the line
+            json.lines()
+                .find(|l| l.contains("\"tag_name\""))
+                .and_then(|l| {
+                    // Skip past "tag_name" key — find value after the colon
+                    let after_key = l.split("\"tag_name\"").nth(1)?;
+                    // Now extract string between quotes: : "value",
+                    let first_quote = after_key.find('"')? + 1;
+                    let rest = &after_key[first_quote..];
+                    let end_quote = rest.find('"')?;
+                    let val = &rest[..end_quote];
+                    if val.is_empty() {
+                        None
+                    } else {
+                        Some(val.to_string())
+                    }
+                })
+                .unwrap_or_else(|| "payload-dumper-rust-v0.8.2".to_string())
+        }
+        _ => "payload-dumper-rust-v0.8.2".to_string(),
+    };
+
+    let dl_url = format!(
+        "https://github.com/{}/releases/download/{}/{}",
+        PDG_REPO, tag, asset_name
+    );
+
+    println!("  Downloading {} ...", asset_name);
+    println!("  URL: {}", dl_url);
+
+    let tmp_dir = std::env::temp_dir().join("lfff_pdg_install");
+    fs::create_dir_all(&tmp_dir).ok();
+    let archive = tmp_dir.join(&asset_name);
+
+    // Download
+    let dl_ok = Command::new("curl")
+        .args(["-sL", "-o"])
+        .arg(&archive)
+        .arg(&dl_url)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if !dl_ok {
+        result.error = format!("Download failed: {}", dl_url);
+        let _ = fs::remove_dir_all(&tmp_dir);
         return result;
     }
 
-    println!("  Installing payload_dumper via cargo install ...");
-    let status = Command::new("cargo")
-        .args(["install", "payload_dumper"])
-        .status();
+    // Extract ZIP
+    let unzip_ok = Command::new("unzip")
+        .args(["-o", "-q"])
+        .arg(&archive)
+        .arg("-d")
+        .arg(&tmp_dir)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
 
-    match status {
-        Ok(s) if s.success() => {
-            if which::which(PDG_BINARY).is_ok() {
-                result.installed = true;
-                println!("  ✓ payload_dumper installed");
-            } else {
-                result.error =
-                    "cargo install succeeded but binary not found in PATH. Check ~/.cargo/bin"
-                        .into();
+    if !unzip_ok {
+        result.error = "Failed to unzip archive".into();
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return result;
+    }
+
+    // Find the binary
+    let binary = tmp_dir.join("payload_dumper");
+    if !binary.exists() {
+        result.error = "payload_dumper binary not found in archive".into();
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return result;
+    }
+
+    // Make executable
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).ok();
+    }
+
+    // Install to /usr/local/bin (with sudo) or ~/.local/bin
+    let dest = std::path::Path::new("/usr/local/bin/payload_dumper");
+
+    let install_ok = Command::new("sudo")
+        .args(["cp"])
+        .arg(&binary)
+        .arg(dest)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+        && Command::new("sudo")
+            .args(["chmod", "755"])
+            .arg(dest)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+    if install_ok {
+        println!("  Installed to {}", dest.display());
+        result.installed = true;
+    } else {
+        // Fallback: ~/.local/bin
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+        let local_bin = std::path::Path::new(&home).join(".local/bin");
+        fs::create_dir_all(&local_bin).ok();
+        let local_dest = local_bin.join("payload_dumper");
+        if fs::copy(&binary, &local_dest).is_ok() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&local_dest, fs::Permissions::from_mode(0o755)).ok();
             }
-        }
-        Ok(s) => {
-            result.error = format!("cargo install failed with code {}", s.code().unwrap_or(-1));
-        }
-        Err(e) => {
-            result.error = format!("Failed to run cargo: {}", e);
+            println!(
+                "  Installed to {}  (add ~/.local/bin to PATH if needed)",
+                local_dest.display()
+            );
+            result.installed = true;
+        } else {
+            result.error = "Failed to install binary".into();
         }
     }
 
+    let _ = fs::remove_dir_all(&tmp_dir);
     result
 }
 
