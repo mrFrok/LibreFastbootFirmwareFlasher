@@ -1,3 +1,5 @@
+### THIS IS TEST BUILD. ONLY FOR TEST!
+
 # LFFF — Libre Fastboot Firmware Flasher (Rust)
 
 Free, open-source firmware flasher for Android A/B devices via fastboot.
