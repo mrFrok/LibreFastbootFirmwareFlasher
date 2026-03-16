@@ -19,7 +19,7 @@ Single static binary — no Python, no pip, no bloat.
 ### Build from source
 
 ```bash
-git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher
+git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher -b rust
 cd LibreFastbootFirmwareFlasher
 cargo build --release
 ```
