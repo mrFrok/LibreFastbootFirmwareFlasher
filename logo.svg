@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 175" width="900" height="175">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117"/>
+      <stop offset="100%" style="stop-color:#161b22"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="175" fill="url(#bg)" rx="8"/>
+  <rect width="900" height="175" fill="none" stroke="#21262d" stroke-width="1" rx="8"/>
+
+  <!-- ASCII logo -->
+  <text x="14" y="32"  font-family="'Courier New', monospace" font-size="15" xml:space="preserve"><tspan fill="#FF8C00">██╗     </tspan><tspan fill="#FFB300">███████╗</tspan><tspan fill="#FF8C00">███████╗</tspan><tspan fill="#FFB300">███████╗</tspan></text>
+  <text x="14" y="53"  font-family="'Courier New', monospace" font-size="15" xml:space="preserve"><tspan fill="#FF8C00">██║     </tspan><tspan fill="#FFB300">██╔════╝</tspan><tspan fill="#FF8C00">██╔════╝</tspan><tspan fill="#FFB300">██╔════╝</tspan></text>
+  <text x="14" y="74"  font-family="'Courier New', monospace" font-size="15" xml:space="preserve"><tspan fill="#FF8C00">██║     </tspan><tspan fill="#FFB300">█████╗  </tspan><tspan fill="#FF8C00">█████╗  </tspan><tspan fill="#FFB300">█████╗  </tspan></text>
+  <text x="14" y="95"  font-family="'Courier New', monospace" font-size="15" xml:space="preserve"><tspan fill="#FF8C00">██║     </tspan><tspan fill="#FFB300">██╔══╝  </tspan><tspan fill="#FF8C00">██╔══╝  </tspan><tspan fill="#FFB300">██╔══╝  </tspan></text>
+  <text x="14" y="116" font-family="'Courier New', monospace" font-size="15" xml:space="preserve"><tspan fill="#FF8C00">███████╗</tspan><tspan fill="#FFB300">██║     </tspan><tspan fill="#FF8C00">██║     </tspan><tspan fill="#FFB300">██║     </tspan></text>
+  <text x="14" y="137" font-family="'Courier New', monospace" font-size="15" xml:space="preserve"><tspan fill="#FF8C00">╚══════╝</tspan><tspan fill="#FFB300">╚═╝     </tspan><tspan fill="#FF8C00">╚═╝     </tspan><tspan fill="#FFB300">╚═╝     </tspan></text>
+  <text x="14" y="158" font-family="'Courier New', monospace" font-size="11" fill="#484f58">LibreFastbootFirmwareFlasher</text>
+
+  <!-- Divider -->
+  <rect x="345" y="14" width="1" height="147" fill="#21262d"/>
+
+  <!-- Right panel -->
+  <!-- Title -->
+  <text x="365" y="38" font-family="'Courier New', monospace" font-size="16" font-weight="bold" fill="#e6edf3">LibreFastbootFirmwareFlasher</text>
+  <text x="365" y="56" font-family="'Courier New', monospace" font-size="11" fill="#484f58">─────────────────────────────────────────────────</text>
+
+  <!-- Info rows -->
+  <text x="365" y="75"  font-family="'Courier New', monospace" font-size="12" xml:space="preserve"><tspan fill="#6e7681">license  </tspan><tspan fill="#e6edf3">GNU GPL v3</tspan></text>
+  <text x="365" y="93" font-family="'Courier New', monospace" font-size="12" xml:space="preserve"><tspan fill="#6e7681">platform </tspan><tspan fill="#e6edf3">Linux · macOS</tspan></text>
+  <text x="365" y="111" font-family="'Courier New', monospace" font-size="12" xml:space="preserve"><tspan fill="#6e7681">devices  </tspan><tspan fill="#e6edf3">OnePlus · OPPO · Realme · Qualcomm A/B</tspan></text>
+
+  <text x="365" y="147" font-family="'Courier New', monospace" font-size="11" fill="#484f58">─────────────────────────────────────────────────</text>
+  <text x="365" y="163" font-family="'Courier New', monospace" font-size="12" fill="#FF8C00">Flash Android firmware via fastboot — free &amp; open</text>
+</svg>

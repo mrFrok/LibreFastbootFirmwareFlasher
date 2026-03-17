@@ -1,181 +1,269 @@
-# THIS IS TEST BUILD. ONLY FOR TEST!
+<div align="center">
 
-# LFFF — Libre Fastboot Firmware Flasher (Rust)
+![LFFF](logo.svg)
 
-Free, open-source firmware flasher for Android A/B devices via fastboot.
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-orange.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange)](https://www.rust-lang.org)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-orange)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher)
+
+**Free, open-source firmware flasher for Android A/B devices via fastboot.**  
 Single static binary — no Python, no pip, no bloat.
 
-**Supported devices:** OnePlus · OPPO · Realme (Qualcomm SoC, A/B partition layout)
+[Installation](#installation) · [Quick Start](#quick-start) · [Commands](#commands) · [Supported Devices](#supported-devices) · [Development](#development)
 
-## Install
+</div>
 
-### Prerequisites
+---
 
-- [Rust toolchain](https://rustup.rs) (for building LFFF and installing payload_dumper)
-- `fastboot` and `adb` (android-tools)
-- `aria2c` (for firmware downloads)
-- `payload_dumper` (for OTA extraction)
+## About
 
-### Build from source
+LFFF is a command-line tool for flashing Android firmware on **OnePlus / OPPO / Realme** devices with Qualcomm SoC and A/B partition layout. It handles the full flash pipeline — extraction, pre-flash checks, Anti-Rollback protection, dynamic super partitions, A/B slot management and modem flashing — all from a single binary.
+
+> **Windows?** Check out the Windows version by [NeFeroN](https://t.me/NeFeroN) who helped during development.  
+> **Community:** [t.me/gt3neo5hub](https://t.me/gt3neo5hub)
+
+---
+
+## Features
+
+| | |
+|---|---|
+| 🔥 **Full firmware flash** | Non-super + super (dynamic) partitions, modem, full bootloader chain |
+| 🔄 **A/B slot management** | Non-super → both slots; super → active slot only (with super wipe) |
+| 🛡️ **Anti-Rollback protection** | Reads ARB from `xbl_config.img` ELF64, compares against device, warns on downgrade |
+| 📊 **Live progress bar** | Single animated bar with elapsed time across the entire session |
+| 🔧 **Interactive error recovery** | On failure: retry / reboot to correct mode / abort |
+| ✅ **Pre-flash checks** | Device detection, cable speed, battery level, bootloader unlock |
+| 🎯 **Single-partition flash** | Flash any partition by name with `flash-partition` |
+| 📦 **Firmware extraction** | Unpacks OTA `.zip` via `payload_dumper` (ZIP passed directly, no unzipping) |
+| 📥 **Firmware download** | Downloads OTA zips via `aria2c` with 4PDA redirect support |
+| 🔩 **Dependency installer** | Auto-installs `fastboot`, `aria2c`, `payload_dumper` |
+| 💻 **Linux + macOS** | Single static binary, no runtime dependencies |
+| 🦀 **Written in Rust** | Fast compilation, zero-cost abstractions, no garbage collector |
+
+---
+
+## Requirements
+
+| Tool | Purpose | Auto-install |
+|------|---------|:---:|
+| `fastboot` | Flashing interface | ✓ |
+| `adb` | Device detection & reboot | ✓ |
+| `payload_dumper` | OTA zip extraction | ✓ |
+| `aria2c` | Multi-connection download | ✓ |
 
 ```bash
-git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher -b rust
-cd LibreFastbootFirmwareFlasher
-cargo build --release
+lfff deps   # installs everything automatically
 ```
 
-The binary will be at `target/release/lfff`. Copy it somewhere in your `$PATH`:
+---
+
+## Installation
+
+### From source (recommended)
 
 ```bash
+git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher
+cd LibreFastbootFirmwareFlasher
+cargo build --release
 sudo cp target/release/lfff /usr/local/bin/
 ```
 
-### Install dependencies
+### From GitHub Releases
 
-LFFF can install its own dependencies:
+Download the prebuilt binary for your platform from [Releases](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases):
 
 ```bash
+tar xzf lfff-linux-x86_64.tar.gz
+sudo cp lfff /usr/local/bin/
+```
+
+### Arch Linux (AUR)
+
+```bash
+yay -S lfff
+```
+
+---
+
+## Quick Start
+
+```bash
+# 1. Install external tools
 lfff deps
+
+# 2. Download firmware (skip if you already have the zip)
+lfff download https://...
+
+# 3. Extract firmware zip
+lfff extract CPH2653_11.F.85_2850_202601060236.zip
+
+# 4. Run pre-flash diagnostics
+lfff devices --check
+
+# 5. Flash
+lfff flash ./firmwares/CPH2653_11.F.85_2850
 ```
 
-This will install `fastboot`, `adb`, `aria2c` via your system package manager and `payload_dumper` via `cargo install payload_dumper`.
-
-To check what's missing without installing:
-
-```bash
-lfff deps --check
-```
-
-## Quick start
-
-```
-1.  lfff deps                        # install tools
-2.  lfff download <url>              # download OTA zip
-3.  lfff extract firmware.zip        # unpack partition images
-4.  lfff devices --check             # verify cable, battery, unlock
-5.  lfff flash ./firmwares/<dir>     # flash all partitions
-```
+---
 
 ## Commands
 
-### `lfff deps`
+### `lfff flash <firmware_dir>`
 
-Install and verify external dependencies.
-
-```bash
-lfff deps                        # install all missing dependencies
-lfff deps --check                # check only, do not install
-lfff deps fastboot adb           # install specific tools
-```
-
-### `lfff download <url>`
-
-Download firmware via OTA link. Supports direct URLs and 4PDA redirect links. Uses `aria2c` with 16 parallel connections.
+Flash a full extracted firmware directory.
 
 ```bash
-lfff download "https://..." -o ~/Downloads
-lfff download "https://4pda.to/redirector/?u=..." -c 8
+lfff flash ./firmwares/RMX3709_11.H.38
+lfff flash ./firmwares/RMX3709_11.H.38 -s R5CT20    # specific device
+lfff flash ./firmwares/RMX3709_11.H.38 --dry-run    # preview only
 ```
 
-### `lfff extract <firmware.zip>`
+**Flash flow:**
 
-Extract a firmware archive into grouped partition images. Automatically detects the format:
-- `payload.bin` inside ZIP → extracted via `payload_dumper` (ZIP passed directly, no unzipping needed)
-- raw `.img` files → extracted directly
+```
+[1] Choose where device is now: system / bootloader / fastbootd
+      ↓
+[Stage 1 — fastbootd]
+  Non-super partitions  →  slot A  +  slot B
+  Super/dynamic parts   →  active slot only  (super wiped first)
+      ↓
+[Stage 2 — bootloader]
+  modem  →  slot A  +  slot B
+      ↓
+[Offer userdata wipe]  →  reboot to system
+```
+
+On error: **retry** / **reboot to correct mode + retry** / **abort**
+
+---
+
+### `lfff flash-partition <partition>`
+
+Flash a single partition by name.
+
+```bash
+lfff flash-partition boot --firmware-dir ./firmwares/RMX3709
+lfff flash-partition vendor_boot --firmware-dir ./firmwares/RMX3709 --slot a
+lfff flash-partition modem --firmware-dir ./firmwares/RMX3709 --no-ab
+```
+
+---
+
+### `lfff extract <zip>`
+
+Extract OTA firmware zip into individual `.img` files. `payload_dumper` accepts ZIP directly — no need to unzip first.
+
+```bash
+lfff extract firmware.zip
+lfff extract firmware.zip -o ./firmwares/my_build
+lfff extract firmware.zip --list               # list contents only
+lfff extract firmware.zip --checksum <sha256>  # verify before extracting
+```
 
 Images are organized into subdirectories: `critical/`, `bootloader/`, `radio/`, `system/`, `vendor/`, `other/`.
 
-```bash
-lfff extract firmware.zip                          # interactive output dir prompt
-lfff extract firmware.zip -o ./out/oos15           # specify output directory
-lfff extract firmware.zip -p boot,vendor_boot      # extract specific partitions only
-lfff extract firmware.zip --list                   # list contents without extracting
-lfff extract firmware.zip --checksum <sha256>      # verify integrity first
-```
+---
 
-### `lfff devices`
+### `lfff devices [--check]`
 
-List connected devices and run pre-flash diagnostics.
+List connected devices or run full pre-flash diagnostics.
 
 ```bash
-lfff devices                     # list fastboot and adb devices
-lfff devices --check             # full diagnostics: cable speed, battery, unlock
-lfff devices --check -s R5CT20   # target a specific device
+lfff devices           # list fastboot + adb devices
+lfff devices --check   # cable speed, battery, unlock status
 ```
 
-Pre-flash checks include:
-- Device detection (fastboot / adb)
-- Communication test (`fastboot getvar all`)
-- USB cable speed test (`fastboot stage`)
-- Battery level check (minimum 30%)
-- Bootloader unlock status
+---
 
 ### `lfff arb`
 
-Check Anti-Rollback (ARB) version embedded in firmware. Parses `xbl_config.img` ELF64 OEM metadata directly — same algorithm as [arbextract](https://github.com/koaaN/arbextract).
+Compare Anti-Rollback version between firmware and device. Parses `xbl_config.img` ELF64 OEM metadata directly — same algorithm as [arbextract](https://github.com/koaaN/arbextract).
 
 ```bash
-lfff arb --firmware-dir ./out/oos15                      # show firmware ARB
-lfff arb --xbl ./out/oos15/critical/xbl_config.img       # from specific file
-lfff arb --firmware-dir ./out/oos15 --device              # compare with device
-lfff arb --firmware-dir ./out/oos15 --device -s R5CT20   # specific device
+lfff arb --firmware-dir ./firmwares/RMX3709
+lfff arb --xbl ./firmwares/RMX3709/critical/xbl_config.img --device
 ```
 
 ARB levels:
 - `ARB = 0` — hard ARB not enforced (safe)
 - `ARB > 0` — hard ARB active; flashing a lower version **will brick the device**
 
-### `lfff flash <firmware_dir>`
+---
 
-Flash an extracted firmware directory to a connected device.
+### `lfff download <url>`
 
-```bash
-lfff flash ./firmwares/oos15                # full flash
-lfff flash ./firmwares/oos15 --dry-run      # simulate without writing
-lfff flash ./firmwares/oos15 -s R5CT20      # target specific device
-```
-
-Flash stages:
-1. **Pre-flash checks** — device, cable, battery, unlock
-2. **ARB check** — firmware-only, warns about rollback risk
-3. **Stage 1 (fastbootd)** — non-super partitions (both slots) + super/dynamic partitions (active slot only)
-4. **Stage 2 (bootloader)** — modem (both slots)
-5. **Summary** — wipe offer, reboot to system
-
-On failure: interactive retry / reboot / abort menu with cause diagnosis.
-
-### `lfff flash-partition`
-
-Flash a single partition image.
+Download firmware with multi-connection resume support. Handles 4PDA redirect links automatically.
 
 ```bash
-lfff flash-partition boot --firmware-dir ./firmwares/oos15
-lfff flash-partition boot --firmware-dir ./firmwares/oos15 --slot a
-lfff flash-partition vbmeta --firmware-dir ./firmwares/oos15 --no-ab
-lfff flash-partition ./firmwares/oos15/critical/boot.img
-lfff flash-partition boot --firmware-dir ./firmwares/oos15 --dry-run
+lfff download https://example.com/firmware.zip
+lfff download "https://4pda.to/redirector/?u=..." -o ./firmwares -c 8
 ```
 
-## Project structure
+---
+
+### `lfff deps [--check] [TOOL ...]`
+
+Install or verify external dependencies.
+
+```bash
+lfff deps              # install all missing
+lfff deps --check      # check status only
+lfff deps fastboot     # install specific tool
+```
+
+---
+
+## Supported Devices
+
+Tested on Qualcomm A/B devices:
+
+| Device | Model | Status |
+|--------|-------|--------|
+| Realme GT Neo 5 | RMX3709 | ✅ Working |
+
+Other OnePlus / OPPO / Realme devices with Qualcomm SoC and A/B layout should work.  
+If your device works (or doesn't) — open an issue!
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher
+cd LibreFastbootFirmwareFlasher
+cargo build              # debug build
+cargo build --release    # optimized build
+cargo check              # type-check without building
+cargo test               # run tests
+```
+
+### Project structure
 
 ```
-lfff-rust/
+LibreFastbootFirmwareFlasher/
 ├── Cargo.toml
+├── README.md
+├── LICENSE
+├── logo.svg
+├── .github/
+│   └── workflows/
+│       └── release.yml      # CI: cross-platform builds on tag push
 └── src/
-    ├── lib.rs           # library crate root (for future GUI)
-    ├── main.rs          # CLI entry point (clap)
-    ├── utils.rs         # subprocess helpers, sha256, tool checks
-    ├── arb.rs           # Anti-Rollback ELF64 parser
-    ├── device.rs        # device discovery, pre-flash checks
-    ├── extractor.rs     # firmware extraction, partition grouping
-    ├── downloader.rs    # OTA download via aria2c
-    ├── flasher.rs       # flash orchestrator, A/B slots, progress bar
-    └── deps.rs          # dependency installer
+    ├── lib.rs               # library crate root (for future GUI)
+    ├── main.rs              # CLI entry point (clap derive)
+    ├── utils.rs             # subprocess helpers, sha256, tool checks
+    ├── arb.rs               # Anti-Rollback ELF64 parser
+    ├── device.rs            # device discovery, pre-flash checks
+    ├── extractor.rs         # firmware extraction, partition grouping
+    ├── downloader.rs        # OTA download via aria2c
+    ├── flasher.rs           # flash orchestrator, A/B slots, progress bar
+    └── deps.rs              # dependency installer
 ```
 
 Split into library + binary crates to support a potential Qt GUI in the future.
 
-## Dependencies (Cargo)
+### Cargo dependencies
 
 | Crate | Purpose |
 |-------|---------|
@@ -190,22 +278,33 @@ Split into library + binary crates to support a potential Qt GUI in the future.
 | `url` | Parsing OTA/CDN URLs |
 | `indicatif` | Progress bars |
 
-## External tools
-
-| Tool | Installed by | Purpose |
-|------|-------------|---------|
-| `fastboot` | `lfff deps` (system pkg manager) | Flash partitions, device communication |
-| `adb` | `lfff deps` (system pkg manager) | Device detection, reboot commands |
-| `aria2c` | `lfff deps` (system pkg manager) | Multi-connection firmware download |
-| `payload_dumper` | `lfff deps` (`cargo install`) | OTA payload extraction |
-| `curl` | Pre-installed on most systems | CDN URL resolution for downloads |
+---
 
 ## Links
 
-- **GitHub:** https://github.com/mrFrok/LibreFastbootFirmwareFlasher
-- **Telegram group:** https://t.me/gt3neo5hub
-- **Author:** https://t.me/mrFrok228
+| | |
+|---|---|
+| ✈️ Author | [t.me/mrFrok228](https://t.me/mrFrok228) |
+| 👥 Community | [t.me/gt3neo5hub](https://t.me/gt3neo5hub) |
+| 🪟 Windows version | [NeFeroN](https://t.me/NeFeroN) |
+
+---
 
 ## License
 
-GPL-3.0
+[GNU GPL v3](LICENSE) — free to use, modify and distribute.  
+Derivative works must remain open source.
+
+---
+
+## Star History
+
+If LFFF saved you time or a bricked device — a ⭐ goes a long way!
+
+<a href="https://www.star-history.com/?repos=mrFrok%2FLibreFastbootFirmwareFlasher&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=mrFrok/LibreFastbootFirmwareFlasher&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=mrFrok/LibreFastbootFirmwareFlasher&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=mrFrok/LibreFastbootFirmwareFlasher&type=date&legend=top-left" />
+ </picture>
+</a>
