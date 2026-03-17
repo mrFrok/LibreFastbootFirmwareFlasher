@@ -60,7 +60,7 @@ lfff deps   # installs everything automatically
 
 ## Installation
 
-### From source (recommended)
+### From source
 
 ```bash
 git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher
@@ -78,13 +78,27 @@ tar xzf lfff-linux-x86_64.tar.gz
 sudo cp lfff /usr/local/bin/
 ```
 
+### Any Linux / macOS (one-liner)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
+```
+
+Works on immutable distros (Fedora Silverblue, NixOS, SteamOS) — installs to ~/.local/bin.
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap mrFrok/lfff
+brew install lfff
+```
+
 ### Arch Linux (AUR)
 
 ```bash
-yay -S lfff
+yay -S lfff        # build from source
+yay -S lfff-bin    # prebuilt binary---
 ```
-
----
 
 ## Quick Start
 
