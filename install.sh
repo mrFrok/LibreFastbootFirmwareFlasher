@@ -196,6 +196,12 @@ main() {
                 wget -qO "$icon_dir/lfff-gui.svg" "$raw/logo.svg"
             fi
 
+            # Replace Exec= with absolute path so DE finds the binary
+            # even if ~/.local/bin is not in the desktop session's PATH
+            local gui_bin
+            gui_bin="$(command -v lfff-gui 2>/dev/null || echo "$install_dir/lfff-gui")"
+            sed -i "s|^Exec=.*|Exec=$gui_bin|" "$desktop_dir/lfff-gui.desktop"
+
             command -v gtk-update-icon-cache &>/dev/null && \
                 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
             command -v update-desktop-database &>/dev/null && \
@@ -227,7 +233,7 @@ main() {
 if $UNINSTALL; then
     uninstall
 else
-    main "$@"
+    main
 fi
 
 REPO="mrFrok/LibreFastbootFirmwareFlasher"
