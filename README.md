@@ -3,11 +3,11 @@
 ![LFFF](logo.svg)
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-orange.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-orange)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher)
 
 **Free, open-source firmware flasher for Android A/B devices via fastboot.**  
-Single static binary — no Python, no pip, no bloat.
+Available as a CLI tool and a native GUI — single static binary, no Python, no pip, no bloat.
 
 [Installation](#installation) · [Quick Start](#quick-start) · [Commands](#commands) · [Supported Devices](#supported-devices) · [Development](#development)
 
@@ -17,7 +17,11 @@ Single static binary — no Python, no pip, no bloat.
 
 ## About
 
-LFFF is a command-line tool for flashing Android firmware on **OnePlus / OPPO / Realme** devices with Qualcomm SoC and A/B partition layout. It handles the full flash pipeline — extraction, pre-flash checks, Anti-Rollback protection, dynamic super partitions, A/B slot management and modem flashing — all from a single binary.
+LFFF is a tool for flashing Android firmware on **OnePlus / OPPO / Realme** devices with Qualcomm SoC and A/B partition layout. It handles the full flash pipeline — extraction, pre-flash checks, Anti-Rollback protection, dynamic super partitions, A/B slot management and modem flashing.
+
+Available in two flavours:
+- **`lfff`** — CLI tool, scriptable, works over SSH
+- **`lfff-gui`** — native desktop GUI built with [Slint](https://slint.dev)
 
 > **Windows?** Check out the Windows version by [NeFeroN](https://t.me/NeFeroN) who helped during development.  
 > **Community:** [t.me/gt3neo5hub](https://t.me/gt3neo5hub)
@@ -28,18 +32,19 @@ LFFF is a command-line tool for flashing Android firmware on **OnePlus / OPPO / 
 
 | | |
 |---|---|
+| 🖥️ **Native GUI** | Desktop app with live log, progress bar, device info, download & extract |
 | 🔥 **Full firmware flash** | Non-super + super (dynamic) partitions, modem, full bootloader chain |
 | 🔄 **A/B slot management** | Non-super → both slots; super → active slot only (with super wipe) |
-| 🛡️ **Anti-Rollback protection** | Reads ARB from `xbl_config.img` ELF64, compares against device, warns on downgrade |
-| 📊 **Live progress bar** | Single animated bar with elapsed time across the entire session |
-| 🔧 **Interactive error recovery** | On failure: retry / reboot to correct mode / abort |
+| 🛡️ **Anti-Rollback protection** | Reads ARB from `xbl_config.img` ELF64 — warns before raising the counter |
+| 📊 **Live progress** | Animated progress bar with elapsed time |
+| 🔧 **Error recovery** | On failure: retry / reboot to correct mode / abort |
 | ✅ **Pre-flash checks** | Device detection, cable speed, battery level, bootloader unlock |
-| 🎯 **Single-partition flash** | Flash any partition by name with `flash-partition` |
-| 📦 **Firmware extraction** | Unpacks OTA `.zip` via `payload_dumper` (ZIP passed directly, no unzipping) |
+| 🎯 **Single-partition flash** | Flash any partition by name |
+| 📦 **Firmware extraction** | Unpacks OTA `.zip` via `payload_dumper` — ZIP passed directly, no unzipping |
 | 📥 **Firmware download** | Downloads OTA zips via `aria2c` with 4PDA redirect support |
 | 🔩 **Dependency installer** | Auto-installs `fastboot`, `aria2c`, `payload_dumper` |
-| 💻 **Linux + macOS** | Single static binary, no runtime dependencies |
-| 🦀 **Written in Rust** | Fast compilation, zero-cost abstractions, no garbage collector |
+| 💻 **Linux + macOS** | x86_64 and aarch64 |
+| 🦀 **Written in Rust** | Fast, safe, no garbage collector |
 
 ---
 
@@ -60,47 +65,70 @@ lfff deps   # installs everything automatically
 
 ## Installation
 
-### From source
-
-```bash
-git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher
-cd LibreFastbootFirmwareFlasher
-cargo build --release
-sudo cp target/release/lfff /usr/local/bin/
-```
-
-### From GitHub Releases
-
-Download the prebuilt binary for your platform from [Releases](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases):
-
-```bash
-tar xzf lfff-linux-x86_64.tar.gz
-sudo cp lfff /usr/local/bin/
-```
-
 ### Any Linux / macOS (one-liner)
 
 ```bash
+# Install CLI
 curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
+
+# Install GUI
+curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --gui
 ```
 
-Works on immutable distros (Fedora Silverblue, NixOS, SteamOS) — installs to ~/.local/bin.
+Works on immutable distros (Fedora Silverblue, NixOS, SteamOS) — installs to `~/.local/bin`.
 
 ### Homebrew (macOS / Linux)
 
 ```bash
 brew tap mrFrok/lfff
-brew install lfff
+brew install lfff        # CLI only
+brew install lfff-gui    # GUI
 ```
 
 ### Arch Linux (AUR)
 
 ```bash
-yay -S lfff        # build from source
-yay -S lfff-bin    # prebuilt binary---
+yay -S lfff        # CLI, build from source
+yay -S lfff-bin    # CLI, prebuilt binary
+yay -S lfff-gui-bin  # GUI, prebuilt binary
 ```
 
+### From GitHub Releases
+
+Download prebuilt binaries from [Releases](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases):
+
+```bash
+# CLI
+tar xzf lfff-linux-x86_64.tar.gz
+sudo cp lfff /usr/local/bin/
+
+# GUI
+tar xzf lfff-gui-linux-x86_64.tar.gz
+sudo cp lfff-gui /usr/local/bin/
+```
+
+### From source
+
+```bash
+git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher
+cd LibreFastbootFirmwareFlasher
+cargo build --release -p lfff       # CLI
+cargo build --release -p lfff-gui   # GUI
+```
+
+---
+
 ## Quick Start
+
+### GUI
+
+```bash
+lfff-gui
+```
+
+Use the sidebar to navigate: **Download** → **Flash All** → **Flash Partition**.
+
+### CLI
 
 ```bash
 # 1. Install external tools
@@ -136,8 +164,6 @@ lfff flash ./firmwares/RMX3709_11.H.38 --dry-run    # preview only
 **Flash flow:**
 
 ```
-[1] Choose where device is now: system / bootloader / fastbootd
-      ↓
 [Stage 1 — fastbootd]
   Non-super partitions  →  slot A  +  slot B
   Super/dynamic parts   →  active slot only  (super wiped first)
@@ -145,7 +171,7 @@ lfff flash ./firmwares/RMX3709_11.H.38 --dry-run    # preview only
 [Stage 2 — bootloader]
   modem  →  slot A  +  slot B
       ↓
-[Offer userdata wipe]  →  reboot to system
+[Offer: reboot to system  /  wipe data + reboot]
 ```
 
 On error: **retry** / **reboot to correct mode + retry** / **abort**
@@ -166,7 +192,7 @@ lfff flash-partition modem --firmware-dir ./firmwares/RMX3709 --no-ab
 
 ### `lfff extract <zip>`
 
-Extract OTA firmware zip into individual `.img` files. `payload_dumper` accepts ZIP directly — no need to unzip first.
+Extract OTA firmware zip into individual `.img` files.
 
 ```bash
 lfff extract firmware.zip
@@ -192,7 +218,7 @@ lfff devices --check   # cable speed, battery, unlock status
 
 ### `lfff arb`
 
-Compare Anti-Rollback version between firmware and device. Parses `xbl_config.img` ELF64 OEM metadata directly — same algorithm as [arbextract](https://github.com/koaaN/arbextract).
+Compare Anti-Rollback version between firmware and device.
 
 ```bash
 lfff arb --firmware-dir ./firmwares/RMX3709
@@ -200,14 +226,14 @@ lfff arb --xbl ./firmwares/RMX3709/critical/xbl_config.img --device
 ```
 
 ARB levels:
-- `ARB = 0` — hard ARB not enforced (safe)
-- `ARB > 0` — hard ARB active; flashing a lower version **will brick the device**
+- `ARB = 0` — hard ARB not enforced (safe to flash)
+- `ARB > 0` — hard ARB active; flashing **permanently raises the counter** — downgrade will brick the device
 
 ---
 
 ### `lfff download <url>`
 
-Download firmware with multi-connection resume support. Handles 4PDA redirect links automatically.
+Download firmware with multi-connection resume support.
 
 ```bash
 lfff download https://example.com/firmware.zip
@@ -246,7 +272,7 @@ If your device works (or doesn't) — open an issue!
 ```bash
 git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher
 cd LibreFastbootFirmwareFlasher
-cargo build              # debug build
+cargo build              # debug build (all crates)
 cargo build --release    # optimized build
 cargo check              # type-check without building
 cargo test               # run tests
@@ -256,41 +282,50 @@ cargo test               # run tests
 
 ```
 LibreFastbootFirmwareFlasher/
-├── Cargo.toml
+├── Cargo.toml               # workspace
 ├── README.md
 ├── LICENSE
 ├── logo.svg
+├── install.sh               # universal installer
 ├── .github/
 │   └── workflows/
-│       └── release.yml      # CI: cross-platform builds on tag push
-└── src/
-    ├── lib.rs               # library crate root (for future GUI)
-    ├── main.rs              # CLI entry point (clap derive)
-    ├── utils.rs             # subprocess helpers, sha256, tool checks
-    ├── arb.rs               # Anti-Rollback ELF64 parser
-    ├── device.rs            # device discovery, pre-flash checks
-    ├── extractor.rs         # firmware extraction, partition grouping
-    ├── downloader.rs        # OTA download via aria2c
-    ├── flasher.rs           # flash orchestrator, A/B slots, progress bar
-    └── deps.rs              # dependency installer
+│       └── release.yml      # CI: builds CLI + GUI on tag push
+├── lib/                     # shared library crate
+│   └── src/
+│       ├── lib.rs
+│       ├── utils.rs         # subprocess helpers, sha256
+│       ├── arb.rs           # Anti-Rollback ELF64 parser
+│       ├── device.rs        # device discovery, pre-flash checks
+│       ├── extractor.rs     # firmware extraction, partition grouping
+│       ├── downloader.rs    # OTA download via aria2c
+│       ├── flasher.rs       # flash orchestrator, A/B slots
+│       └── deps.rs          # dependency installer
+├── cli/                     # CLI binary crate
+│   └── src/
+│       └── main.rs
+└── gui/                     # GUI binary crate (Slint)
+    ├── build.rs
+    ├── src/
+    │   └── main.rs
+    └── ui/
+        └── main.slint
 ```
-
-Split into library + binary crates to support a potential Qt GUI in the future.
 
 ### Cargo dependencies
 
 | Crate | Purpose |
 |-------|---------|
-| `clap` | CLI argument parsing (derive) |
-| `anyhow` / `thiserror` | Error handling |
+| `clap` | CLI argument parsing |
+| `anyhow` | Error handling |
 | `log` / `env_logger` | Logging |
 | `sha2` | File checksum verification |
 | `colored` | Terminal colors |
-| `regex` | Parsing fastboot output |
 | `which` | Finding binaries in $PATH |
 | `zip` | Reading firmware archives |
-| `url` | Parsing OTA/CDN URLs |
 | `indicatif` | Progress bars |
+| `slint` | GUI framework |
+| `rfd` | Native file dialogs |
+| `arboard` | Clipboard access |
 
 ---
 

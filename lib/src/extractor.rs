@@ -143,16 +143,29 @@ fn move_into_groups(images: &[PathBuf], base: &Path) -> Result<HashMap<String, V
 ///
 /// payload_dumper accepts ZIP files directly (no need to unpack payload.bin first).
 /// payload-dumper-go requires a raw payload.bin path.
-fn run_payload_dumper(input: &Path, output: &Path, partitions: Option<&[String]>) -> bool {
+fn run_payload_dumper(
+    input: &Path,
+    output: &Path,
+    partitions: Option<&[String]>,
+    on_log: Option<&dyn Fn(String)>,
+) -> bool {
     let (tool, images_flag) = if which::which("payload_dumper").is_ok() {
         ("payload_dumper", "-i")
     } else if which::which("payload-dumper-go").is_ok() {
         ("payload-dumper-go", "-p")
     } else {
         log::error!("No payload dumper found in $PATH. Install: cargo install payload_dumper");
+        if let Some(cb) = on_log { cb("ERROR: No payload dumper found. Install payload_dumper.".into()); }
         return false;
     };
 
+    use std::process::Stdio;
+    use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+
+    // payload_dumper (Rust binary) uses indicatif which suppresses all output
+    // when stdout/stderr are not a TTY — nothing arrives until the process exits.
+    // Strategy: collect output after completion, and send heartbeat ticks every
+    // 2s while the process runs so the GUI shows progress instead of freezing.
     let mut cmd = Command::new(tool);
     cmd.arg("-o").arg(output);
     if let Some(parts) = partitions {
@@ -161,9 +174,134 @@ fn run_payload_dumper(input: &Path, output: &Path, partitions: Option<&[String]>
         }
     }
     cmd.arg(input);
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     debug!("Running: {:?}", cmd);
-    cmd.status().map(|s| s.success()).unwrap_or(false)
+
+    let child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            if let Some(cb) = on_log { cb(format!("ERROR: failed to start {}: {}", tool, e)); }
+            return false;
+        }
+    };
+
+    // payload_dumper writes to /dev/tty directly (bypasses stdout/stderr pipes).
+    // We can't capture its output. Instead, watch the output directory for newly
+    // created .img files and report them in real time, so the GUI shows progress.
+    let done_flag = Arc::new(AtomicBool::new(false));
+    let done_clone = done_flag.clone();
+    let watch_dir = output.to_path_buf();
+    let (tick_tx, tick_rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        let mut known: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut secs = 0u32;
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            if done_clone.load(Ordering::Relaxed) { break; }
+            secs += 1;
+            // Scan for new .img files (recursive)
+            let mut queue = vec![watch_dir.clone()];
+            while let Some(dir) = queue.pop() {
+                if let Ok(entries) = fs::read_dir(&dir) {
+                    for e in entries.flatten() {
+                        let p = e.path();
+                        if p.is_dir() { queue.push(p); continue; }
+                        let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                        if name.ends_with(".img") && known.insert(name.clone()) {
+                            tick_tx.send(format!("Extracted: {}", name)).ok();
+                        }
+                    }
+                }
+            }
+            // Also tick every 5s so GUI doesn't look frozen
+            if secs % 5 == 0 && known.is_empty() {
+                tick_tx.send(format!("Extracting... ({}s)", secs)).ok();
+            }
+        }
+        // Final scan after process exits (recursive)
+        let mut queue = vec![watch_dir.clone()];
+        while let Some(dir) = queue.pop() {
+            if let Ok(entries) = fs::read_dir(&dir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if p.is_dir() { queue.push(p); continue; }
+                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    if name.ends_with(".img") && known.insert(name.clone()) {
+                        tick_tx.send(format!("Extracted: {}", name)).ok();
+                    }
+                }
+            }
+        }
+    });
+
+    if let Some(cb) = on_log { cb(format!("Running {}...", tool)); }
+    let output_result = child.wait_with_output();
+    done_flag.store(true, Ordering::Relaxed);
+    std::thread::sleep(std::time::Duration::from_millis(1100)); // let watcher do final scan
+
+    while let Ok(tick) = tick_rx.try_recv() {
+        if let Some(cb) = on_log { cb(tick); }
+    }
+
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut chars = s.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '\x1b' {
+                if chars.peek() == Some(&'[') {
+                    chars.next();
+                    for c in chars.by_ref() {
+                        if c.is_ascii_alphabetic() { break; }
+                    }
+                }
+            } else {
+                out.push(ch);
+            }
+        }
+        out
+    }
+
+    fn is_noise(s: &str) -> bool {
+        if s.contains("[00:") { return true; }
+        if s.contains("\x1b") { return true; }
+        if s == "[" || s == "]" { return true; }
+        let is_spinner = (s.starts_with('*') || s.starts_with('-') || s.starts_with('\\') || s.starts_with('/'))
+            && s.contains("Extracting partitions");
+        is_spinner
+    }
+
+    match output_result {
+        Ok(out) => {
+            let stdout_bytes = out.stdout.len();
+            let stderr_bytes = out.stderr.len();
+            // Replay stdout then stderr line by line after the process finishes
+            let mut shown = 0usize;
+            for bytes in [&out.stdout, &out.stderr] {
+                let text = String::from_utf8_lossy(bytes);
+                for line in text.lines() {
+                    let t = strip_ansi(line.trim());
+                    if !t.is_empty() && !is_noise(&t) {
+                        if let Some(cb) = on_log { cb(t); shown += 1; }
+                    }
+                }
+            }
+            if shown == 0 {
+                // payload_dumper wrote nothing useful — show a summary anyway
+                if let Some(cb) = on_log {
+                    cb(format!("{} finished (stdout: {} B, stderr: {} B, exit: {})",
+                        tool, stdout_bytes, stderr_bytes,
+                        if out.status.success() { "OK" } else { "FAIL" }));
+                }
+            }
+            out.status.success()
+        }
+        Err(e) => {
+            if let Some(cb) = on_log { cb(format!("ERROR: {}", e)); }
+            false
+        }
+    }
 }
+
 
 /// Check if payload_dumper (Rust version) is available.
 /// It supports ZIP input directly, so we can skip payload.bin extraction.
@@ -220,6 +358,17 @@ pub fn extract_firmware(
     output_dir: &Path,
     checksum: Option<&str>,
     partitions: Option<&[String]>,
+) -> ExtractionResult {
+    extract_firmware_with_log(zip_path, output_dir, checksum, partitions, None)
+}
+
+/// Same as [`extract_firmware`] but streams log lines to `on_log` for GUI display.
+pub fn extract_firmware_with_log(
+    zip_path: &Path,
+    output_dir: &Path,
+    checksum: Option<&str>,
+    partitions: Option<&[String]>,
+    on_log: Option<&dyn Fn(String)>,
 ) -> ExtractionResult {
     let zip_path = match zip_path.canonicalize() {
         Ok(p) => p,
@@ -295,7 +444,7 @@ pub fn extract_firmware(
         let ok = if has_payload_dumper_rust() {
             // payload_dumper (Rust) accepts ZIP directly — no need to extract payload.bin
             info!("Using payload_dumper with ZIP input (no unzipping needed)");
-            run_payload_dumper(&zip_path, &staging, partitions)
+            run_payload_dumper(&zip_path, &staging, partitions, on_log)
         } else {
             // payload-dumper-go needs raw payload.bin — extract it first
             info!("Extracting payload.bin for payload-dumper-go ...");
@@ -309,7 +458,7 @@ pub fn extract_firmware(
                 let mut o = fs::File::create(&payload_tmp).unwrap();
                 io::copy(&mut e, &mut o).unwrap();
             }
-            let result = run_payload_dumper(&payload_tmp, &staging, partitions);
+            let result = run_payload_dumper(&payload_tmp, &staging, partitions, on_log);
             let _ = fs::remove_file(&payload_tmp);
             let _ = fs::remove_dir(&tmp);
             result
@@ -384,7 +533,13 @@ pub fn extract_firmware(
     )
 }
 
-/// Try to read firmware name from payload_properties.txt inside the archive.
+/// Try to read a human-friendly firmware name from inside the archive.
+///
+/// Strategy (first match wins):
+/// 1. `META-INF/com/android/metadata` — combine `product_name` + numeric part
+///    of `version_name`, e.g. `RMX3709TR` + `16.0.2.400` → `RMX3709TR_16.0.2.400`
+/// 2. `payload_properties.txt` — `ota_target_version` or `oplus_rom_version`
+/// 3. Fallback: ZIP file stem as before.
 pub fn get_firmware_name(zip_path: &Path) -> String {
     let fallback = || {
         zip_path
@@ -393,6 +548,7 @@ pub fn get_firmware_name(zip_path: &Path) -> String {
             .to_string_lossy()
             .to_string()
     };
+
     let f = match fs::File::open(zip_path) {
         Ok(f) => f,
         Err(_) => return fallback(),
@@ -401,7 +557,46 @@ pub fn get_firmware_name(zip_path: &Path) -> String {
         Ok(a) => a,
         Err(_) => return fallback(),
     };
-    let props = z
+
+    // ── Strategy 1: META-INF/com/android/metadata ──────────────────────────
+    let metadata_props = z
+        .by_name("META-INF/com/android/metadata")
+        .ok()
+        .and_then(|mut e| {
+            let mut buf = String::new();
+            io::Read::read_to_string(&mut e, &mut buf).ok()?;
+            Some(parse_payload_properties(&buf))
+        })
+        .unwrap_or_default();
+
+    if let (Some(product), Some(version)) = (
+        metadata_props.get("product_name"),
+        metadata_props.get("version_name"),
+    ) {
+        let product = product.trim();
+        // version_name looks like "RMX3709_16.0.2.400(EX01)" — extract the
+        // numeric version after the last underscore, stripping any suffix in parens.
+        let numeric = version
+            .trim()
+            .rsplit('_')
+            .next()
+            .unwrap_or("")
+            .split('(')
+            .next()
+            .unwrap_or("")
+            .trim();
+
+        if !product.is_empty() && !numeric.is_empty() {
+            return format!("{}_{}", product, numeric);
+        }
+        // Fallback within strategy 1: just product_name if version parse failed
+        if !product.is_empty() {
+            return product.to_string();
+        }
+    }
+
+    // ── Strategy 2: payload_properties.txt ────────────────────────────────
+    let payload_props = z
         .by_name("payload_properties.txt")
         .ok()
         .and_then(|mut e| {
@@ -410,14 +605,16 @@ pub fn get_firmware_name(zip_path: &Path) -> String {
             Some(parse_payload_properties(&buf))
         })
         .unwrap_or_default();
+
     for key in &["ota_target_version", "oplus_rom_version"] {
-        if let Some(v) = props.get(*key) {
+        if let Some(v) = payload_props.get(*key) {
             let v = v.trim();
             if !v.is_empty() {
                 return v.replace('/', "_").replace(' ', "_");
             }
         }
     }
+
     fallback()
 }
 

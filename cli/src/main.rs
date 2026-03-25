@@ -149,7 +149,7 @@ enum Commands {
 // ---------------------------------------------------------------------------
 
 fn cmd_devices(check: bool, serial: Option<&str>) -> i32 {
-    use lfff::device::{
+    use lfff_lib::device::{
         list_adb_devices, list_fastboot_devices, print_check_report, run_pre_flash_checks,
     };
 
@@ -190,7 +190,7 @@ fn cmd_extract(
     checksum: Option<&str>,
     list_only: bool,
 ) -> i32 {
-    use lfff::extractor::{extract_firmware, get_firmware_name, print_extraction_result};
+    use lfff_lib::extractor::{extract_firmware, get_firmware_name, print_extraction_result};
 
     if !zip.exists() {
         println!("✗ File not found: {}", zip.display());
@@ -232,7 +232,7 @@ fn cmd_extract(
                 .join(&name);
             println!("  Firmware : {}", name);
             let raw =
-                lfff::utils::prompt(&format!("  Output directory [{}]", default.display()), "");
+                lfff_lib::utils::prompt(&format!("  Output directory [{}]", default.display()), "");
             if raw.is_empty() {
                 default
             } else {
@@ -251,7 +251,7 @@ fn cmd_extract(
 }
 
 fn cmd_flash(firmware_dir: &PathBuf, serial: Option<&str>, dry_run: bool) -> i32 {
-    use lfff::flasher::{print_summary, run_flash_session};
+    use lfff_lib::flasher::{print_summary, run_flash_session};
 
     if !firmware_dir.is_dir() {
         println!("✗ Not a directory: {}", firmware_dir.display());
@@ -259,7 +259,7 @@ fn cmd_flash(firmware_dir: &PathBuf, serial: Option<&str>, dry_run: bool) -> i32
     }
 
     println!("\n── Dependency check ─────────────────────────────────────");
-    let ok = lfff::utils::require_tools(&["fastboot"]);
+    let ok = lfff_lib::utils::require_tools(&["fastboot"]);
     println!("────────────────────────────────────────────────────────\n");
     if !ok {
         println!("✗ fastboot is required for flashing. Aborting.");
@@ -285,7 +285,7 @@ fn cmd_flash_partition(
     dry_run: bool,
     serial: Option<&str>,
 ) -> i32 {
-    use lfff::flasher::{collect_images, run_flash_single};
+    use lfff_lib::flasher::{collect_images, run_flash_single};
 
     let image_path: PathBuf = match image {
         Some(img) => {
@@ -355,7 +355,7 @@ fn cmd_arb(
     device: bool,
     serial: Option<&str>,
 ) -> i32 {
-    use lfff::arb::{
+    use lfff_lib::arb::{
         arb_confirmation_gate, compare_arb_versions, extract_arb_from_xbl, find_xbl_config,
         get_device_arb_version,
     };
@@ -393,7 +393,7 @@ fn cmd_arb(
 }
 
 fn cmd_deps(check: bool, tools: &[String]) -> i32 {
-    use lfff::deps::install_dependencies;
+    use lfff_lib::deps::install_dependencies;
 
     let tool_list = if tools.is_empty() { None } else { Some(tools) };
     let report = install_dependencies(tool_list, check);
@@ -402,7 +402,7 @@ fn cmd_deps(check: bool, tools: &[String]) -> i32 {
 }
 
 fn cmd_download(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
-    use lfff::downloader::download_firmware;
+    use lfff_lib::downloader::download_firmware;
 
     println!("\n── Firmware download ────────────────────────────────────");
     let result = download_firmware(url, output.map(|p| p.as_path()), connections);
@@ -435,7 +435,7 @@ fn print_welcome() {
     println!("  ███████╗██║     ██║     ██║     ");
     println!("  ╚══════╝╚═╝     ╚═╝     ╚═╝     ");
     println!();
-    println!("  LibreFastbootFirmwareFlasher  v0.2.0");
+    println!("  LibreFastbootFirmwareFlasher  v1.0.0");
     println!("  Flash Android firmware via fastboot — free, open, no bloat.");
     println!();
     println!("  Quick start:");

@@ -1,0 +1,23 @@
+[package]
+name = "lfff-cli"
+version = "1.0.0"
+edition = "2024"
+description = "CLI frontend for LibreFastbootFirmwareFlasher"
+license = "GPL-3.0"
+
+[[bin]]
+name = "lfff"
+path = "src/main.rs"
+
+[dependencies]
+lfff-lib = { path = "../lib" }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+log = "0.4"
+env_logger = "0.11"
+indicatif = "0.17"
+colored = "3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+assert_cmd = "2"

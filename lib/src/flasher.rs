@@ -1250,3 +1250,219 @@ fn offer_wipe(session: &FlashSession) {
     }
     println!("────────────────────────────────────────────────────────\n");
 }
+
+// ---------------------------------------------------------------------------
+// GUI-friendly flash session — same logic as run_flash_session but uses
+// callbacks instead of println!/prompt/exit so it works from a GUI thread.
+//
+// Assumptions for GUI mode:
+//   - Device is already in fastbootd when this is called
+//   - No interactive prompts (ARB check is handled by GUI before calling this)
+// ---------------------------------------------------------------------------
+
+pub struct FlashProgress {
+    pub partition: String,
+    pub slot: String,
+    pub done: usize,
+    pub total: usize,
+}
+
+pub fn run_flash_session_with_log(
+    firmware_dir: &Path,
+    serial: Option<&str>,
+    on_log: &dyn Fn(String),
+    on_progress: &dyn Fn(FlashProgress),
+) -> FlashSession {
+    let mut session = FlashSession::new(firmware_dir, serial, false);
+
+    let images = collect_images(firmware_dir);
+    if images.is_empty() {
+        on_log(format!("No .img files found in {}", firmware_dir.display()));
+        return session;
+    }
+
+    let fastbootd_images: HashMap<&str, &PathBuf> = images
+        .iter()
+        .filter(|(k, _)| !is_bootloader_partition(k))
+        .map(|(k, v)| (k.as_str(), v))
+        .collect();
+    let bootloader_images: HashMap<&str, &PathBuf> = images
+        .iter()
+        .filter(|(k, _)| is_bootloader_partition(k))
+        .map(|(k, v)| (k.as_str(), v))
+        .collect();
+
+    on_log(format!("{} images found", images.len()));
+
+    // -- Stage 1: fastbootd --
+    if !fastbootd_images.is_empty() {
+        let active_slot = get_active_slot(serial);
+        on_log(format!("Active slot: {}", active_slot.to_uppercase()));
+
+        let super_imgs: HashMap<&&str, &&PathBuf> = fastbootd_images
+            .iter()
+            .filter(|(k, _)| is_super_partition(k))
+            .collect();
+        let non_super_imgs: HashMap<&&str, &&PathBuf> = fastbootd_images
+            .iter()
+            .filter(|(k, _)| !is_super_partition(k))
+            .collect();
+
+        let total_ops = non_super_imgs.len() * 2 + super_imgs.len();
+        let flash_start = std::time::Instant::now();
+        let mut done_ops = 0usize;
+
+        on_log(format!(
+            "Stage 1/2: fastbootd — {} non-super × 2 slots, {} super × 1 slot",
+            non_super_imgs.len(), super_imgs.len()
+        ));
+
+        // Non-super → both slots
+        let mut sorted_non_super: Vec<_> = non_super_imgs.iter().collect();
+        sorted_non_super.sort_by_key(|(k, _)| k.to_string());
+
+        for slot in SLOTS {
+            for (partition, image_path) in &sorted_non_super {
+                on_progress(FlashProgress {
+                    partition: partition.to_string(),
+                    slot: slot.to_string(),
+                    done: done_ops,
+                    total: total_ops,
+                });
+                on_log(format!("Flashing {}_{} ...", partition, slot));
+                let result = flash_partition(image_path, partition, slot, serial);
+                done_ops += 1;
+                if result.success {
+                    on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
+                } else {
+                    on_log(format!("{}_{} FAILED: {}", partition, slot, result.error));
+                    session.results.push(result.clone());
+                    // Retry once
+                    on_log(format!("Retrying {}_{} ...", partition, slot));
+                    let retry = flash_partition(image_path, partition, slot, serial);
+                    if retry.success {
+                        on_log(format!("{}_{} OK on retry ({:.1}s)", partition, slot, retry.duration_s));
+                        *session.results.last_mut().unwrap() = retry;
+                    } else {
+                        on_log(format!("{}_{} FAILED on retry — aborting", partition, slot));
+                        *session.results.last_mut().unwrap() = retry;
+                        session.aborted = true;
+                        return session;
+                    }
+                    continue;
+                }
+                session.results.push(result);
+            }
+        }
+
+        // Super → active slot only
+        if !super_imgs.is_empty() {
+            on_log("Clearing super partition...".into());
+            let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
+            wipe_super(serial, &super_names);
+
+            let mut sorted_super: Vec<_> = super_imgs.iter().collect();
+            sorted_super.sort_by_key(|(k, _)| k.to_string());
+
+            for (partition, image_path) in &sorted_super {
+                on_progress(FlashProgress {
+                    partition: partition.to_string(),
+                    slot: active_slot.clone(),
+                    done: done_ops,
+                    total: total_ops,
+                });
+                on_log(format!("Flashing {}_{} (super) ...", partition, active_slot));
+                let result = flash_partition(image_path, partition, &active_slot, serial);
+                done_ops += 1;
+                if result.success {
+                    on_log(format!("{}_{} OK ({:.1}s)", partition, active_slot, result.duration_s));
+                } else {
+                    on_log(format!("{}_{} FAILED: {}", partition, active_slot, result.error));
+                    session.results.push(result.clone());
+                    on_log(format!("Retrying {}_{} ...", partition, active_slot));
+                    let retry = flash_partition(image_path, partition, &active_slot, serial);
+                    if retry.success {
+                        on_log(format!("{}_{} OK on retry ({:.1}s)", partition, active_slot, retry.duration_s));
+                        *session.results.last_mut().unwrap() = retry;
+                    } else {
+                        on_log(format!("{}_{} FAILED on retry — aborting", partition, active_slot));
+                        *session.results.last_mut().unwrap() = retry;
+                        session.aborted = true;
+                        return session;
+                    }
+                    continue;
+                }
+                session.results.push(result);
+            }
+        }
+
+        let elapsed = flash_start.elapsed().as_secs();
+        on_log(format!("Stage 1 complete in {}m{:02}s", elapsed / 60, elapsed % 60));
+    }
+
+    // -- Stage 2: bootloader --
+    if !bootloader_images.is_empty() {
+        on_log("Rebooting to bootloader for modem/bootloader flash...".into());
+        if !enter_bootloader(serial) {
+            on_log("Could not reach bootloader — modem was not flashed".into());
+            for (&partition, _) in &bootloader_images {
+                for &slot in SLOTS {
+                    session.results.push(FlashResult {
+                        partition: partition.to_string(),
+                        slot: slot.to_string(),
+                        success: false,
+                        error: "Could not enter bootloader mode".into(),
+                        duration_s: 0.0,
+                    });
+                }
+            }
+            return session;
+        }
+
+        let total_ops2 = bootloader_images.len() * 2;
+        let mut done_ops2 = 0usize;
+        let flash_start2 = std::time::Instant::now();
+        on_log(format!("Stage 2/2: bootloader — {} partitions × 2 slots", bootloader_images.len()));
+
+        let mut sorted_bl: Vec<_> = bootloader_images.iter().collect();
+        sorted_bl.sort_by_key(|(k, _)| k.to_string());
+
+        for &slot in SLOTS {
+            for (partition, image_path) in &sorted_bl {
+                on_progress(FlashProgress {
+                    partition: partition.to_string(),
+                    slot: slot.to_string(),
+                    done: done_ops2,
+                    total: total_ops2,
+                });
+                on_log(format!("Flashing {}_{} ...", partition, slot));
+                let result = flash_partition(image_path, partition, slot, serial);
+                done_ops2 += 1;
+                if result.success {
+                    on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
+                } else {
+                    on_log(format!("{}_{} FAILED: {}", partition, slot, result.error));
+                    session.results.push(result.clone());
+                    on_log(format!("Retrying {}_{} ...", partition, slot));
+                    let retry = flash_partition(image_path, partition, slot, serial);
+                    if retry.success {
+                        on_log(format!("{}_{} OK on retry ({:.1}s)", partition, slot, retry.duration_s));
+                        *session.results.last_mut().unwrap() = retry;
+                    } else {
+                        on_log(format!("{}_{} FAILED on retry — aborting", partition, slot));
+                        *session.results.last_mut().unwrap() = retry;
+                        session.aborted = true;
+                        return session;
+                    }
+                    continue;
+                }
+                session.results.push(result);
+            }
+        }
+
+        let elapsed2 = flash_start2.elapsed().as_secs();
+        on_log(format!("Stage 2 complete in {}m{:02}s", elapsed2 / 60, elapsed2 % 60));
+    }
+
+    session
+}

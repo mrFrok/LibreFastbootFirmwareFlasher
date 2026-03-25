@@ -15,8 +15,6 @@ use crate::utils::run_cmd;
 const CABLE_SPEED_THRESHOLD_MB: f64 = 1.0;
 const CABLE_TEST_PAYLOAD_MB: usize = 8;
 const POLL_INTERVAL: u64 = 3;
-#[allow(dead_code)]
-const DEVICE_WAIT_TIMEOUT: u64 = 60;
 const BATTERY_MIN_LEVEL: i32 = 30;
 
 // ---------------------------------------------------------------------------

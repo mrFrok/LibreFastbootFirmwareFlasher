@@ -4,12 +4,12 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
-#   wget -qO- https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --gui
+#   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --both
 
 set -euo pipefail
 
 REPO="mrFrok/LibreFastbootFirmwareFlasher"
-BINARY="lfff"
 
 # Colors
 RED='\033[0;31m'
@@ -23,6 +23,19 @@ info()  { echo -e "${CYAN}$*${NC}"; }
 ok()    { echo -e "${GREEN}✓${NC} $*"; }
 warn()  { echo -e "${YELLOW}⚠${NC} $*"; }
 err()   { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
+
+# Parse flags
+INSTALL_CLI=true
+INSTALL_GUI=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --gui)  INSTALL_CLI=false; INSTALL_GUI=true ;;
+        --both) INSTALL_CLI=true;  INSTALL_GUI=true ;;
+        --reinstall) : ;;  # accepted, no-op (always reinstalls)
+        *) warn "Unknown flag: $arg" ;;
+    esac
+done
 
 # Detect OS and arch
 detect_platform() {
@@ -47,13 +60,10 @@ detect_platform() {
 
 # Find best install directory
 find_install_dir() {
-    # Try /usr/local/bin first (needs root)
     if [ -w /usr/local/bin ]; then
         echo "/usr/local/bin"
         return
     fi
-
-    # Try ~/.local/bin (no root needed, works on immutable distros)
     local local_bin="$HOME/.local/bin"
     mkdir -p "$local_bin"
     echo "$local_bin"
@@ -71,64 +81,68 @@ get_latest_version() {
     fi
 }
 
+# Download and install one binary
+install_binary() {
+    local binary="$1"       # e.g. "lfff" or "lfff-gui"
+    local asset_name="$2"   # e.g. "lfff-linux-x86_64.tar.gz"
+    local version="$3"
+    local install_dir="$4"
+
+    local url="https://github.com/${REPO}/releases/download/${version}/${asset_name}"
+    local tmp
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' RETURN
+
+    info "Downloading $asset_name..."
+    if command -v curl &>/dev/null; then
+        curl -fsSL "$url" -o "$tmp/$asset_name"
+    else
+        wget -qO "$tmp/$asset_name" "$url"
+    fi
+    ok "Downloaded"
+
+    tar xzf "$tmp/$asset_name" -C "$tmp"
+    [ -f "$tmp/$binary" ] || err "Binary '$binary' not found in archive"
+    chmod +x "$tmp/$binary"
+
+    if [ "$install_dir" = "/usr/local/bin" ] && [ "$(id -u)" -ne 0 ]; then
+        info "Installing to $install_dir (requires sudo)..."
+        sudo cp "$tmp/$binary" "$install_dir/$binary"
+    else
+        cp "$tmp/$binary" "$install_dir/$binary"
+    fi
+
+    ok "Installed $binary to $install_dir/$binary"
+}
+
 main() {
     echo
     echo -e "${BOLD}LFFF Installer${NC}"
     echo -e "LibreFastbootFirmwareFlasher"
     echo
 
-    # Detect platform
     local platform
     platform="$(detect_platform)"
     info "Platform: $platform"
 
-    # Get latest version
     info "Fetching latest release..."
     local version
     version="$(get_latest_version)"
     [ -z "$version" ] && err "Could not determine latest version"
     ok "Latest version: $version"
 
-    # Build download URL
-    local asset="lfff-${platform}.tar.gz"
-    local url="https://github.com/${REPO}/releases/download/${version}/${asset}"
-
-    # Download
-    local tmp
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
-
-    info "Downloading $asset..."
-    if command -v curl &>/dev/null; then
-        curl -fsSL "$url" -o "$tmp/$asset"
-    else
-        wget -qO "$tmp/$asset" "$url"
-    fi
-    ok "Downloaded"
-
-    # Extract
-    tar xzf "$tmp/$asset" -C "$tmp"
-    [ -f "$tmp/$BINARY" ] || err "Binary not found in archive"
-    chmod +x "$tmp/$BINARY"
-
-    # Install
     local install_dir
     install_dir="$(find_install_dir)"
 
-    if [ "$install_dir" = "/usr/local/bin" ]; then
-        if [ "$(id -u)" -eq 0 ]; then
-            cp "$tmp/$BINARY" "$install_dir/$BINARY"
-        else
-            info "Installing to $install_dir (requires sudo)..."
-            sudo cp "$tmp/$BINARY" "$install_dir/$BINARY"
-        fi
-    else
-        cp "$tmp/$BINARY" "$install_dir/$BINARY"
+    if $INSTALL_CLI; then
+        install_binary "lfff" "lfff-${platform}.tar.gz" "$version" "$install_dir"
     fi
 
-    ok "Installed to $install_dir/$BINARY"
+    if $INSTALL_GUI; then
+        install_binary "lfff-gui" "lfff-gui-${platform}.tar.gz" "$version" "$install_dir"
+    fi
 
-    # Check PATH
+    # PATH warning
     if ! echo "$PATH" | tr ':' '\n' | grep -qx "$install_dir"; then
         echo
         warn "$install_dir is not in your PATH"
@@ -137,12 +151,13 @@ main() {
         echo
     fi
 
-    # Verify
-    if command -v lfff &>/dev/null; then
-        echo
+    echo
+    if $INSTALL_CLI && command -v lfff &>/dev/null; then
         ok "lfff is ready! Run ${BOLD}lfff deps${NC} to install external tools."
     fi
-
+    if $INSTALL_GUI && command -v lfff-gui &>/dev/null; then
+        ok "lfff-gui is ready!"
+    fi
     echo
 }
 

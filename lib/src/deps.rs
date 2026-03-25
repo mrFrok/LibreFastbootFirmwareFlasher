@@ -147,6 +147,10 @@ fn detect_pkg_manager() -> Option<String> {
     None
 }
 
+fn sudo_cmd() -> String {
+    std::env::var("LFFF_SUDO_CMD").unwrap_or_else(|_| "sudo".to_string())
+}
+
 fn needs_sudo(pm: &str) -> bool {
     if pm == "brew" {
         return false;
@@ -317,14 +321,15 @@ fn install_payload_dumper() -> DepResult {
     // Install to /usr/local/bin (with sudo) or ~/.local/bin
     let dest = std::path::Path::new("/usr/local/bin/payload_dumper");
 
-    let install_ok = Command::new("sudo")
+    let sc = sudo_cmd();
+    let install_ok = Command::new(&sc)
         .args(["cp"])
         .arg(&binary)
         .arg(dest)
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
-        && Command::new("sudo")
+        && Command::new(&sc)
             .args(["chmod", "755"])
             .arg(dest)
             .status()
@@ -407,10 +412,11 @@ fn install_via_pkg_manager(tools: &[&str], pm: &str) -> Vec<DepResult> {
     let mut cmd = install_cmd(pm);
     cmd.extend(packages.iter());
 
+    let sc = sudo_cmd();
     if needs_sudo(pm) {
-        let mut sudo_cmd = vec!["sudo"];
-        sudo_cmd.extend(cmd.iter());
-        cmd = sudo_cmd;
+        let mut new_cmd: Vec<&str> = vec![&sc];
+        new_cmd.extend(cmd.iter());
+        cmd = new_cmd;
     }
 
     println!("  Running: {}", cmd.join(" "));
