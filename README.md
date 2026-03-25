@@ -68,11 +68,14 @@ lfff deps   # installs everything automatically
 ### Any Linux / macOS (one-liner)
 
 ```bash
-# Install CLI
+# Install CLI and GUI
 curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
 
-# Install GUI
-curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --gui
+# Install only GUI
+curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --gui-only
+
+# Install only CLI
+curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --cli-only
 ```
 
 Works on immutable distros (Fedora Silverblue, NixOS, SteamOS) — installs to `~/.local/bin`.
@@ -81,16 +84,14 @@ Works on immutable distros (Fedora Silverblue, NixOS, SteamOS) — installs to `
 
 ```bash
 brew tap mrFrok/lfff
-brew install lfff        # CLI only
-brew install lfff-gui    # GUI
+brew install lfff
 ```
 
 ### Arch Linux (AUR)
 
 ```bash
-yay -S lfff        # CLI, build from source
-yay -S lfff-bin    # CLI, prebuilt binary
-yay -S lfff-gui-bin  # GUI, prebuilt binary
+yay -S lfff        # Build from source
+yay -S lfff-bin    # Prebuilt binary
 ```
 
 ### From GitHub Releases
@@ -117,6 +118,11 @@ cargo build --release -p lfff-gui   # GUI
 ```
 
 ---
+
+## Uninstall
+```bash
+curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --uninstall
+```
 
 ## Quick Start
 
