@@ -38,7 +38,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build CLI
-        run: cargo build --release --target ${{ matrix.target }} -p lfff
+        run: cargo build --release --target ${{ matrix.target }} -p lfff-cli
 
       - name: Package
         run: |
