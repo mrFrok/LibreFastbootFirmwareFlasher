@@ -9,7 +9,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  build-cli:
+    name: CLI — ${{ matrix.name }}
     strategy:
       matrix:
         include:
@@ -17,7 +18,7 @@ jobs:
             os: ubuntu-latest
             name: linux-x86_64
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
             name: linux-aarch64
           - target: x86_64-apple-darwin
             os: macos-latest
@@ -36,16 +37,8 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux aarch64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+      - name: Build CLI
+        run: cargo build --release --target ${{ matrix.target }} -p lfff
 
       - name: Package
         run: |
@@ -58,11 +51,74 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lfff-${{ matrix.name }}
+          name: cli-${{ matrix.name }}
           path: dist/lfff-${{ matrix.name }}.tar.gz*
 
+  build-gui:
+    name: GUI — ${{ matrix.name }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            name: linux-aarch64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: macos-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: macos-aarch64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux system dependencies
+        if: contains(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libfontconfig1-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libwayland-dev \
+            libx11-dev \
+            libxcb1-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libdbus-1-dev \
+            pkg-config
+
+      - name: Build GUI
+        run: cargo build --release --target ${{ matrix.target }} -p lfff-gui
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/lfff-gui dist/
+          cd dist
+          tar czf lfff-gui-${{ matrix.name }}.tar.gz lfff-gui
+          sha256sum lfff-gui-${{ matrix.name }}.tar.gz > lfff-gui-${{ matrix.name }}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.name }}
+          path: dist/lfff-gui-${{ matrix.name }}.tar.gz*
+
   release:
-    needs: build
+    needs: [build-cli, build-gui]
     runs-on: ubuntu-latest
     permissions:
       contents: write
