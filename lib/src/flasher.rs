@@ -94,6 +94,35 @@ fn is_critical_partition(name: &str) -> bool {
 // Data types
 // ---------------------------------------------------------------------------
 
+/// Source of firmware images — regular firmware directory or Android source build output.
+#[derive(Debug, Clone)]
+pub enum FirmwareSource {
+    /// Regular firmware directory (e.g. extracted from ZIP/OTA). ARB check applies.
+    Extracted(PathBuf),
+    /// Android source build output directory (`out/target/product/*/`). Skips ARB.
+    SourceBuild(PathBuf),
+}
+
+impl FirmwareSource {
+    pub fn path(&self) -> &Path {
+        match self {
+            FirmwareSource::Extracted(p) => p,
+            FirmwareSource::SourceBuild(p) => p,
+        }
+    }
+
+    pub fn is_source(&self) -> bool {
+        matches!(self, FirmwareSource::SourceBuild(_))
+    }
+
+    pub fn into_path(self) -> PathBuf {
+        match self {
+            FirmwareSource::Extracted(p) => p,
+            FirmwareSource::SourceBuild(p) => p,
+        }
+    }
+}
+
 /// Current device mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceMode {
@@ -117,6 +146,7 @@ pub struct FlashResult {
 #[derive(Debug, Clone)]
 pub struct FlashSession {
     pub firmware_dir: PathBuf,
+    pub source: FirmwareSource,
     pub results: Vec<FlashResult>,
     pub serial: Option<String>,
     pub aborted: bool,
@@ -124,9 +154,10 @@ pub struct FlashSession {
 }
 
 impl FlashSession {
-    pub fn new(firmware_dir: &Path, serial: Option<&str>, dry_run: bool) -> Self {
+    pub fn new(source: &FirmwareSource, serial: Option<&str>, dry_run: bool) -> Self {
         Self {
-            firmware_dir: firmware_dir.to_path_buf(),
+            firmware_dir: source.path().to_path_buf(),
+            source: source.clone(),
             results: Vec::new(),
             serial: serial.map(|s| s.to_string()),
             aborted: false,
@@ -438,13 +469,17 @@ fn flash_with_progress(
 /// For each dynamic partition: delete old entries and COW snapshots,
 /// then recreate with size=0.
 pub fn wipe_super(serial: Option<&str>, super_names: &[String]) {
+    wipe_super_with_log(serial, super_names, &|msg| println!("{}", msg));
+}
+
+pub fn wipe_super_with_log(serial: Option<&str>, super_names: &[String], on_log: &dyn Fn(String)) {
     let mut base_args: Vec<String> = vec!["fastboot".into()];
     if let Some(s) = serial {
         base_args.push("-s".into());
         base_args.push(s.into());
     }
 
-    println!("  Preparing {} super partition(s) ...", super_names.len());
+    on_log(format!("Preparing {} super partition(s) ...", super_names.len()));
 
     for base in super_names {
         // Delete existing entries + COW snapshots
@@ -484,7 +519,7 @@ pub fn wipe_super(serial: Option<&str>, super_names: &[String]) {
         }
     }
 
-    println!("  ✓ Super partitions cleared and recreated with size=0");
+    on_log("Super partitions cleared and recreated with size=0".into());
 }
 
 // ---------------------------------------------------------------------------
@@ -523,6 +558,83 @@ pub fn collect_images(firmware_dir: &Path) -> HashMap<String, PathBuf> {
             .to_string_lossy()
             .to_lowercase();
         // Strip _a / _b suffix
+        for suffix in &["_a", "_b"] {
+            if stem.ends_with(suffix) {
+                stem = stem[..stem.len() - suffix.len()].to_string();
+                break;
+            }
+        }
+        images.entry(stem).or_insert(img);
+    }
+
+    images
+}
+
+/// Scan a source build directory for flashable .img files.
+/// Applies Android build output filtering — ignores debug images, test images,
+/// temporary files, metadata, and build artifacts. Exception: `vendor_ramdump.img`
+/// is NOT ignored.
+pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
+    fn is_ignored_file(name: &str) -> bool {
+        let lower = name.to_lowercase();
+        // vendor_ramdump is NOT ignored
+        if lower == "vendor_ramdump.img" {
+            return false;
+        }
+        lower.ends_with("-debug.img")
+            || lower.contains("-test")
+            || lower.contains("_harness")
+            || lower.starts_with("ramdisk")
+            || lower == "super_empty.img"
+            || lower.starts_with("ota_metadata")
+            || lower.ends_with(".pb")
+    }
+
+    fn is_ignored_dir(name: &str) -> bool {
+        let lower = name.to_lowercase();
+        lower == "obj"
+            || lower == "symbols"
+            || lower == "fake_packages"
+            || lower == "install"
+            || lower.starts_with("tmp")
+    }
+
+    let mut images: HashMap<String, PathBuf> = HashMap::new();
+    let mut entries: Vec<PathBuf> = Vec::new();
+
+    fn collect_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
+        if let Ok(rd) = fs::read_dir(dir) {
+            for entry in rd.flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    let dname = p.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_lowercase();
+                    if !is_ignored_dir(&dname) {
+                        collect_recursive(&p, out);
+                    }
+                } else if p.extension().map(|e| e == "img").unwrap_or(false) {
+                    let fname = p.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    if !is_ignored_file(&fname) {
+                        out.push(p);
+                    }
+                }
+            }
+        }
+    }
+
+    collect_recursive(dir, &mut entries);
+    entries.sort_by_key(|p| p.components().count());
+
+    for img in entries {
+        let mut stem = img
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
         for suffix in &["_a", "_b"] {
             if stem.ends_with(suffix) {
                 stem = stem[..stem.len() - suffix.len()].to_string();
@@ -648,8 +760,9 @@ fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: Devic
 ///   5. Stage 1: fastbootd — non-super (both slots) + super (active slot)
 ///   6. Stage 2: bootloader — modem (both slots)
 ///   7. Summary, wipe offer, reboot
-pub fn run_flash_session(firmware_dir: &Path, serial: Option<&str>, dry_run: bool) -> FlashSession {
-    let mut session = FlashSession::new(firmware_dir, serial, dry_run);
+pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run: bool) -> FlashSession {
+    let firmware_dir = source.path();
+    let mut session = FlashSession::new(source, serial, dry_run);
 
     // -- Pre-flash checks --
     info!("==> Running pre-flash checks ...");
@@ -672,9 +785,17 @@ pub fn run_flash_session(firmware_dir: &Path, serial: Option<&str>, dry_run: boo
     session.serial = serial.clone();
 
     // -- Collect images --
-    let images = collect_images(firmware_dir);
+    let images = if source.is_source() {
+        collect_images_from_source(firmware_dir)
+    } else {
+        collect_images(firmware_dir)
+    };
     if images.is_empty() {
-        println!("✗ No .img files found in {}", firmware_dir.display());
+        if source.is_source() {
+            println!("✗ No flashable .img files found in source build directory: {}", firmware_dir.display());
+        } else {
+            println!("✗ No .img files found in {}", firmware_dir.display());
+        }
         std::process::exit(1);
     }
 
@@ -712,22 +833,24 @@ pub fn run_flash_session(firmware_dir: &Path, serial: Option<&str>, dry_run: boo
         );
     }
 
-    // -- ARB check (firmware only) --
-    if let Some(xbl_path) = find_xbl_config(firmware_dir) {
-        let firmware_arb = extract_arb_from_xbl(&xbl_path);
-        let device_arb = ArbInfo {
-            version: None,
-            source: "not checked".into(),
-            oem_major: None,
-            oem_minor: None,
-        };
-        let arb_result = compare_arb_versions(&firmware_arb, &device_arb);
-        if !arb_confirmation_gate(&arb_result, "none") {
-            println!("Aborted by user (ARB check).");
-            std::process::exit(0);
+    // -- ARB check (firmware only, skip for source builds) --
+    if !source.is_source() {
+        if let Some(xbl_path) = find_xbl_config(firmware_dir) {
+            let firmware_arb = extract_arb_from_xbl(&xbl_path);
+            let device_arb = ArbInfo {
+                version: None,
+                source: "not checked".into(),
+                oem_major: None,
+                oem_minor: None,
+            };
+            let arb_result = compare_arb_versions(&firmware_arb, &device_arb);
+            if !arb_confirmation_gate(&arb_result, "none") {
+                println!("Aborted by user (ARB check).");
+                std::process::exit(0);
+            }
+        } else {
+            warn!("xbl_config.img not found in firmware — ARB check skipped");
         }
-    } else {
-        warn!("xbl_config.img not found in firmware — ARB check skipped");
     }
 
     if dry_run {
@@ -1032,7 +1155,7 @@ pub fn run_flash_single(
     dry_run: bool,
 ) -> FlashSession {
     let mut session = FlashSession::new(
-        image_path.parent().unwrap_or(Path::new(".")),
+        &FirmwareSource::Extracted(image_path.parent().unwrap_or(Path::new(".")).to_path_buf()),
         serial,
         dry_run,
     );
@@ -1268,16 +1391,25 @@ pub struct FlashProgress {
 }
 
 pub fn run_flash_session_with_log(
-    firmware_dir: &Path,
+    source: &FirmwareSource,
     serial: Option<&str>,
     on_log: &dyn Fn(String),
     on_progress: &dyn Fn(FlashProgress),
 ) -> FlashSession {
-    let mut session = FlashSession::new(firmware_dir, serial, false);
+    let firmware_dir = source.path();
+    let mut session = FlashSession::new(source, serial, false);
 
-    let images = collect_images(firmware_dir);
+    let images = if source.is_source() {
+        collect_images_from_source(firmware_dir)
+    } else {
+        collect_images(firmware_dir)
+    };
     if images.is_empty() {
-        on_log(format!("No .img files found in {}", firmware_dir.display()));
+        if source.is_source() {
+            on_log(format!("No flashable .img files found in source build directory: {}", firmware_dir.display()));
+        } else {
+            on_log(format!("No .img files found in {}", firmware_dir.display()));
+        }
         return session;
     }
 
@@ -1359,7 +1491,7 @@ pub fn run_flash_session_with_log(
         if !super_imgs.is_empty() {
             on_log("Clearing super partition...".into());
             let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
-            wipe_super(serial, &super_names);
+            wipe_super_with_log(serial, &super_names, &|msg| on_log(msg));
 
             let mut sorted_super: Vec<_> = super_imgs.iter().collect();
             sorted_super.sort_by_key(|(k, _)| k.to_string());

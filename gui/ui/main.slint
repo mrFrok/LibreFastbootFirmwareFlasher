@@ -1,13 +1,174 @@
-// LibreFastbootFirmwareFlasher — Material Design 3 GUI
-// Uses slint-ui/material-components library
+// LibreFastbootFirmwareFlasher — Material Design 3 GUI (Slint built-in material)
 
-import { MaterialWindow } from "@material";
-import { FilledButton, OutlineButton, TextButton, TonalButton } from "@material";
-import { LinearProgressIndicator } from "@material";
-import { ScrollView } from "@material";
-import { HorizontalDivider } from "@material";
-import { MaterialPalette } from "@material";
-import { Palette } from "std-widgets.slint";
+import { Palette, ScrollView } from "std-widgets.slint";
+
+// MD3 color roles — Blue palette, clean dark/light
+global MaterialPalette {
+    in-out property <color> primary:                Palette.color-scheme == ColorScheme.dark ? #9ec3ff : #0061a4;
+    in-out property <color> on-primary:             Palette.color-scheme == ColorScheme.dark ? #003258 : #ffffff;
+    in-out property <color> primary-container:      Palette.color-scheme == ColorScheme.dark ? #00497d : #d0e4ff;
+    in-out property <color> on-primary-container:   Palette.color-scheme == ColorScheme.dark ? #d0e4ff : #001d36;
+    in-out property <color> secondary-container:    Palette.color-scheme == ColorScheme.dark ? #3a5a72 : #d6e3ff;
+    in-out property <color> on-secondary-container: Palette.color-scheme == ColorScheme.dark ? #d6e3ff : #001d36;
+    in-out property <color> surface-container-low:  Palette.color-scheme == ColorScheme.dark ? #141416 : #fef7ff;
+    in-out property <color> surface-container:      Palette.color-scheme == ColorScheme.dark ? #1c1c1e : #fef7ff;
+    in-out property <color> surface-container-high: Palette.color-scheme == ColorScheme.dark ? #28282a : #ece6f0;
+    in-out property <color> surface-container-highest: Palette.color-scheme == ColorScheme.dark ? #323234 : #e6e0e9;
+    in-out property <color> on-surface:             Palette.color-scheme == ColorScheme.dark ? #e4e1e6 : #1c1b1f;
+    in-out property <color> on-surface-variant:     Palette.color-scheme == ColorScheme.dark ? #c6c4c8 : #49454f;
+    in-out property <color> outline:                Palette.color-scheme == ColorScheme.dark ? #8e8e93 : #79747e;
+    in-out property <color> outline-variant:        Palette.color-scheme == ColorScheme.dark ? #444649 : #cac4d0;
+    in-out property <color> error:                  Palette.color-scheme == ColorScheme.dark ? #f2b8b5 : #b0121a;
+    in-out property <color> on-error:               Palette.color-scheme == ColorScheme.dark ? #601410 : #ffffff;
+    in-out property <color> error-container:        Palette.color-scheme == ColorScheme.dark ? #8c1d18 : #f1d8d9;
+    in-out property <color> on-error-container:     Palette.color-scheme == ColorScheme.dark ? #ffdad6 : #541217;
+}
+
+// ── Custom MD3-styled components ────────────────────────────────────────────
+
+component FilledButton {
+    in property <string> text;
+    in property <bool> enabled <=> ta.enabled;
+    callback clicked;
+    height: 36px;
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+        Rectangle {
+            border-radius: 20px; clip: true;
+            background: root.enabled ? MaterialPalette.primary : MaterialPalette.surface-container;
+            animate background { duration: 200ms; easing: ease-out; }
+            HorizontalLayout { padding-left: 16px; padding-right: 16px;
+                Text {
+                    text: root.text; font-size: 14px; font-weight: 600;
+                    color: root.enabled ? MaterialPalette.on-primary : MaterialPalette.on-surface-variant;
+                    horizontal-alignment: center; vertical-alignment: center;
+                    overflow: elide; horizontal-stretch: 1;
+                    animate color { duration: 200ms; easing: ease-out; }
+                }
+            }
+        }
+    }
+}
+
+component OutlinedButton {
+    in property <string> text;
+    in property <bool> enabled <=> ta.enabled;
+    callback clicked;
+    height: 36px;
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+        Rectangle {
+            border-radius: 20px; clip: true;
+            border-width: 1px;
+            border-color: root.enabled ? MaterialPalette.outline : MaterialPalette.outline-variant;
+            background: ta.has-hover ? MaterialPalette.surface-container-high : transparent;
+            animate background { duration: 200ms; easing: ease-out; }
+            animate border-color { duration: 200ms; easing: ease-out; }
+            HorizontalLayout { padding-left: 16px; padding-right: 16px;
+                Text {
+                    text: root.text; font-size: 14px; font-weight: 600;
+                    color: root.enabled ? MaterialPalette.primary : MaterialPalette.on-surface-variant;
+                    horizontal-alignment: center; vertical-alignment: center;
+                    overflow: elide; horizontal-stretch: 1;
+                    animate color { duration: 200ms; easing: ease-out; }
+                }
+            }
+        }
+    }
+}
+
+component TextButton {
+    in property <string> text;
+    in property <bool> enabled;
+    callback clicked;
+    height: 36px;
+    TouchArea {
+        clicked => { root.clicked(); }
+        Rectangle {
+            border-radius: 20px; clip: true;
+            background: parent.has-hover ? MaterialPalette.primary.with-alpha(0.08) : transparent;
+            animate background { duration: 200ms; easing: ease-out; }
+            HorizontalLayout { padding-left: 12px; padding-right: 12px;
+                Text {
+                    text: root.text; font-size: 14px; font-weight: 600;
+                    color: root.enabled ? MaterialPalette.primary : MaterialPalette.on-surface-variant;
+                    horizontal-alignment: center; vertical-alignment: center;
+                    overflow: elide; horizontal-stretch: 1;
+                    animate color { duration: 200ms; easing: ease-out; }
+                }
+            }
+        }
+    }
+}
+
+component FilledTonalButton {
+    in property <string> text;
+    in property <bool> enabled;
+    callback clicked;
+    height: 36px;
+    TouchArea {
+        clicked => { root.clicked(); }
+        Rectangle {
+            border-radius: 20px; clip: true;
+            background: MaterialPalette.secondary-container;
+            animate background { duration: 200ms; easing: ease-out; }
+            HorizontalLayout { padding-left: 16px; padding-right: 16px;
+                Text {
+                    text: root.text; font-size: 14px; font-weight: 600;
+                    color: MaterialPalette.on-secondary-container;
+                    horizontal-alignment: center; vertical-alignment: center;
+                    overflow: elide; horizontal-stretch: 1;
+                }
+            }
+        }
+    }
+}
+
+component HorizontalDivider {
+    height: 1px;
+    Rectangle {
+        width: 100%; height: 100%;
+        background: MaterialPalette.outline-variant;
+    }
+}
+
+component LinearProgressIndicator {
+    in property <float> progress;
+    height: 4px;
+    Rectangle {
+        border-radius: 2px;
+        background: MaterialPalette.surface-container-high;
+        width: 100%; height: 100%;
+        Rectangle {
+            border-radius: 2px;
+            width: parent.width * root.progress;
+            height: 100%;
+            background: MaterialPalette.primary;
+            animate width { duration: 200ms; easing: ease-out; }
+        }
+    }
+}
+
+component BackButton {
+    callback clicked;
+    width: 40px; height: 40px;
+    TouchArea {
+        clicked => { root.clicked(); }
+        Rectangle {
+            border-radius: 20px; border-width: 1px;
+            border-color: MaterialPalette.outline;
+            background: parent.has-hover ? MaterialPalette.surface-container-highest : transparent;
+            animate background { duration: 80ms; }
+            Image {
+                source: @image-url("icons/arrow_back.svg");
+                width: 20px; height: 20px;
+                x: (parent.width - 20px) / 2;
+                y: (parent.height - 20px) / 2;
+                colorize: MaterialPalette.on-surface-variant;
+            }
+        }
+    }
+}
 
 // ── Structs ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +202,10 @@ global Tr {
     out property <string> extract:      lang == 1 ? "Распаковать"    : "Extract";
 
     out property <string> select-folder:lang == 1 ? "Выбрать папку"  : "Select folder";
+    out property <string> flash-from-zip:lang == 1 ? "Из архива / папки" : "From ZIP / folder";
+    out property <string> flash-from-src:lang == 1 ? "Из исходников"     : "From build output";
+    out property <string> src-select:    lang == 1 ? "Выбрать папку"     : "Select folder";
+    out property <string> src-images:    lang == 1 ? "образов"           : "images";
     out property <string> find-phone:   lang == 1 ? "Найти телефон"  : "Find phone";
     out property <string> skip-arb:     lang == 1 ? "Пропустить проверку ARB" : "Skip ARB check";
     out property <string> flash-all-btn:lang == 1 ? "Прошить всё"   : "Flash all";
@@ -97,6 +262,10 @@ global Tr {
         ? "Внимание! Я не несу ответственности за ваши действия. Всё делается на ваш страх и риск."
         : "Attention! I do not take responsibility for your actions. Everything you do at your own risk.";
 
+    out property <string> supported-devices: lang == 1
+        ? "Данная программа предназначена ТОЛЬКО для устройств Realme, OnePlus и OPPO на базе процессоров Qualcomm."
+        : "This tool is intended ONLY for Realme, OnePlus and OPPO devices based on Qualcomm processors.";
+
     out property <string> home-quicklinks: lang == 1 ? "Быстрые ссылки:" : "Quick links:";
     out property <string> home-goto-device:   lang == 1 ? "Устройство и драйверы" : "Device & Drivers";
     out property <string> home-goto-download: lang == 1 ? "Скачать прошивку"      : "Download Firmware";
@@ -108,10 +277,17 @@ global Tr {
 
 component LogView inherits Rectangle {
     in property <[LogEntry]> entries;
+    in property <bool> auto-scroll;
     background: Palette.color-scheme == ColorScheme.dark
-        ? #1c1c26 : MaterialPalette.surface-container;
+        ? MaterialPalette.surface-container-high : MaterialPalette.surface-container;
     border-radius: 12px;
     clip: true;
+
+    changed entries => {
+        if auto-scroll {
+            sv.viewport-y = sv.viewport-height - sv.visible-height;
+        }
+    }
 
     if entries.length == 0: Text {
         text: "—";
@@ -120,7 +296,7 @@ component LogView inherits Rectangle {
         x: 12px; y: 8px;
     }
 
-    ScrollView {
+    sv := ScrollView {
         VerticalLayout { spacing: 0px; padding: 6px;
             for e in entries: Rectangle {
                 height: 20px;
@@ -190,11 +366,11 @@ component DeviceBanner inherits Rectangle {
     height: 40px; border-radius: 12px;
     background: device.connected
         ? MaterialPalette.primary-container
-        : (Palette.color-scheme == ColorScheme.dark ? #3a0a0a : MaterialPalette.error-container);
+        : MaterialPalette.error-container;
     border-width: 1px;
     border-color: device.connected
         ? MaterialPalette.primary
-        : (Palette.color-scheme == ColorScheme.dark ? #8b2020 : MaterialPalette.error);
+        : MaterialPalette.error;
 
     HorizontalLayout { padding-left: 14px; padding-right: 14px; spacing: 10px;
         Rectangle {
@@ -329,7 +505,7 @@ component AboutLink inherits TouchArea {
 
 // ═══════════════════════════════ MAIN WINDOW ══════════════════════════════════
 
-export component MainWindow inherits MaterialWindow {
+export component MainWindow inherits Window {
     title: "LibreFastbootFirmwareFlasher";
     preferred-width: 1000px;
     preferred-height: 660px;
@@ -367,6 +543,9 @@ export component MainWindow inherits MaterialWindow {
 
     in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—" };
     in-out property <string>  firmware-path;
+    in-out property <int>     flash-source-mode: 0;  // 0=zip/folder, 1=source dir
+    in-out property <string>  source-dir;
+    in-out property <int>     source-image-count: 0;
     in-out property <string>  single-image-path;
     in-out property <string>  partition-name;
     in-out property <bool>    is-flashing: false;
@@ -404,6 +583,8 @@ export component MainWindow inherits MaterialWindow {
 
     callback check-device();       callback browse-firmware();
     callback browse-folder();      callback browse-single-image();
+    callback browse-source-dir();
+    callback start-flash-from-source();
     callback start-flash();        callback start-single-flash();
     callback cancel-flash();       callback check-deps();
     callback install-deps();       callback download-firmware(string);
@@ -641,19 +822,23 @@ export component MainWindow inherits MaterialWindow {
                 // ── P0: Home ──────────────────────────────────────────────────
                 if root.page == 0: VerticalLayout { spacing: 14px;
 
-                    // ── Warning banner ────────────────────────────────────────
+                    // ── Warning banner (merged) ────────────────────────────────
                     Rectangle {
-                        height: 40px;
                         border-radius: 12px;
-                        background: Palette.color-scheme == ColorScheme.dark ? #2a2200 : #fff8e1;
+                        background: Palette.color-scheme == ColorScheme.dark
+                            ? MaterialPalette.error-container.with-alpha(0.35)
+                            : MaterialPalette.error-container.with-alpha(0.25);
                         border-width: 1px;
-                        border-color: Palette.color-scheme == ColorScheme.dark ? #4a3a00 : #f0c040;
-                        HorizontalLayout { padding-left: 14px; padding-right: 14px; spacing: 10px;
+                        border-color: MaterialPalette.error;
+                        HorizontalLayout { padding-left: 14px; padding-right: 14px; padding-top: 12px; padding-bottom: 12px; spacing: 10px;
                             Text { text: "⚠"; font-size: 15px; width: 20px; vertical-alignment: center;
-                                color: Palette.color-scheme == ColorScheme.dark ? #c8960c : #b47d00; }
-                            Text { text: Tr.home-warning; font-size: 14px; vertical-alignment: center;
-                                horizontal-stretch: 1; wrap: word-wrap;
-                                color: Palette.color-scheme == ColorScheme.dark ? #d4a820 : #7a5500; }
+                                color: MaterialPalette.error; }
+                            VerticalLayout { spacing: 4px; horizontal-stretch: 1;
+                                Text { text: Tr.home-warning; font-size: 13px; wrap: word-wrap;
+                                    color: MaterialPalette.on-error-container; }
+                                Text { text: Tr.supported-devices; font-size: 12px; wrap: word-wrap;
+                                    color: MaterialPalette.on-error-container; }
+                            }
                         }
                     }
 
@@ -775,8 +960,8 @@ export component MainWindow inherits MaterialWindow {
                     DeviceBanner { device: root.device; }
 
                     HorizontalLayout { spacing: 8px;
-                        OutlineButton { text: Tr.find-device;  clicked => { root.check-device(); } }
-                        OutlineButton { text: Tr.check-deps;   clicked => { root.check-deps(); } }
+                        OutlinedButton { text: Tr.find-device;  clicked => { root.check-device(); } }
+                        OutlinedButton { text: Tr.check-deps;   clicked => { root.check-deps(); } }
                         FilledButton  { text: Tr.install-deps; clicked => { root.install-deps(); } }
                     }
 
@@ -790,7 +975,7 @@ export component MainWindow inherits MaterialWindow {
                             vertical-alignment: center;
                         }
                         Rectangle { horizontal-stretch: 1; }
-                        TonalButton {
+                        FilledTonalButton {
                             text: Tr.run-test;
                             enabled: test-step == 0 || test-step >= 5 || test-step < 0;
                             clicked => { root.run-driver-test(); }
@@ -805,7 +990,7 @@ export component MainWindow inherits MaterialWindow {
                             Rectangle {
                                 width: 10px; height: 10px; border-radius: 5px;
                                 background: test-step >= s.n
-                                        ? (Palette.color-scheme == ColorScheme.dark ? #3a8a3a : #4caf50)
+                                        ? #4caf50
                                     : test-step < 0 ? MaterialPalette.error
                                     : MaterialPalette.outline-variant;
                                 animate background { duration: 200ms; }
@@ -814,7 +999,7 @@ export component MainWindow inherits MaterialWindow {
                             Text {
                                 text: s.label; font-size: 14px;
                                 color: test-step >= s.n
-                                    ? (Palette.color-scheme == ColorScheme.dark ? #3a8a3a : #4caf50)
+                                    ? #4caf50
                                     : MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
                             }
@@ -881,10 +1066,10 @@ export component MainWindow inherits MaterialWindow {
                                 border-radius: 12px; border-width: 1px;
                                 border-color: parent.has-hover
                                     ? MaterialPalette.primary
-                                    : (Palette.color-scheme == ColorScheme.dark ? #383848 : MaterialPalette.outline-variant);
+                                    : MaterialPalette.outline-variant;
                                 background: parent.has-hover
                                     ? MaterialPalette.surface-container-high
-                                    : (Palette.color-scheme == ColorScheme.dark ? #28283a : MaterialPalette.surface-container);
+                                    : MaterialPalette.surface-container;
                                 animate background { duration: 80ms; } animate border-color { duration: 80ms; }
                                 Text { text: item.label; font-size: 13px; font-weight: 500;
                                     color: MaterialPalette.on-surface;
@@ -893,7 +1078,7 @@ export component MainWindow inherits MaterialWindow {
                         }
                     }
 
-                    LogView { entries: root.device-log; vertical-stretch: 1; }
+                    LogView { entries: root.device-log; auto-scroll: true; vertical-stretch: 1; }
                 }
 
                 // ── P2: Download ──────────────────────────────────────────────
@@ -1012,7 +1197,7 @@ export component MainWindow inherits MaterialWindow {
                             Text { text: Math.round(dl-percent) + "%"; font-size: 15px; font-weight: 700; color: MaterialPalette.primary; }
                             Text { text: dl-downloaded + " / " + dl-total; font-size: 14px; color: MaterialPalette.on-surface-variant; }
                             Rectangle { horizontal-stretch: 1; }
-                            Text { text: "↓ " + dl-speed; font-size: 14px; font-weight: 500; color: Palette.color-scheme == ColorScheme.dark ? #3a8a3a : #4caf50; }
+                            Text { text: "↓ " + dl-speed; font-size: 14px; font-weight: 500; color: Palette.color-scheme == ColorScheme.dark ? #4caf50 : #4caf50; }
                             Text { text: "ETA " + dl-eta; font-size: 14px; color: MaterialPalette.on-surface-variant; }
                         }
                         LinearProgressIndicator { progress: dl-percent / 100; }
@@ -1070,28 +1255,87 @@ export component MainWindow inherits MaterialWindow {
                         }
                     }
 
-                    LogView { entries: root.download-log; vertical-stretch: 1; }
+                    LogView { entries: root.download-log; auto-scroll: true; vertical-stretch: 1; }
                 }
 
                 // ── P3: Flash All ─────────────────────────────────────────────
                 if root.page == 3: VerticalLayout { spacing: 12px;
 
                     SectionTitle { text: Tr.nav-flash; }
-                    DeviceBanner { device: root.device; }
 
-                    HorizontalLayout { spacing: 8px;
-                        PathField { path: firmware-path; horizontal-stretch: 1; }
-                        OutlineButton { text: Tr.select-folder; enabled: !is-flashing; clicked => { root.browse-folder(); } }
-                        OutlineButton { text: Tr.find-phone;    enabled: !is-flashing; clicked => { root.check-device(); } }
+                    // Flash mode selector — ZIP/folder vs build-output source dir
+                    HorizontalLayout { spacing: 6px; height: 36px;
+                        for item in [
+                            { label: Tr.flash-from-zip, val: 0 },
+                            { label: Tr.flash-from-src, val: 1 },
+                        ]: TouchArea {
+                            horizontal-stretch: 1;
+                            clicked => { root.flash-source-mode = item.val; }
+                            Rectangle {
+                                border-radius: 10px;
+                                border-width: root.flash-source-mode == item.val ? 2px : 1px;
+                                border-color: root.flash-source-mode == item.val
+                                    ? MaterialPalette.primary : MaterialPalette.outline-variant;
+                                background: root.flash-source-mode == item.val
+                                    ? MaterialPalette.secondary-container
+                                    : (parent.has-hover
+                                        ? MaterialPalette.surface-container-high
+                                        : MaterialPalette.surface-container);
+                                animate background    { duration: 120ms; easing: ease-out; }
+                                animate border-color  { duration: 120ms; easing: ease-out; }
+                                Text {
+                                    text: item.label;
+                                    font-size: 13px; font-weight: 500;
+                                    color: root.flash-source-mode == item.val
+                                        ? MaterialPalette.on-secondary-container
+                                        : MaterialPalette.on-surface;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                }
+                            }
+                        }
                     }
 
-                    // Skip ARB — compact inline toggle
-                    TouchArea {
+                    DeviceBanner { device: root.device; }
+
+                    // Mode 0: ZIP / extracted folder
+                    if flash-source-mode == 0: HorizontalLayout { spacing: 8px;
+                        PathField { path: firmware-path; horizontal-stretch: 1; }
+                        OutlinedButton { text: Tr.select-folder; enabled: !is-flashing; clicked => { root.browse-folder(); } }
+                        OutlinedButton { text: Tr.find-phone;    enabled: !is-flashing; clicked => { root.check-device(); } }
+                    }
+
+                    // Mode 1: Build output source dir
+                    if flash-source-mode == 1: VerticalLayout { spacing: 8px;
+                        HorizontalLayout { spacing: 8px;
+                            PathField { path: source-dir; horizontal-stretch: 1; }
+                            FilledTonalButton {
+                                text: Tr.src-select;
+                                enabled: !is-flashing;
+                                clicked => { root.browse-source-dir(); }
+                            }
+                            OutlinedButton { text: Tr.find-phone; enabled: !is-flashing; clicked => { root.check-device(); } }
+                        }
+                        if source-image-count > 0: Rectangle {
+                            height: 28px; border-radius: 8px; border-width: 1px;
+                            border-color: MaterialPalette.primary;
+                            background: MaterialPalette.primary-container;
+                            HorizontalLayout { padding-left: 12px; padding-right: 12px;
+                                Text {
+                                    text: "✓ " + source-image-count + " " + Tr.src-images;
+                                    font-size: 12px; font-weight: 600;
+                                    color: MaterialPalette.on-primary-container;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+
+                    // Skip ARB — only in mode 0
+                    if flash-source-mode == 0: TouchArea {
                         height: 32px;
                         clicked => { root.skip-arb-check = !root.skip-arb-check; }
 
                         HorizontalLayout { spacing: 10px;
-                            // Checkbox box
                             Rectangle {
                                 width: 18px; height: 18px;
                                 border-radius: 4px;
@@ -1129,15 +1373,20 @@ export component MainWindow inherits MaterialWindow {
                     }
 
                     HorizontalLayout { spacing: 8px;
-                        FilledButton {
+                        if flash-source-mode == 0: FilledButton {
                             text: is-flashing ? Tr.flashing : Tr.flash-all-btn;
                             enabled: !is-flashing && firmware-path != "" && device.connected;
                             clicked => { reboot-choice = 0; confirm-action = 3; show-confirm = true; }
                         }
-                        if is-flashing: OutlineButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
+                        if flash-source-mode == 1: FilledButton {
+                            text: is-flashing ? Tr.flashing : Tr.flash-all-btn;
+                            enabled: !is-flashing && source-dir != "" && source-image-count > 0 && device.connected;
+                            clicked => { root.start-flash-from-source(); }
+                        }
+                        if is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
                     }
 
-                    LogView { entries: root.flash-log; vertical-stretch: 1; }
+                    LogView { entries: root.flash-log; auto-scroll: true; vertical-stretch: 1; }
                 }
 
                 // ── P4: Flash Partition ───────────────────────────────────────
@@ -1148,8 +1397,8 @@ export component MainWindow inherits MaterialWindow {
 
                     HorizontalLayout { spacing: 8px;
                         PathField { path: single-image-path; horizontal-stretch: 1; }
-                        OutlineButton { text: ".img";        clicked => { root.browse-single-image(); } }
-                        OutlineButton { text: Tr.find-phone; clicked => { root.check-device(); } }
+                        OutlinedButton { text: ".img";        clicked => { root.browse-single-image(); } }
+                        OutlinedButton { text: Tr.find-phone; clicked => { root.check-device(); } }
                     }
 
                     HorizontalLayout { spacing: 8px; height: 20px;
@@ -1234,10 +1483,10 @@ export component MainWindow inherits MaterialWindow {
                             enabled: !is-flashing && single-image-path != "" && device.connected && partition-name != "";
                             clicked => { reboot-choice = 0; confirm-action = 5; show-confirm = true; }
                         }
-                        if is-flashing: OutlineButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
+                        if is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
                     }
 
-                    LogView { entries: root.partition-log; vertical-stretch: 1; }
+                    LogView { entries: root.partition-log; auto-scroll: true; vertical-stretch: 1; }
                 }
 
                 // ── P5: About ─────────────────────────────────────────────────
@@ -1308,7 +1557,9 @@ export component MainWindow inherits MaterialWindow {
                 Rectangle {
                     width: parent.width;
                     height: parent.height;
-                    background: Palette.color-scheme == ColorScheme.dark ? #1a1a24 : #fafafa;
+                    background: Palette.color-scheme == ColorScheme.dark
+                        ? MaterialPalette.surface-container-low
+                        : #fafafa;
                     opacity: root.page-opacity;
                     animate opacity { duration: 300ms; easing: ease-in-out; }
                 }
@@ -1421,8 +1672,7 @@ export component MainWindow inherits MaterialWindow {
                         text: Tr.cancel;
                         clicked => { show-confirm = false; }
                     }
-                    OutlineButton {
-                        text: "←";
+                    BackButton {
                         clicked => { confirm-action = 3; }
                     }
                     FilledButton {
@@ -1503,7 +1753,7 @@ export component MainWindow inherits MaterialWindow {
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout { spacing: 8px; alignment: end;
                     TextButton { text: Tr.cancel; clicked => { show-confirm = false; } }
-                    OutlineButton { text: "←"; clicked => { confirm-action = 5; } }
+                    BackButton { clicked => { confirm-action = 5; } }
                     FilledButton {
                         text: Tr.flash-btn;
                         clicked => { show-confirm = false; root.start-single-flash(); }
@@ -1521,9 +1771,17 @@ export component MainWindow inherits MaterialWindow {
             drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
 
             VerticalLayout { padding: 28px; spacing: 12px;
-                Text {
-                    text: lang == 1 ? "✓ Прошивка завершена" : "✓ Flash complete";
-                    font-size: 18px; font-weight: 700; color: #4caf50;
+                HorizontalLayout { spacing: 8px; alignment: start;
+                    Image {
+                        source: @image-url("icons/check.svg");
+                        width: 22px; height: 22px;
+                        colorize: #4caf50;
+                        y: (parent.height - 22px) / 2;
+                    }
+                    Text {
+                        text: lang == 1 ? "Прошивка завершена" : "Flash complete";
+                        font-size: 18px; font-weight: 700; color: #4caf50;
+                    }
                 }
                 Text {
                     text: lang == 1
@@ -1537,7 +1795,7 @@ export component MainWindow inherits MaterialWindow {
                         text: lang == 1 ? "Закрыть" : "Dismiss";
                         clicked => { show-confirm = false; }
                     }
-                    OutlineButton {
+                    OutlinedButton {
                         text: lang == 1 ? "Перезагрузить" : "Reboot";
                         clicked => { show-confirm = false; root.post-flash-reboot(); }
                     }

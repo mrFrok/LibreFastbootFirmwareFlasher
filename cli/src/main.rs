@@ -98,10 +98,14 @@ enum Commands {
         serial: Option<String>,
     },
 
-    /// Flash an extracted firmware directory
+    /// Flash an extracted firmware directory (or source build with --source)
     Flash {
         /// Path to the extracted firmware directory
-        firmware_dir: PathBuf,
+        firmware_dir: Option<PathBuf>,
+
+        /// Android source build output directory (skips ARB check)
+        #[arg(long, value_name = "DIR", conflicts_with = "firmware_dir")]
+        source: Option<PathBuf>,
 
         /// Target a specific device by serial number
         #[arg(short, long, value_name = "SERIAL")]
@@ -250,11 +254,12 @@ fn cmd_extract(
     if result.success { 0 } else { 1 }
 }
 
-fn cmd_flash(firmware_dir: &PathBuf, serial: Option<&str>, dry_run: bool) -> i32 {
+fn cmd_flash(source: &lfff_lib::flasher::FirmwareSource, serial: Option<&str>, dry_run: bool) -> i32 {
     use lfff_lib::flasher::{print_summary, run_flash_session};
 
-    if !firmware_dir.is_dir() {
-        println!("✗ Not a directory: {}", firmware_dir.display());
+    let dir = source.path();
+    if !dir.is_dir() {
+        println!("✗ Not a directory: {}", dir.display());
         return 1;
     }
 
@@ -266,7 +271,7 @@ fn cmd_flash(firmware_dir: &PathBuf, serial: Option<&str>, dry_run: bool) -> i32
         return 1;
     }
 
-    let session = run_flash_session(firmware_dir, serial, dry_run);
+    let session = run_flash_session(source, serial, dry_run);
     print_summary(&session);
 
     if session.critical_failed().is_empty() {
@@ -526,9 +531,20 @@ fn main() {
 
         Some(Commands::Flash {
             ref firmware_dir,
+            ref source,
             ref serial,
             dry_run,
-        }) => cmd_flash(firmware_dir, serial.as_deref(), dry_run),
+        }) => {
+            if let Some(dir) = firmware_dir {
+                cmd_flash(&lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), serial.as_deref(), dry_run)
+            } else if let Some(dir) = source {
+                cmd_flash(&lfff_lib::flasher::FirmwareSource::SourceBuild(dir.clone()), serial.as_deref(), dry_run)
+            } else {
+                println!("✗ Specify a firmware directory or --source DIR");
+                eprintln!("Usage: lfff flash <DIR>  or  lfff flash --source <DIR>");
+                1
+            }
+        },
 
         Some(Commands::FlashPartition {
             ref image,

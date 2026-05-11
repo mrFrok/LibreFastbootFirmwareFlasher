@@ -39,6 +39,7 @@ enum Cmd {
     PostFlashReboot, PostFlashWipe,
     ConfirmArbAndFlash { path: String },
     RebootForFlash { reboot_choice: u8 },
+    FlashFromSource { dir: String },
 }
 
 fn ts() -> String {
@@ -94,12 +95,12 @@ fn wait_for_fastboot(tx: &mpsc::Sender<WMsg>, tab: u8, timeout_secs: u64) -> boo
     false
 }
 
-fn do_flash(tx: &mpsc::Sender<WMsg>, dir: &std::path::Path, serial: &Option<String>) {
+fn do_flash(tx: &mpsc::Sender<WMsg>, source: &lfff_lib::flasher::FirmwareSource, serial: &Option<String>) {
     let sref = serial.as_deref();
     let tx_log = tx.clone();
     let tx_prog = tx.clone();
     let session = lfff_lib::flasher::run_flash_session_with_log(
-        dir,
+        source,
         sref,
         &|msg| { tx_log.send(WMsg::Log{level:LogLevel::Info,message:msg,tab:2}).ok(); },
         &|p| {
@@ -291,7 +292,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                             }
                         }
                     }
-                    do_flash(&tx, &dir, &serial);
+                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial);
                 }
                 Cmd::ConfirmArbAndFlash{path}=>{
                     // User confirmed ARB warning, proceed with flash
@@ -334,7 +335,25 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                         log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
                     }else{fw.to_path_buf()};
                     log(&tx,LogLevel::Info,2,"ARB warning confirmed by user, proceeding...");
-                    do_flash(&tx, &dir, &serial);
+                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial);
+                }
+                Cmd::FlashFromSource{dir}=>{
+                    tx.send(WMsg::Flashing(true)).ok();
+                    log(&tx,LogLevel::Info,2,&format!("Flashing from source dir: {}",dir));
+                    let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&dir));
+                    let images = lfff_lib::flasher::collect_images_from_source(d.path());
+                    if images.is_empty() {
+                        log(&tx,LogLevel::Error,2,"No flashable .img files found in the selected source directory");
+                        tx.send(WMsg::FlashComplete{success:false,message:"No flashable images found".into()}).ok();
+                        tx.send(WMsg::Flashing(false)).ok();
+                        continue;
+                    }
+                    log(&tx,LogLevel::Info,2,&format!("Found {} images to flash",images.len()));
+                    for (name,path) in &images {
+                        let size_mb = std::fs::metadata(path).map(|m|m.len() as f64/1024.0/1024.0).unwrap_or(0.0);
+                        log(&tx,LogLevel::Info,2,&format!("  {} ({:.1} MB)",name,size_mb));
+                    }
+                    do_flash(&tx, &d, &serial);
                 }
                 Cmd::FlashSingle{path,partition,reboot_choice}=>{
                     tx.send(WMsg::Flashing(true)).ok();
@@ -808,6 +827,33 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });}
 
+    // Browse Android source build directory
+    {let w=ui.as_weak();ui.on_browse_source_dir(move||{
+        if let Some(p)=rfd::FileDialog::new()
+            .set_title("Select build output directory (containing .img files)")
+            .pick_folder()
+        {
+            if let Some(ui)=w.upgrade(){
+                let dir_str = p.display().to_string();
+                let images = lfff_lib::flasher::collect_images_from_source(&p);
+                ui.set_firmware_path(dir_str.clone().into());
+                ui.set_source_dir(dir_str.clone().into());
+                ui.set_source_image_count(images.len() as i32);
+                add_log(&ui,&LogLevel::Info,2,&format!(
+                    "Source dir selected: {} ({} images)",
+                    p.file_name().unwrap_or_default().to_string_lossy(),
+                    images.len()
+                ));
+                let mut sorted: Vec<_> = images.iter().collect();
+                sorted.sort_by_key(|(k,_)| k.to_string());
+                for (name,path) in &sorted {
+                    let mb = std::fs::metadata(path).map(|m|m.len() as f64/1024.0/1024.0).unwrap_or(0.0);
+                    add_log(&ui,&LogLevel::Info,2,&format!("  {} ({:.1} MB)",name,mb));
+                }
+            }
+        }
+    });}
+
     // Browse single .img
     {let w=ui.as_weak();ui.on_browse_single_image(move||{
         if let Some(p)=rfd::FileDialog::new().add_filter("Image",&["img"]).add_filter("All",&["*"]).set_directory(fw_dir()).pick_file(){
@@ -823,6 +869,21 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(ui)=w.upgrade(){
             ui.set_is_flashing(true);ui.set_flash_progress(0.0);ui.set_flash_status("Starting...".into());
             t.send(Cmd::Flash{path:ui.get_firmware_path().to_string(),skip_arb:ui.get_skip_arb_check()}).ok();
+        }
+    });}
+
+    // Flash from source dir (no reboot dialog needed — source mode should be simple)
+    {let t=ctx.clone();let w=ui.as_weak();ui.on_start_flash_from_source(move||{
+        if let Some(ui)=w.upgrade(){
+            let dir = ui.get_source_dir().to_string();
+            if dir.is_empty() {
+                add_log(&ui,&LogLevel::Error,2,"No source directory selected");
+                return;
+            }
+            ui.set_is_flashing(true);
+            ui.set_flash_progress(0.0);
+            ui.set_flash_status("Starting flash from source...".into());
+            t.send(Cmd::FlashFromSource{dir}).ok();
         }
     });}
 
