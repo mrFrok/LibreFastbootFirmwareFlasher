@@ -37,6 +37,11 @@ component FilledButton {
             border-radius: 20px; clip: true;
             background: root.enabled ? MaterialPalette.primary : MaterialPalette.surface-container;
             animate background { duration: 200ms; easing: ease-out; }
+            Rectangle {
+                width: 100%; height: 100%; border-radius: 20px;
+                background: ta.has-hover ? MaterialPalette.on-primary.with-alpha(0.12) : transparent;
+                animate background { duration: 200ms; easing: ease-out; }
+            }
             HorizontalLayout { padding-left: 16px; padding-right: 16px;
                 Text {
                     text: root.text; font-size: 14px; font-weight: 600;
@@ -61,7 +66,7 @@ component OutlinedButton {
             border-radius: 20px; clip: true;
             border-width: 1px;
             border-color: root.enabled ? MaterialPalette.outline : MaterialPalette.outline-variant;
-            background: ta.has-hover ? MaterialPalette.surface-container-high : transparent;
+            background: ta.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
             animate background { duration: 200ms; easing: ease-out; }
             animate border-color { duration: 200ms; easing: ease-out; }
             HorizontalLayout { padding-left: 16px; padding-right: 16px;
@@ -86,7 +91,7 @@ component TextButton {
         clicked => { root.clicked(); }
         Rectangle {
             border-radius: 20px; clip: true;
-            background: parent.has-hover ? MaterialPalette.primary.with-alpha(0.08) : transparent;
+            background: parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
             animate background { duration: 200ms; easing: ease-out; }
             HorizontalLayout { padding-left: 12px; padding-right: 12px;
                 Text {
@@ -103,21 +108,27 @@ component TextButton {
 
 component FilledTonalButton {
     in property <string> text;
-    in property <bool> enabled;
+    in property <bool> enabled <=> ta.enabled;
     callback clicked;
     height: 36px;
-    TouchArea {
+    ta := TouchArea {
         clicked => { root.clicked(); }
         Rectangle {
             border-radius: 20px; clip: true;
             background: MaterialPalette.secondary-container;
             animate background { duration: 200ms; easing: ease-out; }
+            Rectangle {
+                width: 100%; height: 100%; border-radius: 20px;
+                background: ta.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
+                animate background { duration: 200ms; easing: ease-out; }
+            }
             HorizontalLayout { padding-left: 16px; padding-right: 16px;
                 Text {
                     text: root.text; font-size: 14px; font-weight: 600;
                     color: MaterialPalette.on-secondary-container;
                     horizontal-alignment: center; vertical-alignment: center;
                     overflow: elide; horizontal-stretch: 1;
+                    animate color { duration: 200ms; easing: ease-out; }
                 }
             }
         }
@@ -408,38 +419,40 @@ component SectionTitle {
 component NavItem inherits TouchArea {
     in property <string>  label;
     in property <bool>    selected;
-    in property <string>  icon-text;
+    in property <image>   icon;
 
     height: 56px;
 
     Rectangle {
-        // MD3: full-width pill, 28px vertical padding from top/bottom of item
         x: 0; y: 4px;
         width: parent.width;
         height: parent.height - 8px;
         border-radius: 28px;
         background: selected
             ? MaterialPalette.secondary-container
-            : parent.has-hover
-                ? MaterialPalette.on-surface.with-alpha(0.08)
-                : transparent;
+            : transparent;
         animate background { duration: 150ms; }
+
+        Rectangle {
+            width: 100%; height: 100%; border-radius: 28px;
+            background: root.has-hover
+                ? MaterialPalette.on-surface.with-alpha(0.12)
+                : transparent;
+            animate background { duration: 150ms; }
+        }
 
         HorizontalLayout {
             padding-left: 16px; padding-right: 24px; spacing: 12px;
 
-            // Icon container — 24px wide per MD3
-            Rectangle { width: 24px;
-                Text {
-                    text: icon-text;
-                    font-size: 18px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    color: selected
-                        ? MaterialPalette.on-secondary-container
-                        : MaterialPalette.on-surface-variant;
-                    animate color { duration: 150ms; }
-                }
+            // Icon — 24×24 colorized via Image rendering
+            Image {
+                source: icon;
+                width: 22px; height: 22px;
+                y: (parent.height - 22px) / 2;
+                colorize: selected
+                    ? MaterialPalette.on-secondary-container
+                    : MaterialPalette.on-surface-variant;
+                animate colorize { duration: 150ms; }
             }
 
             Text {
@@ -642,27 +655,27 @@ export component MainWindow inherits Window {
                 }
 
                 NavItem {
-                    label: Tr.home; icon-text: "⌂";
+                    label: Tr.home; icon: @image-url("icons/home.svg");
                     selected: root.page == 0;
                     clicked => { root.page = 0; }
                 }
                 NavItem {
-                    label: Tr.nav-device; icon-text: "⚙";
+                    label: Tr.nav-device; icon: @image-url("icons/smartphone.svg");
                     selected: root.page == 1;
                     clicked => { root.page = 1; }
                 }
                 NavItem {
-                    label: Tr.nav-download; icon-text: "⬇";
+                    label: Tr.nav-download; icon: @image-url("icons/download.svg");
                     selected: root.page == 2;
                     clicked => { root.page = 2; }
                 }
                 NavItem {
-                    label: Tr.nav-flash; icon-text: "⚡";
+                    label: Tr.nav-flash; icon: @image-url("icons/flash.svg");
                     selected: root.page == 3;
                     clicked => { root.page = 3; }
                 }
                 NavItem {
-                    label: Tr.nav-part; icon-text: "🗂";
+                    label: Tr.nav-part; icon: @image-url("icons/storage.svg");
                     selected: root.page == 4;
                     clicked => { root.page = 4; }
                 }
@@ -678,7 +691,7 @@ export component MainWindow inherits Window {
                 Rectangle { height: 8px; }
 
                 NavItem {
-                    label: Tr.nav-about; icon-text: "ℹ";
+                    label: Tr.nav-about; icon: @image-url("icons/info.svg");
                     selected: root.page == 5;
                     clicked => { root.page = 5; }
                 }
@@ -714,7 +727,7 @@ export component MainWindow inherits Window {
                                 border-radius: 5px;
                                 background: root.ui-scale == item.val
                                     ? MaterialPalette.primary
-                                    : (parent.has-hover ? MaterialPalette.surface-container-high : transparent);
+                                    : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent);
                                 animate background { duration: 80ms; }
                                 Text {
                                     text: item.label; font-size: 10px; font-weight: 600;
@@ -792,7 +805,7 @@ export component MainWindow inherits Window {
                         }
                         Rectangle {
                             border-radius: 8px;
-                            background: parent.has-hover ? MaterialPalette.surface-container-high : transparent;
+                            background: parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
                             animate background { duration: 80ms; }
                             Text {
                                 text: Palette.color-scheme == ColorScheme.dark ? "☀" : "🌙";
@@ -851,11 +864,10 @@ export component MainWindow inherits Window {
                                 Rectangle {
                                     width: 80px; height: 80px; border-radius: 24px;
                                     background: MaterialPalette.primary-container;
-                                    Text {
-                                        text: "⚡";
-                                        font-size: 38px;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
+                                    Image {
+                                        source: @image-url("icons/flash.svg");
+                                        width: 40px; height: 40px;
+                                        x: (parent.width - 40px) / 2; y: (parent.height - 40px) / 2;
                                     }
                                 }
                             }
@@ -1715,7 +1727,7 @@ export component MainWindow inherits Window {
                             border-color: reboot-choice == item.val ? MaterialPalette.primary : MaterialPalette.outline-variant;
                             background: reboot-choice == item.val
                                 ? MaterialPalette.primary-container
-                                : (parent.has-hover ? MaterialPalette.surface-container-highest : MaterialPalette.surface-container);
+                                : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : MaterialPalette.surface-container);
                             animate background { duration: 80ms; }
                             animate border-color { duration: 80ms; }
                             Text {
