@@ -65,11 +65,34 @@ fn ts() -> String {
 fn lvl(l: &LogLevel) -> &'static str { match l { LogLevel::Info=>"info", LogLevel::Warn=>"warn", LogLevel::Error=>"error", LogLevel::Success=>"success" } }
 fn log(tx: &mpsc::Sender<WMsg>, l: LogLevel, tab: u8, m: impl Into<String>) { tx.send(WMsg::Log{level:l,message:m.into(),tab}).ok(); }
 
-fn fw_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    let dir = PathBuf::from(home).join("firmwares");
+fn output_dir_path() -> PathBuf {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            let mut p = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+            p.push(".config");
+            p
+        })
+        .join("lfff/output_dir")
+}
+
+fn get_output_dir() -> PathBuf {
+    let dir = std::fs::read_to_string(output_dir_path())
+        .ok()
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+            PathBuf::from(home).join("firmwares")
+        });
     std::fs::create_dir_all(&dir).ok();
     dir
+}
+
+fn set_output_dir(path: &str) {
+    let p = output_dir_path();
+    if let Some(d) = p.parent() { let _ = std::fs::create_dir_all(d); }
+    let _ = std::fs::write(&p, path);
 }
 
 /// Poll for a fastboot device to appear, with progress logs. Returns true if found.
@@ -244,7 +267,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                     let fw=Path::new(&path);
                     let dir=if path.ends_with(".zip"){
                         let fw_name=lfff_lib::extractor::get_firmware_name(fw);
-                        let out=fw_dir().join(&fw_name);
+                        let out=get_output_dir().join(&fw_name);
                         log(&tx,LogLevel::Info,2,format!("Extracting to {}...",out.display()));
                         let tx_ex=tx.clone();
                         let staging2=out.join("_staging");
@@ -305,7 +328,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                     let fw=Path::new(&path);
                     let dir=if path.ends_with(".zip"){
                         let fw_name=lfff_lib::extractor::get_firmware_name(fw);
-                        let out=fw_dir().join(&fw_name);
+                        let out=get_output_dir().join(&fw_name);
                         log(&tx,LogLevel::Info,2,format!("Extracting to {}...",out.display()));
                         let tx_ex=tx.clone();
                         let staging2=out.join("_staging");
@@ -353,7 +376,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                         let dir = if path.ends_with(".zip"){
                             let fw=Path::new(&path);
                             let fw_name=lfff_lib::extractor::get_firmware_name(fw);
-                            let out=fw_dir().join(&fw_name);
+                            let out=get_output_dir().join(&fw_name);
                             log(&tx,LogLevel::Info,2,format!("Extracting to {}...",out.display()));
                             let tx_ex=tx.clone();
                             let staging2=out.join("_staging");
@@ -533,7 +556,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                     let token = lfff_lib::downloader::CancelToken::new();
                     *dl_cancel_token.lock().unwrap() = Some(token.clone());
                     std::thread::spawn(move||{
-                        let out=fw_dir();
+                        let out=get_output_dir();
                         log(&tx_dl,LogLevel::Info,1,format!("Output: {}",out.display()));
                         let tx2=tx_dl.clone();
                         let last_update = std::sync::Mutex::new(std::time::Instant::now());
@@ -564,7 +587,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                     }
                 }
                 Cmd::Extract{path}=>{
-                    let fw=Path::new(&path);let out=fw_dir().join(lfff_lib::extractor::get_firmware_name(fw));
+                    let fw=Path::new(&path);let out=get_output_dir().join(lfff_lib::extractor::get_firmware_name(fw));
                     log(&tx,LogLevel::Info,1,format!("Extracting to {}...",out.display()));
                     let tx_ex=tx.clone();
                     // Watch _staging dir for new .img files and forward to GUI in real time.
@@ -882,6 +905,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_download_log(ModelRc::from(Rc::clone(&models.download)));
     ui.set_flash_log(ModelRc::from(Rc::clone(&models.flash)));
     ui.set_partition_log(ModelRc::from(Rc::clone(&models.partition)));
+    ui.set_output_dir(get_output_dir().display().to_string().as_str().into());
 
     // Device detection
     {let t=ctx.clone();ui.on_check_device(move||{t.send(Cmd::CheckDevice).ok();});}
@@ -891,7 +915,7 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(p)=rfd::FileDialog::new()
             .add_filter("Firmware",&["zip","ops","ofp"])
             .add_filter("All",&["*"])
-            .set_directory(fw_dir())
+            .set_directory(get_output_dir())
             .pick_file()
         {
             if let Some(ui)=w.upgrade(){
@@ -904,7 +928,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Browse extracted firmware folder
     {let fl=Rc::clone(&models.flash);let w=ui.as_weak();ui.on_browse_folder(move||{
         if let Some(p)=rfd::FileDialog::new()
-            .set_directory(fw_dir())
+            .set_directory(get_output_dir())
             .pick_folder()
         {
             if let Some(ui)=w.upgrade(){
@@ -943,10 +967,21 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Browse single .img
     {let pt=Rc::clone(&models.partition);let w=ui.as_weak();ui.on_browse_single_image(move||{
-        if let Some(p)=rfd::FileDialog::new().add_filter("Image",&["img"]).add_filter("All",&["*"]).set_directory(fw_dir()).pick_file(){
+        if let Some(p)=rfd::FileDialog::new().add_filter("Image",&["img"]).add_filter("All",&["*"]).set_directory(get_output_dir()).pick_file(){
             if let Some(ui)=w.upgrade(){
                 ui.set_single_image_path(p.display().to_string().into());
                 add_log_m(&pt,&ui,&LogLevel::Info,&format!("Selected: {}",p.file_name().unwrap_or_default().to_string_lossy()));
+            }
+        }
+    });}
+
+    // Browse output directory — persist immediately
+    {let w=ui.as_weak();ui.on_browse_output_dir(move||{
+        if let Some(p)=rfd::FileDialog::new().pick_folder(){
+            if let Some(ui)=w.upgrade(){
+                let s = p.display().to_string();
+                set_output_dir(&s);
+                ui.set_output_dir(s.as_str().into());
             }
         }
     });}

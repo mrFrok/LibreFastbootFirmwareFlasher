@@ -316,6 +316,13 @@ global Tr {
     out property <string> flash-error-hint: lang == 1
         ? "Проверьте подключение и попробуйте снова."
         : "Check the connection and try again.";
+
+    out property <string> output-dir: lang == 1
+        ? "Папка для сохранения:"
+        : "Output folder:";
+    out property <string> browse: lang == 1
+        ? "Обзор"
+        : "Browse";
 }
 
 // ── Log view ──────────────────────────────────────────────────────────────────
@@ -597,6 +604,7 @@ export component MainWindow inherits Window {
     in-out property <[LogEntry]> flash-log: [];
     in-out property <[LogEntry]> partition-log: [];
     in-out property <bool>    skip-arb-check: false;
+    in-out property <string>  output-dir;
     in-out property <string>  download-url;
     in-out property <string>  dl-speed;
     in-out property <string>  dl-eta;
@@ -637,6 +645,7 @@ export component MainWindow inherits Window {
     callback install-deps();       callback download-firmware(string);
     callback cancel-download();
     callback extract-firmware();   callback open-url(string);
+    callback browse-output-dir();
     callback paste-clipboard();    callback request-back();
     callback run-driver-test();    callback get-device-info();
     callback reboot-to(string);
@@ -1374,6 +1383,32 @@ export component MainWindow inherits Window {
                             Text { text: "ETA " + dl-eta; font-size: 14px; color: MaterialPalette.on-surface-variant; }
                         }
                         LinearProgressIndicator { progress: dl-percent / 100; }
+                    }
+
+                    // Output directory selector
+                    Text { text: Tr.output-dir; font-size: 15px; color: MaterialPalette.on-surface-variant; }
+                    HorizontalLayout { spacing: 8px; height: 44px;
+                        PathField { path: root.output-dir; horizontal-stretch: 1; }
+                        TouchArea {
+                            width: 90px;
+                            clicked => { root.browse-output-dir(); }
+                            Rectangle {
+                                border-radius: 12px;
+                                border-width: 1px;
+                                border-color: MaterialPalette.outline;
+                                background: parent.has-hover
+                                    ? MaterialPalette.surface-container-high
+                                    : MaterialPalette.surface-container;
+                                animate background { duration: 80ms; }
+                                Text {
+                                    text: Tr.browse;
+                                    font-size: 14px; font-weight: 600;
+                                    color: MaterialPalette.primary;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
                     }
 
                     HorizontalDivider { }
