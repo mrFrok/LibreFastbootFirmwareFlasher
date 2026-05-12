@@ -5,11 +5,12 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-orange.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-orange)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher)
+[![Releases](https://img.shields.io/github/v/release/mrFrok/LibreFastbootFirmwareFlasher)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases)
 
 **Free, open-source firmware flasher for Android A/B devices via fastboot.**  
-Available as a CLI tool and a native GUI — single static binary, no Python, no pip, no bloat.
+CLI + GUI — single static binary, no Python, no bloat.
 
-[Installation](#installation) · [Quick Start](#quick-start) · [Commands](#commands) · [Supported Devices](#supported-devices) · [Development](#development)
+[Installation](#installation) · [Quick Start](#quick-start) · [Features](#features) · [Commands](#commands) · [Supported Devices](#supported-devices) · [Development](#development)
 
 </div>
 
@@ -17,14 +18,28 @@ Available as a CLI tool and a native GUI — single static binary, no Python, no
 
 ## About
 
-LFFF is a tool for flashing Android firmware on **OnePlus / OPPO / Realme** devices with Qualcomm SoC and A/B partition layout. It handles the full flash pipeline — extraction, pre-flash checks, Anti-Rollback protection, dynamic super partitions, A/B slot management and modem flashing.
+LFFF flashes full firmware on **OnePlus / OPPO / Realme** devices with Qualcomm SoC and A/B partition layout. Handles the entire pipeline — extraction, pre-flash checks, Anti-Rollback protection, dynamic super partitions, A/B slot management, modem flashing.
 
-Available in two flavours:
-- **`lfff`** — CLI tool, scriptable, works over SSH
+Two flavours:
+- **`lfff`** — CLI, scriptable, works over SSH
 - **`lfff-gui`** — native desktop GUI built with [Slint](https://slint.dev)
 
-> **Windows?** Check out the Windows version by [NeFeroN](https://t.me/NeFeroN) who helped during development.  
+> **Windows?** Check out the Windows version by [NeFeroN](https://t.me/NeFeroN).  
 > **Community:** [t.me/gt3neo5hub](https://t.me/gt3neo5hub)
+
+---
+
+## What's New in v2.0
+
+| | |
+|---|---|
+| 🏗️ **Source build support** | Flash directly from `out/target/product/*` — no zip extraction needed |
+| 🎨 **Custom Material Design 3** | Full dark/light theme, proper hover states, animated transitions |
+| ⏭️ **Per-partition skip on error** | Skip a failed partition and continue flashing |
+| 🧹 **Smarter image filtering** | Auto-filters debug/test images, `dtb`, `vendor_ramdisk`, `vendor-bootconfig` in source builds |
+| 🚫 **No more vendored themes** | Custom MD3 components — smaller, faster, no external theme deps |
+| ⚡ **Slint 1.16.1** | Latest stable rendering engine |
+| 🔧 **Better error reporting** | Each failure shown clearly with retry/skip/abort options |
 
 ---
 
@@ -32,15 +47,15 @@ Available in two flavours:
 
 | | |
 |---|---|
-| 🖥️ **Native GUI** | Desktop app with live log, progress bar, device info, download & extract |
-| 🔥 **Full firmware flash** | Non-super + super (dynamic) partitions, modem, full bootloader chain |
-| 🔄 **A/B slot management** | Non-super → both slots; super → active slot only (with super wipe) |
+| 🖥️ **Native GUI** | Desktop app with live log, progress bar, device info, download & extract, no electron and web bloat |
+| 🔥 **Full firmware flash** | Non-super + super (dynamic) partitions, modem, bootloader chain |
+| 🔄 **A/B slot management** | Non-super → both slots; super → active slot only (super wiped first) |
 | 🛡️ **Anti-Rollback protection** | Reads ARB from `xbl_config.img` ELF64 — warns before raising the counter |
 | 📊 **Live progress** | Animated progress bar with elapsed time |
-| 🔧 **Error recovery** | On failure: retry / reboot to correct mode / abort |
+| 🔧 **Error recovery** | Retry / reboot to correct mode / skip partition / abort |
 | ✅ **Pre-flash checks** | Device detection, cable speed, battery level, bootloader unlock |
 | 🎯 **Single-partition flash** | Flash any partition by name |
-| 📦 **Firmware extraction** | Unpacks OTA `.zip` via `payload_dumper` — ZIP passed directly, no unzipping |
+| 📦 **Firmware extraction** | Unpacks OTA `.zip` via `payload_dumper` |
 | 📥 **Firmware download** | Downloads OTA zips via `aria2c` with 4PDA redirect support |
 | 🔩 **Dependency installer** | Auto-installs `fastboot`, `aria2c`, `payload_dumper` |
 | 💻 **Linux + macOS** | x86_64 and aarch64 |
@@ -96,7 +111,7 @@ yay -S lfff-bin    # Prebuilt binary
 
 ### From GitHub Releases
 
-Download prebuilt binaries from [Releases](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases):
+Download from [Releases](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases):
 
 ```bash
 # CLI
@@ -113,16 +128,19 @@ sudo cp lfff-gui /usr/local/bin/
 ```bash
 git clone https://github.com/mrFrok/LibreFastbootFirmwareFlasher
 cd LibreFastbootFirmwareFlasher
-cargo build --release -p lfff       # CLI
-cargo build --release -p lfff-gui   # GUI
+cargo build --release -p lfff-cli     # CLI
+cargo build --release -p lfff-gui     # GUI
 ```
 
 ---
 
 ## Uninstall
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --uninstall
 ```
+
+---
 
 ## Quick Start
 
@@ -132,7 +150,7 @@ curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher
 lfff-gui
 ```
 
-Use the sidebar to navigate: **Download** → **Flash All** → **Flash Partition**.
+Navigate the sidebar: **Download** → **Flash All** → **Flash Partition**.
 
 ### CLI
 
@@ -140,17 +158,20 @@ Use the sidebar to navigate: **Download** → **Flash All** → **Flash Partitio
 # 1. Install external tools
 lfff deps
 
-# 2. Download firmware (skip if you already have the zip)
+# 2. Download firmware (or use your own zip)
 lfff download https://...
 
-# 3. Extract firmware zip
-lfff extract CPH2653_11.F.85_2850_202601060236.zip
+# 3. Extract
+lfff extract CPH2653_11.F.85_2850_202501010000.zip
 
-# 4. Run pre-flash diagnostics
+# 4. Diagnostics
 lfff devices --check
 
-# 5. Flash
+# 5. Flash full firmware
 lfff flash ./firmwares/CPH2653_11.F.85_2850
+
+# Or flash from Android source build directory
+lfff flash --source /out/target/product/senna
 ```
 
 ---
@@ -159,12 +180,13 @@ lfff flash ./firmwares/CPH2653_11.F.85_2850
 
 ### `lfff flash <firmware_dir>`
 
-Flash a full extracted firmware directory.
+Full firmware flash with A/B slot management.
 
 ```bash
 lfff flash ./firmwares/RMX3709_11.H.38
-lfff flash ./firmwares/RMX3709_11.H.38 -s R5CT20    # specific device
-lfff flash ./firmwares/RMX3709_11.H.38 --dry-run    # preview only
+lfff flash ./firmwares/RMX3709_11.H.38 -s R5CT20      # specific device
+lfff flash ./firmwares/RMX3709_11.H.38 --dry-run      # preview only
+lfff flash --source /out/target/product/senna           # source build dir
 ```
 
 **Flash flow:**
@@ -172,7 +194,7 @@ lfff flash ./firmwares/RMX3709_11.H.38 --dry-run    # preview only
 ```
 [Stage 1 — fastbootd]
   Non-super partitions  →  slot A  +  slot B
-  Super/dynamic parts   →  active slot only  (super wiped first)
+  Super/dynamic parts   →  active slot only (super wiped first)
       ↓
 [Stage 2 — bootloader]
   modem  →  slot A  +  slot B
@@ -180,13 +202,11 @@ lfff flash ./firmwares/RMX3709_11.H.38 --dry-run    # preview only
 [Offer: reboot to system  /  wipe data + reboot]
 ```
 
-On error: **retry** / **reboot to correct mode + retry** / **abort**
+On error: **retry** / **reboot** / **skip partition** / **abort**
 
 ---
 
-### `lfff flash-partition <partition>`
-
-Flash a single partition by name.
+### `lfff flash-partition <name>`
 
 ```bash
 lfff flash-partition boot --firmware-dir ./firmwares/RMX3709
@@ -198,8 +218,6 @@ lfff flash-partition modem --firmware-dir ./firmwares/RMX3709 --no-ab
 
 ### `lfff extract <zip>`
 
-Extract OTA firmware zip into individual `.img` files.
-
 ```bash
 lfff extract firmware.zip
 lfff extract firmware.zip -o ./firmwares/my_build
@@ -207,13 +225,9 @@ lfff extract firmware.zip --list               # list contents only
 lfff extract firmware.zip --checksum <sha256>  # verify before extracting
 ```
 
-Images are organized into subdirectories: `critical/`, `bootloader/`, `radio/`, `system/`, `vendor/`, `other/`.
-
 ---
 
 ### `lfff devices [--check]`
-
-List connected devices or run full pre-flash diagnostics.
 
 ```bash
 lfff devices           # list fastboot + adb devices
@@ -232,25 +246,21 @@ lfff arb --xbl ./firmwares/RMX3709/critical/xbl_config.img --device
 ```
 
 ARB levels:
-- `ARB = 0` — hard ARB not enforced (safe to flash)
-- `ARB > 0` — hard ARB active; flashing **permanently raises the counter** — downgrade will brick the device
+- `ARB = 0` — hard ARB not enforced (safe)
+- `ARB > 0` — flashing **permanently raises the counter** — downgrade bricks the device
 
 ---
 
 ### `lfff download <url>`
 
-Download firmware with multi-connection resume support.
-
 ```bash
 lfff download https://example.com/firmware.zip
-lfff download "https://4pda.to/redirector/?u=..." -o ./firmwares -c 8
+lfff download "https://4pda.to/redirector/..." -o ./firmwares -c 8
 ```
 
 ---
 
 ### `lfff deps [--check] [TOOL ...]`
-
-Install or verify external dependencies.
 
 ```bash
 lfff deps              # install all missing
@@ -268,8 +278,7 @@ Tested on Qualcomm A/B devices:
 |--------|-------|--------|
 | Realme GT Neo 5 | RMX3709 | ✅ Working |
 
-Other OnePlus / OPPO / Realme devices with Qualcomm SoC and A/B layout should work.  
-If your device works (or doesn't) — open an issue!
+Other OnePlus / OPPO / Realme devices with Qualcomm SoC and A/B layout should work.
 
 ---
 
@@ -292,46 +301,32 @@ LibreFastbootFirmwareFlasher/
 ├── README.md
 ├── LICENSE
 ├── logo.svg
+├── lfff-gui.desktop         # desktop entry for GUI
+├── lfff-gui.svg             # app icon
 ├── install.sh               # universal installer
 ├── .github/
 │   └── workflows/
 │       └── release.yml      # CI: builds CLI + GUI on tag push
-├── lib/                     # shared library crate
+├── lib/                     # shared library
 │   └── src/
 │       ├── lib.rs
-│       ├── utils.rs         # subprocess helpers, sha256
 │       ├── arb.rs           # Anti-Rollback ELF64 parser
+│       ├── deps.rs          # dependency installer
 │       ├── device.rs        # device discovery, pre-flash checks
-│       ├── extractor.rs     # firmware extraction, partition grouping
 │       ├── downloader.rs    # OTA download via aria2c
+│       ├── extractor.rs     # firmware extraction
 │       ├── flasher.rs       # flash orchestrator, A/B slots
-│       └── deps.rs          # dependency installer
-├── cli/                     # CLI binary crate
+│       └── utils.rs         # subprocess helpers, sha256
+├── cli/                     # CLI binary
 │   └── src/
 │       └── main.rs
-└── gui/                     # GUI binary crate (Slint)
+└── gui/                     # GUI binary (Slint)
     ├── build.rs
     ├── src/
     │   └── main.rs
     └── ui/
         └── main.slint
 ```
-
-### Cargo dependencies
-
-| Crate | Purpose |
-|-------|---------|
-| `clap` | CLI argument parsing |
-| `anyhow` | Error handling |
-| `log` / `env_logger` | Logging |
-| `sha2` | File checksum verification |
-| `colored` | Terminal colors |
-| `which` | Finding binaries in $PATH |
-| `zip` | Reading firmware archives |
-| `indicatif` | Progress bars |
-| `slint` | GUI framework |
-| `rfd` | Native file dialogs |
-| `arboard` | Clipboard access |
 
 ---
 
@@ -350,16 +345,19 @@ LibreFastbootFirmwareFlasher/
 [GNU GPL v3](LICENSE) — free to use, modify and distribute.  
 Derivative works must remain open source.
 
+This project uses [Slint](https://github.com/slint-ui/slint) (GNU GPL v3), a declarative GUI toolkit.  
+Uses [Material Design 3](https://m3.material.io) icons and design system under the Apache 2.0 license.
+
 ---
 
 ## Star History
 
 If LFFF saved you time or a bricked device — a ⭐ goes a long way!
 
-<a href="https://www.star-history.com/?repos=mrFrok%2FLibreFastbootFirmwareFlasher&type=date&legend=top-left">
+<a href="https://www.star-history.com/#mrFrok/LibreFastbootFirmwareFlasher&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=mrFrok/LibreFastbootFirmwareFlasher&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=mrFrok/LibreFastbootFirmwareFlasher&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=mrFrok/LibreFastbootFirmwareFlasher&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=mrFrok/LibreFastbootFirmwareFlasher&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=mrFrok/LibreFastbootFirmwareFlasher&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=mrFrok/LibreFastbootFirmwareFlasher&type=Date" />
  </picture>
 </a>

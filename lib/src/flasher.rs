@@ -480,8 +480,11 @@ pub fn wipe_super_with_log(serial: Option<&str>, super_names: &[String], on_log:
     }
 
     on_log(format!("Preparing {} super partition(s) ...", super_names.len()));
+    let base_len = base_args.len();
 
     for base in super_names {
+        let mut cmd = base_args.clone();
+
         // Delete existing entries + COW snapshots
         for slot in &["a", "b"] {
             let part = format!("{}_{}", base, slot);
@@ -490,7 +493,7 @@ pub fn wipe_super_with_log(serial: Option<&str>, super_names: &[String], on_log:
                 candidates.push(format!("{}{}", part, suffix));
             }
             for cand in &candidates {
-                let mut cmd = base_args.clone();
+                cmd.truncate(base_len);
                 cmd.push("delete-logical-partition".into());
                 cmd.push(cand.clone());
                 let refs: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
@@ -507,7 +510,7 @@ pub fn wipe_super_with_log(serial: Option<&str>, super_names: &[String], on_log:
         // Recreate with size=0
         for slot in &["a", "b"] {
             let part = format!("{}_{}", base, slot);
-            let mut cmd = base_args.clone();
+            cmd.truncate(base_len);
             cmd.push("create-logical-partition".into());
             cmd.push(part.clone());
             cmd.push("0".into());
@@ -557,7 +560,6 @@ pub fn collect_images(firmware_dir: &Path) -> HashMap<String, PathBuf> {
             .unwrap_or_default()
             .to_string_lossy()
             .to_lowercase();
-        // Strip _a / _b suffix
         for suffix in &["_a", "_b"] {
             if stem.ends_with(suffix) {
                 stem = stem[..stem.len() - suffix.len()].to_string();
@@ -577,64 +579,39 @@ pub fn collect_images(firmware_dir: &Path) -> HashMap<String, PathBuf> {
 pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
     fn is_ignored_file(name: &str) -> bool {
         let lower = name.to_lowercase();
-        // vendor_ramdump is NOT ignored
-        if lower == "vendor_ramdump.img" {
-            return false;
-        }
+        if lower == "vendor_ramdump.img" { return false; }
         lower.ends_with("-debug.img")
+            || lower.ends_with("-test-harness.img")
             || lower.contains("-test")
             || lower.contains("_harness")
             || lower.starts_with("ramdisk")
             || lower == "super_empty.img"
+            || lower == "dtb.img"
+            || lower == "vendor-bootconfig.img"
+            || lower == "vendor_ramdisk.img"
             || lower.starts_with("ota_metadata")
             || lower.ends_with(".pb")
-    }
-
-    fn is_ignored_dir(name: &str) -> bool {
-        let lower = name.to_lowercase();
-        lower == "obj"
-            || lower == "symbols"
-            || lower == "fake_packages"
-            || lower == "install"
-            || lower.starts_with("tmp")
     }
 
     let mut images: HashMap<String, PathBuf> = HashMap::new();
     let mut entries: Vec<PathBuf> = Vec::new();
 
-    fn collect_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
-        if let Ok(rd) = fs::read_dir(dir) {
-            for entry in rd.flatten() {
-                let p = entry.path();
-                if p.is_dir() {
-                    let dname = p.file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_lowercase();
-                    if !is_ignored_dir(&dname) {
-                        collect_recursive(&p, out);
-                    }
-                } else if p.extension().map(|e| e == "img").unwrap_or(false) {
-                    let fname = p.file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy();
-                    if !is_ignored_file(&fname) {
-                        out.push(p);
-                    }
+    if let Ok(rd) = fs::read_dir(dir) {
+        for entry in rd.flatten() {
+            let p = entry.path();
+            if p.is_file() && p.extension().map(|e| e == "img").unwrap_or(false) {
+                let fname = p.file_name().unwrap_or_default().to_string_lossy();
+                if !is_ignored_file(&fname) {
+                    entries.push(p);
                 }
             }
         }
     }
 
-    collect_recursive(dir, &mut entries);
-    entries.sort_by_key(|p| p.components().count());
+    entries.sort();
 
     for img in entries {
-        let mut stem = img
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_lowercase();
+        let mut stem = img.file_stem().unwrap_or_default().to_string_lossy().to_lowercase();
         for suffix in &["_a", "_b"] {
             if stem.ends_with(suffix) {
                 stem = stem[..stem.len() - suffix.len()].to_string();
@@ -645,6 +622,25 @@ pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
     }
 
     images
+}
+
+/// Check whether `fastboot getvar partition-size:<name>` returns a valid size.
+/// Returns `false` for non-existent partitions (so we skip them silently).
+fn device_has_partition(serial: Option<&str>, name: &str) -> bool {
+    let mut args: Vec<&str> = Vec::new();
+    let serial_str;
+    if let Some(s) = serial {
+        serial_str = s.to_string();
+        args.push("-s");
+        args.push(&serial_str);
+    }
+    let var = format!("partition-size:{}", name);
+    args.push("getvar");
+    args.push(&var);
+    let (code, out, err) = fastboot_cmd(&args, 5);
+    if code != 0 { return false; }
+    let combined = format!("{} {}", out, err).to_lowercase();
+    !combined.contains("not found")
 }
 
 // ---------------------------------------------------------------------------
@@ -689,8 +685,11 @@ fn report_failure(result: &FlashResult) {
     println!();
 }
 
-/// Ask user what to do after a flash failure. Returns true to retry.
-fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: DeviceMode) -> bool {
+#[derive(Debug, Clone)]
+enum ErrorAction { Retry, Skip, Abort }
+
+/// Ask user what to do after a flash failure.
+fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: DeviceMode) -> ErrorAction {
     report_failure(result);
 
     let (mode_label, reboot_args) = match target_mode {
@@ -701,13 +700,15 @@ fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: Devic
     println!("  What do you want to do?");
     println!("  [1] Retry this partition now");
     println!("  [2] Reboot to {} first, then retry", mode_label);
-    println!("  [3] Abort flashing");
+    println!("  [3] Skip this partition and continue");
+    println!("  [4] Abort flashing");
 
     loop {
         let choice = crate::utils::prompt("\n  Choice", "");
         match choice.as_str() {
-            "3" => return false,
-            "1" => return true,
+            "3" => return ErrorAction::Skip,
+            "4" => return ErrorAction::Abort,
+            "1" => return ErrorAction::Retry,
             "2" => {
                 println!();
                 println!("  Rebooting to {} ...", mode_label);
@@ -735,13 +736,13 @@ fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: Devic
                 };
                 if ok {
                     println!("  ✓ Device is in {} — retrying ...", mode_label);
-                    return true;
+                    return ErrorAction::Retry;
                 } else {
                     println!("  ✗ Device did not enter {}.", mode_label);
                     println!("  Try rebooting manually, then press [1] to retry.");
                 }
             }
-            _ => println!("  Enter 1, 2 or 3"),
+            _ => println!("  Enter 1, 2, 3 or 4"),
         }
     }
 }
@@ -812,7 +813,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
 
     println!("\nFound {} image(s) to flash:", images.len());
     let mut sorted: Vec<_> = images.iter().collect();
-    sorted.sort_by_key(|(k, _)| k.to_string());
+    sorted.sort_by_key(|(k, _)| *k);
     for (name, path) in &sorted {
         let mode_tag = if is_bootloader_partition(name) {
             "bootloader"
@@ -970,7 +971,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
 
         // Non-super → both slots
         let mut sorted_non_super: Vec<_> = non_super_imgs.iter().collect();
-        sorted_non_super.sort_by_key(|(k, _)| k.to_string());
+        sorted_non_super.sort_by_key(|(k, _)| *k);
 
         for slot in SLOTS {
             for (partition, image_path) in &sorted_non_super {
@@ -987,9 +988,10 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 done_ops += 1;
                 if !result.success {
                     println!();
-                    if !on_flash_error(&result, serial_ref, DeviceMode::Fastbootd) {
-                        session.aborted = true;
-                        return session;
+                    match on_flash_error(&result, serial_ref, DeviceMode::Fastbootd) {
+                        ErrorAction::Skip => { continue; }
+                        ErrorAction::Abort => { session.aborted = true; return session; }
+                        ErrorAction::Retry => {}
                     }
                     let retry = flash_with_progress(
                         image_path,
@@ -1017,7 +1019,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             println!();
 
             let mut sorted_super: Vec<_> = super_imgs.iter().collect();
-            sorted_super.sort_by_key(|(k, _)| k.to_string());
+            sorted_super.sort_by_key(|(k, _)| *k);
 
             for (partition, image_path) in &sorted_super {
                 let result = flash_with_progress(
@@ -1033,9 +1035,10 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 done_ops += 1;
                 if !result.success {
                     println!();
-                    if !on_flash_error(&result, serial_ref, DeviceMode::Fastbootd) {
-                        session.aborted = true;
-                        return session;
+                    match on_flash_error(&result, serial_ref, DeviceMode::Fastbootd) {
+                        ErrorAction::Skip => { continue; }
+                        ErrorAction::Abort => { session.aborted = true; return session; }
+                        ErrorAction::Retry => {}
                     }
                     let retry = flash_with_progress(
                         image_path,
@@ -1092,7 +1095,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
         println!();
 
         let mut sorted_bl: Vec<_> = bootloader_images.iter().collect();
-        sorted_bl.sort_by_key(|(k, _)| k.to_string());
+        sorted_bl.sort_by_key(|(k, _)| *k);
 
         for &slot in SLOTS {
             for (partition, image_path) in &sorted_bl {
@@ -1109,9 +1112,10 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 done_ops2 += 1;
                 if !result.success {
                     println!();
-                    if !on_flash_error(&result, serial_ref, DeviceMode::Bootloader) {
-                        session.aborted = true;
-                        return session;
+                    match on_flash_error(&result, serial_ref, DeviceMode::Bootloader) {
+                        ErrorAction::Skip => { continue; }
+                        ErrorAction::Abort => { session.aborted = true; return session; }
+                        ErrorAction::Retry => {}
                     }
                     let retry = flash_with_progress(
                         image_path,
@@ -1383,6 +1387,7 @@ fn offer_wipe(session: &FlashSession) {
 //   - No interactive prompts (ARB check is handled by GUI before calling this)
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Clone)]
 pub struct FlashProgress {
     pub partition: String,
     pub slot: String,
@@ -1404,6 +1409,7 @@ pub fn run_flash_session_with_log(
     } else {
         collect_images(firmware_dir)
     };
+
     if images.is_empty() {
         if source.is_source() {
             on_log(format!("No flashable .img files found in source build directory: {}", firmware_dir.display()));
@@ -1451,7 +1457,7 @@ pub fn run_flash_session_with_log(
 
         // Non-super → both slots
         let mut sorted_non_super: Vec<_> = non_super_imgs.iter().collect();
-        sorted_non_super.sort_by_key(|(k, _)| k.to_string());
+        sorted_non_super.sort_by_key(|(k, _)| *k);
 
         for slot in SLOTS {
             for (partition, image_path) in &sorted_non_super {
@@ -1461,9 +1467,13 @@ pub fn run_flash_session_with_log(
                     done: done_ops,
                     total: total_ops,
                 });
+                done_ops += 1;
+                if !device_has_partition(serial, partition) {
+                    on_log(format!("Skipping {}_{} — not a device partition", partition, slot));
+                    continue;
+                }
                 on_log(format!("Flashing {}_{} ...", partition, slot));
                 let result = flash_partition(image_path, partition, slot, serial);
-                done_ops += 1;
                 if result.success {
                     on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
                 } else {
@@ -1476,10 +1486,8 @@ pub fn run_flash_session_with_log(
                         on_log(format!("{}_{} OK on retry ({:.1}s)", partition, slot, retry.duration_s));
                         *session.results.last_mut().unwrap() = retry;
                     } else {
-                        on_log(format!("{}_{} FAILED on retry — aborting", partition, slot));
+                        on_log(format!("{}_{} FAILED on retry — skipping", partition, slot));
                         *session.results.last_mut().unwrap() = retry;
-                        session.aborted = true;
-                        return session;
                     }
                     continue;
                 }
@@ -1490,11 +1498,16 @@ pub fn run_flash_session_with_log(
         // Super → active slot only
         if !super_imgs.is_empty() {
             on_log("Clearing super partition...".into());
-            let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
-            wipe_super_with_log(serial, &super_names, &|msg| on_log(msg));
+            let super_names: Vec<String> = super_imgs.keys()
+                .filter(|k| device_has_partition(serial, k))
+                .map(|k| k.to_string())
+                .collect();
+            if !super_names.is_empty() {
+                wipe_super_with_log(serial, &super_names, &|msg| on_log(msg));
+            }
 
             let mut sorted_super: Vec<_> = super_imgs.iter().collect();
-            sorted_super.sort_by_key(|(k, _)| k.to_string());
+            sorted_super.sort_by_key(|(k, _)| *k);
 
             for (partition, image_path) in &sorted_super {
                 on_progress(FlashProgress {
@@ -1503,9 +1516,13 @@ pub fn run_flash_session_with_log(
                     done: done_ops,
                     total: total_ops,
                 });
+                done_ops += 1;
+                if !device_has_partition(serial, partition) {
+                    on_log(format!("Skipping {} ({}) — not a device partition", partition, active_slot));
+                    continue;
+                }
                 on_log(format!("Flashing {}_{} (super) ...", partition, active_slot));
                 let result = flash_partition(image_path, partition, &active_slot, serial);
-                done_ops += 1;
                 if result.success {
                     on_log(format!("{}_{} OK ({:.1}s)", partition, active_slot, result.duration_s));
                 } else {
@@ -1517,10 +1534,8 @@ pub fn run_flash_session_with_log(
                         on_log(format!("{}_{} OK on retry ({:.1}s)", partition, active_slot, retry.duration_s));
                         *session.results.last_mut().unwrap() = retry;
                     } else {
-                        on_log(format!("{}_{} FAILED on retry — aborting", partition, active_slot));
+                        on_log(format!("{}_{} FAILED on retry — skipping", partition, active_slot));
                         *session.results.last_mut().unwrap() = retry;
-                        session.aborted = true;
-                        return session;
                     }
                     continue;
                 }
@@ -1557,7 +1572,7 @@ pub fn run_flash_session_with_log(
         on_log(format!("Stage 2/2: bootloader — {} partitions × 2 slots", bootloader_images.len()));
 
         let mut sorted_bl: Vec<_> = bootloader_images.iter().collect();
-        sorted_bl.sort_by_key(|(k, _)| k.to_string());
+        sorted_bl.sort_by_key(|(k, _)| *k);
 
         for &slot in SLOTS {
             for (partition, image_path) in &sorted_bl {
@@ -1567,9 +1582,13 @@ pub fn run_flash_session_with_log(
                     done: done_ops2,
                     total: total_ops2,
                 });
+                done_ops2 += 1;
+                if !device_has_partition(serial, partition) {
+                    on_log(format!("Skipping {}_{} — not a device partition", partition, slot));
+                    continue;
+                }
                 on_log(format!("Flashing {}_{} ...", partition, slot));
                 let result = flash_partition(image_path, partition, slot, serial);
-                done_ops2 += 1;
                 if result.success {
                     on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
                 } else {
@@ -1581,10 +1600,8 @@ pub fn run_flash_session_with_log(
                         on_log(format!("{}_{} OK on retry ({:.1}s)", partition, slot, retry.duration_s));
                         *session.results.last_mut().unwrap() = retry;
                     } else {
-                        on_log(format!("{}_{} FAILED on retry — aborting", partition, slot));
+                        on_log(format!("{}_{} FAILED on retry — skipping", partition, slot));
                         *session.results.last_mut().unwrap() = retry;
-                        session.aborted = true;
-                        return session;
                     }
                     continue;
                 }

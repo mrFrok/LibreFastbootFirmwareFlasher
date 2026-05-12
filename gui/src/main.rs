@@ -2,11 +2,11 @@
 
 use slint::Model;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
-#[cfg(unix)] extern crate libc;
 
 slint::include_modules!();
 
@@ -27,6 +27,7 @@ enum WMsg {
     Downloading(bool),
     TestStep { step: i32, status: String },
     ArbWarning { version: u32 },
+    ArbDeviceWarning { path: String, is_source: bool, device_arb: u32 },
     ReadyToFlash,  // device is in fastbootd, show final confirm dialog
 }
 
@@ -38,6 +39,7 @@ enum Cmd {
     DriverTest, RebootTo(String), CancelDownload,
     PostFlashReboot, PostFlashWipe,
     ConfirmArbAndFlash { path: String },
+    ConfirmArbDeviceFlash { path: String, is_source: bool },
     RebootForFlash { reboot_choice: u8 },
     FlashFromSource { dir: String },
 }
@@ -111,21 +113,21 @@ fn do_flash(tx: &mpsc::Sender<WMsg>, source: &lfff_lib::flasher::FirmwareSource,
     tx.send(WMsg::Progress{fraction:1.0,partition:String::new()}).ok();
     let failed = session.failed().len();
     let total = session.results.len();
-    let crit_failed = session.critical_failed().len();
     for r in session.failed() {
         tx.send(WMsg::Log{level:LogLevel::Error,message:format!("FAILED: {}_{} — {}",r.partition,r.slot,r.error),tab:2}).ok();
     }
-    let success = crit_failed == 0 && !session.aborted;
-    tx.send(WMsg::FlashComplete{
-        success,
-        message: if success {
-            format!("Done! {}/{} OK", total - failed, total)
-        } else if session.aborted {
-            format!("Aborted after critical failure ({} errors)", failed)
-        } else {
-            format!("{} errors out of {}", failed, total)
-        }
-    }).ok();
+    let success = !session.aborted;
+    let crit_failed = session.critical_failed().len();
+    let detail_lines: Vec<String> = session.failed().iter()
+        .map(|r| format!("{}_{}: {}", r.partition, r.slot, r.error))
+        .collect();
+    let msg = if failed > 0 {
+        let crit = if crit_failed > 0 { format!("\n⚠ {} critical", crit_failed) } else { String::new() };
+        format!("{}/{} failed:{}\n{}", failed, total, crit, detail_lines.join("\n"))
+    } else {
+        format!("Done! {}/{} OK", total, total)
+    };
+    tx.send(WMsg::FlashComplete{ success, message: msg }).ok();
     tx.send(WMsg::Flashing(false)).ok();
 }
 
@@ -288,7 +290,10 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                                 log(&tx,LogLevel::Warn,2,format!("ARB={} — anti-rollback will be raised, waiting for confirmation...",ver));
                                 continue;
                             } else {
-                                log(&tx,LogLevel::Success,2,"ARB=0 — safe, no rollback counter change");
+                                tx.send(WMsg::Flashing(false)).ok();
+                                tx.send(WMsg::ArbDeviceWarning{path:path.clone(),is_source:false,device_arb:0}).ok();
+                                log(&tx,LogLevel::Warn,2,"Firmware ARB=0 — if device was flashed with ARB>0 firmware before, this may brick");
+                                continue;
                             }
                         }
                     }
@@ -336,6 +341,54 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                     }else{fw.to_path_buf()};
                     log(&tx,LogLevel::Info,2,"ARB warning confirmed by user, proceeding...");
                     do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial);
+                }
+                Cmd::ConfirmArbDeviceFlash{path,is_source}=>{
+                    tx.send(WMsg::Flashing(true)).ok();
+                    if is_source {
+                        log(&tx,LogLevel::Info,2,"Device ARB warning confirmed by user, flashing from source...");
+                        let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&path));
+                        do_flash(&tx, &d, &serial);
+                    } else {
+                        log(&tx,LogLevel::Info,2,"Device ARB warning confirmed by user, proceeding...");
+                        let dir = if path.ends_with(".zip"){
+                            let fw=Path::new(&path);
+                            let fw_name=lfff_lib::extractor::get_firmware_name(fw);
+                            let out=fw_dir().join(&fw_name);
+                            log(&tx,LogLevel::Info,2,format!("Extracting to {}...",out.display()));
+                            let tx_ex=tx.clone();
+                            let staging2=out.join("_staging");
+                            std::fs::create_dir_all(&staging2).ok();
+                            let tx_w2=tx.clone();
+                            let wd2=staging2.clone();
+                            let (stx2,srx2)=std::sync::mpsc::channel::<()>();
+                            std::thread::spawn(move||{
+                                let mut known=std::collections::HashSet::<String>::new();
+                                let mut secs=0u32;
+                                loop{
+                                    std::thread::sleep(std::time::Duration::from_secs(1));
+                                    if srx2.try_recv().is_ok(){break;}
+                                    secs+=1;
+                                    let mut q=vec![wd2.clone()];
+                                    while let Some(d)=q.pop(){
+                                        if let Ok(rd)=std::fs::read_dir(&d){
+                                            for e in rd.flatten(){let p=e.path();if p.is_dir(){q.push(p);continue;}
+                                                let name=p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                                if name.ends_with(".img")&&known.insert(name.clone()){
+                                                    tx_w2.send(WMsg::Log{level:LogLevel::Info,message:format!("Extracted: {}",name),tab:2}).ok();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if secs%5==0&&known.is_empty(){tx_w2.send(WMsg::Log{level:LogLevel::Info,message:format!("Extracting... ({}s)",secs),tab:2}).ok();}
+                                }
+                            });
+                            let r=lfff_lib::extractor::extract_firmware_with_log(Path::new(&path),&out,None,None,Some(&|line:String|{tx_ex.send(WMsg::Log{level:LogLevel::Info,message:line,tab:2}).ok();}));
+                            stx2.send(()).ok();
+                            if !r.success{log(&tx,LogLevel::Error,2,format!("Extract fail: {}",r.error));tx.send(WMsg::FlashComplete{success:false,message:r.error}).ok();tx.send(WMsg::Flashing(false)).ok();continue;}
+                            log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
+                        }else{Path::new(&path).to_path_buf()};
+                        do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir), &serial);
+                    }
                 }
                 Cmd::FlashFromSource{dir}=>{
                     tx.send(WMsg::Flashing(true)).ok();
@@ -652,7 +705,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
     }
 }
 
-fn poll(w: &Weak<MainWindow>, rx: &mpsc::Receiver<WMsg>, last_dl_pct: &mut u32) {
+fn poll(w: &Weak<MainWindow>, rx: &mpsc::Receiver<WMsg>, last_dl_pct: &mut u32, models: &LogModels) {
     // poll() is always called from a Slint Timer — already on the event loop thread.
     // invoke_from_event_loop() here just queued work for the *next* tick and silently
     // dropped messages. Access the UI directly instead.
@@ -674,21 +727,25 @@ fn poll(w: &Weak<MainWindow>, rx: &mpsc::Receiver<WMsg>, last_dl_pct: &mut u32) 
         }
 
         match m {
-            WMsg::Log{level,message,tab} => add_log(&ui,&level,tab,&message),
+            WMsg::Log{level,message,tab} => add_log(models,&ui,&level,tab,&message),
             WMsg::Progress{fraction,partition} => { ui.set_flash_progress(fraction); ui.set_current_partition(partition.clone().into()); if !partition.is_empty() { ui.set_flash_status(partition.into()); } }
             WMsg::DeviceDetected{name,serial,slot} => ui.set_device(DeviceInfo{connected:true,name:name.into(),serial:serial.into(),slot:slot.into()}),
             WMsg::DeviceDisconnected => ui.set_device(DeviceInfo{connected:false,name:"\u{2014}".into(),serial:"\u{2014}".into(),slot:"\u{2014}".into()}),
             WMsg::FlashComplete{success,message} => {
                 ui.set_is_flashing(false);
+                ui.set_pending_source_flash(false);
                 ui.set_flash_status(message.clone().into());
                 if success { ui.set_flash_progress(1.0); }
-                add_log(&ui,if success{&LogLevel::Success}else{&LogLevel::Error},2,&message);
+                add_log(models,&ui,if success{&LogLevel::Success}else{&LogLevel::Error},2,&message);
                 if success {
                     ui.set_confirm_action(7);
                     ui.set_show_confirm(true);
+                } else {
+                    ui.set_flash_error_message(message.into());
+                    ui.set_show_flash_error(true);
                 }
             }
-            WMsg::DepsResult{message,ok} => add_log(&ui,if ok{&LogLevel::Success}else{&LogLevel::Error},0,&message),
+            WMsg::DepsResult{message,ok} => add_log(models,&ui,if ok{&LogLevel::Success}else{&LogLevel::Error},0,&message),
             WMsg::Flashing(f) => ui.set_is_flashing(f),
             WMsg::Downloading(f) => ui.set_is_downloading(f),
             WMsg::FwPath(p) => ui.set_firmware_path(p.into()),
@@ -699,53 +756,71 @@ fn poll(w: &Weak<MainWindow>, rx: &mpsc::Receiver<WMsg>, last_dl_pct: &mut u32) 
                 ui.set_dl_downloaded(downloaded.into());
                 ui.set_dl_total(total.into());
                 if let Some(ref msg) = dl_log {
-                    add_log(&ui, &LogLevel::Info, 1, msg);
+                    add_log(models, &ui, &LogLevel::Info, 1, msg);
                 } else if !raw_line.is_empty() {
                     // Log everything except raw progress-bar lines (those update dl_percent)
                     let is_bar = raw_line.starts_with("[#") || raw_line.starts_with('#');
                     if !is_bar {
-                        add_log(&ui, &LogLevel::Info, 1, &raw_line);
+                        add_log(models, &ui, &LogLevel::Info, 1, &raw_line);
                     }
                 }
             }
             WMsg::TestStep{step,status} => { ui.set_test_step(step); ui.set_test_status(status.into()); }
             WMsg::ArbWarning{version} => {
-                add_log(&ui,&LogLevel::Warn,2,&format!("⚠ ARB={} — flashing will permanently raise the anti-rollback counter. You will NOT be able to downgrade firmware afterwards!",version));
+                add_log(models,&ui,&LogLevel::Warn,2,&format!("⚠ ARB={} — flashing will permanently raise the anti-rollback counter. You will NOT be able to downgrade firmware afterwards!",version));
                 ui.set_arb_warning_version(version as i32);
                 ui.set_show_arb_warning(true);
             }
+            WMsg::ArbDeviceWarning{path,is_source,device_arb} => {
+                add_log(models,&ui,&LogLevel::Warn,2,&format!("⚠ Device has ARB={} — firmware ARB is lower or unknown, may brick!",device_arb));
+                ui.set_arb_device_version(device_arb as i32);
+                ui.set_arb_device_is_source(is_source);
+                ui.set_firmware_path(path.into());
+                ui.set_show_arb_device_warning(true);
+            }
             WMsg::ReadyToFlash => {
-                ui.set_confirm_action(4);
+                if ui.get_pending_source_flash() {
+                    ui.set_confirm_action(8);
+                } else {
+                    ui.set_confirm_action(4);
+                }
                 ui.set_show_confirm(true);
             }
         }
     }
 }
 
-fn add_log(ui: &MainWindow, l: &LogLevel, tab: u8, m: &str) {
-    let mut e: Vec<LogEntry> = match tab {
-        0 => ui.get_device_log(),
-        1 => ui.get_download_log(),
-        2 => ui.get_flash_log(),
-        _ => ui.get_partition_log(),
-    }.iter().collect();
-    e.push(LogEntry{timestamp:ts().into(),level:SharedString::from(lvl(l)),message:SharedString::from(m)});
-    if e.len()>500{e.drain(0..e.len()-500);}
-    let model = ModelRc::new(VecModel::from(e));
+struct LogModels {
+    device: Rc<VecModel<LogEntry>>,
+    download: Rc<VecModel<LogEntry>>,
+    flash: Rc<VecModel<LogEntry>>,
+    partition: Rc<VecModel<LogEntry>>,
+}
+
+fn add_log_m(model: &VecModel<LogEntry>, _ui: &MainWindow, l: &LogLevel, m: &str) {
+    model.insert(0, LogEntry{timestamp:ts().into(),level:SharedString::from(lvl(l)),message:SharedString::from(m)});
+    while model.row_count() > 500 { model.remove(model.row_count() - 1); }
+}
+
+fn add_log_ui_m(model: &VecModel<LogEntry>, ui: &MainWindow, msg: &str) {
+    add_log_m(model, ui, &LogLevel::Info, msg);
+}
+
+fn log_model<'a>(models: &'a LogModels, tab: u8) -> &'a VecModel<LogEntry> {
     match tab {
-        0 => ui.set_device_log(model),
-        1 => ui.set_download_log(model),
-        2 => ui.set_flash_log(model),
-        _ => ui.set_partition_log(model),
+        0 => &models.device,
+        1 => &models.download,
+        2 => &models.flash,
+        _ => &models.partition,
     }
 }
 
-
-
-
-fn add_log_ui(ui: &MainWindow, tab: u8, msg: &str) {
-    add_log(ui, &LogLevel::Info, tab, msg);
+fn add_log(models: &LogModels, ui: &MainWindow, l: &LogLevel, tab: u8, m: &str) {
+    add_log_m(log_model(models, tab), ui, l, m);
 }
+
+
+
 
 fn scale_path() -> std::path::PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
@@ -796,11 +871,23 @@ fn main() -> Result<(), slint::PlatformError> {
     let(mtx,mrx)=mpsc::channel::<WMsg>();
     thread::spawn(move||worker(crx,mtx));
 
+    // Persistent log models (push to these instead of replacing)
+    let models = LogModels {
+        device: Rc::new(VecModel::<LogEntry>::default()),
+        download: Rc::new(VecModel::<LogEntry>::default()),
+        flash: Rc::new(VecModel::<LogEntry>::default()),
+        partition: Rc::new(VecModel::<LogEntry>::default()),
+    };
+    ui.set_device_log(ModelRc::from(Rc::clone(&models.device)));
+    ui.set_download_log(ModelRc::from(Rc::clone(&models.download)));
+    ui.set_flash_log(ModelRc::from(Rc::clone(&models.flash)));
+    ui.set_partition_log(ModelRc::from(Rc::clone(&models.partition)));
+
     // Device detection
     {let t=ctx.clone();ui.on_check_device(move||{t.send(Cmd::CheckDevice).ok();});}
 
     // Browse firmware ZIP file only
-    {let w=ui.as_weak();ui.on_browse_firmware(move||{
+    {let dl=Rc::clone(&models.download);let w=ui.as_weak();ui.on_browse_firmware(move||{
         if let Some(p)=rfd::FileDialog::new()
             .add_filter("Firmware",&["zip","ops","ofp"])
             .add_filter("All",&["*"])
@@ -809,26 +896,26 @@ fn main() -> Result<(), slint::PlatformError> {
         {
             if let Some(ui)=w.upgrade(){
                 ui.set_firmware_path(p.display().to_string().into());
-                add_log(&ui,&LogLevel::Info,1,&format!("Selected: {}",p.file_name().unwrap_or_default().to_string_lossy()));
+                add_log_m(&dl,&ui,&LogLevel::Info,&format!("Selected: {}",p.file_name().unwrap_or_default().to_string_lossy()));
             }
         }
     });}
 
     // Browse extracted firmware folder
-    {let w=ui.as_weak();ui.on_browse_folder(move||{
+    {let fl=Rc::clone(&models.flash);let w=ui.as_weak();ui.on_browse_folder(move||{
         if let Some(p)=rfd::FileDialog::new()
             .set_directory(fw_dir())
             .pick_folder()
         {
             if let Some(ui)=w.upgrade(){
                 ui.set_firmware_path(p.display().to_string().into());
-                add_log(&ui,&LogLevel::Info,2,&format!("Selected folder: {}",p.file_name().unwrap_or_default().to_string_lossy()));
+                add_log_m(&fl,&ui,&LogLevel::Info,&format!("Selected folder: {}",p.file_name().unwrap_or_default().to_string_lossy()));
             }
         }
     });}
 
     // Browse Android source build directory
-    {let w=ui.as_weak();ui.on_browse_source_dir(move||{
+    {let fl=Rc::clone(&models.flash);let w=ui.as_weak();ui.on_browse_source_dir(move||{
         if let Some(p)=rfd::FileDialog::new()
             .set_title("Select build output directory (containing .img files)")
             .pick_folder()
@@ -839,27 +926,27 @@ fn main() -> Result<(), slint::PlatformError> {
                 ui.set_firmware_path(dir_str.clone().into());
                 ui.set_source_dir(dir_str.clone().into());
                 ui.set_source_image_count(images.len() as i32);
-                add_log(&ui,&LogLevel::Info,2,&format!(
+                add_log_m(&fl,&ui,&LogLevel::Info,&format!(
                     "Source dir selected: {} ({} images)",
                     p.file_name().unwrap_or_default().to_string_lossy(),
                     images.len()
                 ));
                 let mut sorted: Vec<_> = images.iter().collect();
-                sorted.sort_by_key(|(k,_)| k.to_string());
+                sorted.sort_by_key(|(k,_)| *k);
                 for (name,path) in &sorted {
                     let mb = std::fs::metadata(path).map(|m|m.len() as f64/1024.0/1024.0).unwrap_or(0.0);
-                    add_log(&ui,&LogLevel::Info,2,&format!("  {} ({:.1} MB)",name,mb));
+                    add_log_m(&fl,&ui,&LogLevel::Info,&format!("  {} ({:.1} MB)",name,mb));
                 }
             }
         }
     });}
 
     // Browse single .img
-    {let w=ui.as_weak();ui.on_browse_single_image(move||{
+    {let pt=Rc::clone(&models.partition);let w=ui.as_weak();ui.on_browse_single_image(move||{
         if let Some(p)=rfd::FileDialog::new().add_filter("Image",&["img"]).add_filter("All",&["*"]).set_directory(fw_dir()).pick_file(){
             if let Some(ui)=w.upgrade(){
                 ui.set_single_image_path(p.display().to_string().into());
-                add_log(&ui,&LogLevel::Info,3,&format!("Selected: {}",p.file_name().unwrap_or_default().to_string_lossy()));
+                add_log_m(&pt,&ui,&LogLevel::Info,&format!("Selected: {}",p.file_name().unwrap_or_default().to_string_lossy()));
             }
         }
     });}
@@ -867,24 +954,81 @@ fn main() -> Result<(), slint::PlatformError> {
     // Flash
     {let t=ctx.clone();let w=ui.as_weak();ui.on_start_flash(move||{
         if let Some(ui)=w.upgrade(){
+            ui.set_pending_source_flash(false);
+            ui.set_flash_error_is_source(false);
             ui.set_is_flashing(true);ui.set_flash_progress(0.0);ui.set_flash_status("Starting...".into());
             t.send(Cmd::Flash{path:ui.get_firmware_path().to_string(),skip_arb:ui.get_skip_arb_check()}).ok();
         }
     });}
 
-    // Flash from source dir (no reboot dialog needed — source mode should be simple)
-    {let t=ctx.clone();let w=ui.as_weak();ui.on_start_flash_from_source(move||{
+    // Flash from source dir — show reboot dialog first, then flash in fastbootd
+    {let fl=Rc::clone(&models.flash);let _t=ctx.clone();let w=ui.as_weak();ui.on_start_flash_from_source(move||{
         if let Some(ui)=w.upgrade(){
             let dir = ui.get_source_dir().to_string();
             if dir.is_empty() {
-                add_log(&ui,&LogLevel::Error,2,"No source directory selected");
+                add_log_m(&fl,&ui,&LogLevel::Error,"No source directory selected");
                 return;
             }
+            ui.set_firmware_path(dir.into());
+            ui.set_pending_source_flash(true);
+            ui.set_reboot_choice(0);
+            ui.set_confirm_action(3);
+            ui.set_show_confirm(true);
+        }
+    });}
+
+    // Source flash confirmed from final dialog — do the actual flash
+    {let fl=Rc::clone(&models.flash);let t=ctx.clone();let w=ui.as_weak();ui.on_confirm_source_flash(move||{
+        if let Some(ui)=w.upgrade(){
+            let dir = ui.get_firmware_path().to_string();
+            if dir.is_empty() {
+                add_log_m(&fl,&ui,&LogLevel::Error,"Source directory lost — please try again");
+                return;
+            }
+            ui.set_pending_source_flash(false);
+            ui.set_flash_error_is_source(true);
             ui.set_is_flashing(true);
             ui.set_flash_progress(0.0);
             ui.set_flash_status("Starting flash from source...".into());
             t.send(Cmd::FlashFromSource{dir}).ok();
         }
+    });}
+
+    // Retry flash after error
+    {let fl=Rc::clone(&models.flash);let t=ctx.clone();let w=ui.as_weak();ui.on_retry_flash(move||{
+        if let Some(ui)=w.upgrade(){
+            if ui.get_flash_error_is_source() {
+                let dir = ui.get_source_dir().to_string();
+                if dir.is_empty() {
+                    add_log_m(&fl,&ui,&LogLevel::Error,"Source directory not available for retry");
+                    return;
+                }
+                ui.set_flash_error_is_source(true);
+                ui.set_is_flashing(true);
+                ui.set_flash_progress(0.0);
+                ui.set_flash_status("Retrying source flash...".into());
+                t.send(Cmd::FlashFromSource{dir}).ok();
+            } else {
+                let path = ui.get_firmware_path().to_string();
+                if path.is_empty() {
+                    add_log_m(&fl,&ui,&LogLevel::Error,"Firmware path not available for retry");
+                    return;
+                }
+                ui.set_flash_error_is_source(false);
+                ui.set_is_flashing(true);
+                ui.set_flash_progress(0.0);
+                ui.set_flash_status("Retrying flash...".into());
+                t.send(Cmd::Flash{path,skip_arb:true}).ok();
+            }
+        }
+    });}
+
+    // Reboot device (from error dialog)
+    {let dv=Rc::clone(&models.device);let w=ui.as_weak();ui.on_reboot_device(move||{
+        if let Some(ui)=w.upgrade(){
+            add_log_m(&dv,&ui,&LogLevel::Info,"Rebooting device...");
+        }
+        let _ = std::process::Command::new("adb").args(["reboot"]).status();
     });}
 
     // Reboot to target
@@ -905,12 +1049,21 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });}
 
+    // Device ARB warning confirmed — continue flash
+    {let t=ctx.clone();let w=ui.as_weak();ui.on_confirm_arb_device_flash(move||{
+        if let Some(ui)=w.upgrade(){
+            ui.set_is_flashing(true);ui.set_flash_progress(0.0);ui.set_flash_status("Starting...".into());
+            let is_source = ui.get_arb_device_is_source();
+            t.send(Cmd::ConfirmArbDeviceFlash{path:ui.get_firmware_path().to_string(),is_source}).ok();
+        }
+    });}
+
     // Reboot to fastbootd before flash (step 1 -> reboot -> step 2)
-    {let t=ctx.clone();let w=ui.as_weak();ui.on_reboot_for_flash(move||{
+    {let fl=Rc::clone(&models.flash);let t=ctx.clone();let w=ui.as_weak();ui.on_reboot_for_flash(move||{
         if let Some(ui)=w.upgrade(){
             let reboot_choice = ui.get_reboot_choice() as u8;
             ui.set_show_confirm(false);
-            add_log_ui(&ui, 2, "Rebooting to fastbootd...");
+            add_log_ui_m(&fl, &ui, "Rebooting to fastbootd...");
             t.send(Cmd::RebootForFlash{reboot_choice}).ok();
         }
     });}
@@ -918,6 +1071,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Single flash — use partition-name if provided
     {let t=ctx.clone();let w=ui.as_weak();ui.on_start_single_flash(move||{
         if let Some(ui)=w.upgrade(){
+            ui.set_pending_source_flash(false);
             ui.set_is_flashing(true);ui.set_flash_progress(0.0);ui.set_flash_status("Starting...".into());
             let path=ui.get_single_image_path().to_string();
             let part=ui.get_partition_name().to_string();
@@ -930,7 +1084,7 @@ fn main() -> Result<(), slint::PlatformError> {
     {let t=ctx.clone();ui.on_cancel_download(move||{t.send(Cmd::CancelDownload).ok();});}
     {let t=ctx.clone();let w=ui.as_weak();ui.on_cancel_flash(move||{
         t.send(Cmd::CancelFlash).ok();
-        if let Some(ui)=w.upgrade(){ui.set_is_flashing(false);ui.set_flash_status("Cancelled".into());}
+        if let Some(ui)=w.upgrade(){ui.set_pending_source_flash(false);ui.set_is_flashing(false);ui.set_flash_status("Cancelled".into());}
     });}
 
     // Deps
@@ -990,7 +1144,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let timer=slint::Timer::default();
     let mut last_dl_pct: u32 = 0;
     timer.start(slint::TimerMode::Repeated,Duration::from_millis(50),move||{
-        poll(&w,&mrx,&mut last_dl_pct);
+        poll(&w,&mrx,&mut last_dl_pct, &models);
     });
     ui.run()
 }

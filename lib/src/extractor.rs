@@ -626,7 +626,7 @@ pub fn print_extraction_result(result: &ExtractionResult) {
     }
     println!("\n✓ Extracted to: {}", result.output_dir.display());
     let mut sorted: Vec<_> = result.groups.iter().collect();
-    sorted.sort_by_key(|(k, _)| (*k).clone());
+    sorted.sort_by_key(|(k, _)| *k);
     for (group, images) in &sorted {
         println!("\n  {}/", group);
         let mut imgs: Vec<&PathBuf> = images.iter().collect();

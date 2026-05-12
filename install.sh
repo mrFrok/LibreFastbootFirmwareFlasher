@@ -6,6 +6,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --cli-only
 #   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --gui-only
+#   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --version v2.0.0
 #   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --uninstall
 
 set -euo pipefail
@@ -29,12 +30,14 @@ err()   { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
 INSTALL_CLI=true
 INSTALL_GUI=true
 UNINSTALL=false
+VERSION=""
 
 for arg in "$@"; do
     case "$arg" in
         --cli-only)  INSTALL_GUI=false ;;
         --gui-only)  INSTALL_CLI=false ;;
         --uninstall) UNINSTALL=true ;;
+        --version=*) VERSION="${arg#*=}" ;;
         --reinstall) : ;;
         *) warn "Unknown flag: $arg" ;;
     esac
@@ -113,6 +116,8 @@ uninstall() {
         remove_file "$HOME/.local/share/icons/hicolor/scalable/apps/lfff-gui.svg"
         command -v update-desktop-database &>/dev/null && \
             update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+        command -v gtk-update-icon-cache &>/dev/null && \
+            gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
     fi
 
     echo
@@ -154,6 +159,28 @@ install_binary() {
     ok "Installed $binary to $install_dir/$binary"
 }
 
+# Suggest shell PATH update
+suggest_path() {
+    local dir="$1"
+    local rc
+    case "${SHELL:-}" in
+        */zsh)  rc="$HOME/.zshrc" ;;
+        */fish) rc="$HOME/.config/fish/config.fish" ;;
+        */bash) rc="$HOME/.bashrc" ;;
+        *)      rc="$HOME/.profile" ;;
+    esac
+    echo
+    warn "$dir is not in your PATH"
+    echo "  Add to $rc:"
+    if [[ "$SHELL" == *fish ]]; then
+        echo -e "  ${BOLD}fish_add_path $dir${NC}"
+    else
+        echo -e "  ${BOLD}export PATH=\"$dir:\$PATH\"${NC}"
+    fi
+    echo "  Then run: source $rc"
+    echo
+}
+
 main() {
     echo
     echo -e "${BOLD}LFFF Installer${NC}"
@@ -164,21 +191,22 @@ main() {
     platform="$(detect_platform)"
     info "Platform: $platform"
 
-    info "Fetching latest release..."
-    local version
-    version="$(get_latest_version)"
-    [ -z "$version" ] && err "Could not determine latest version"
-    ok "Latest version: $version"
+    if [ -z "$VERSION" ]; then
+        info "Fetching latest release..."
+        VERSION="$(get_latest_version)"
+        [ -z "$VERSION" ] && err "Could not determine latest version"
+    fi
+    ok "Version: $VERSION"
 
     local install_dir
     install_dir="$(find_install_dir)"
 
     if $INSTALL_CLI; then
-        install_binary "lfff" "lfff-${platform}.tar.gz" "$version" "$install_dir"
+        install_binary "lfff" "lfff-${platform}.tar.gz" "$VERSION" "$install_dir"
     fi
 
     if $INSTALL_GUI; then
-        install_binary "lfff-gui" "lfff-gui-${platform}.tar.gz" "$version" "$install_dir"
+        install_binary "lfff-gui" "lfff-gui-${platform}.tar.gz" "$VERSION" "$install_dir"
 
         # Install .desktop entry and icon on Linux
         if [ "$(uname -s)" = "Linux" ]; then
@@ -186,38 +214,35 @@ main() {
             local icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
             mkdir -p "$desktop_dir" "$icon_dir"
 
-            local raw="https://raw.githubusercontent.com/${REPO}/main"
+            local raw="https://raw.githubusercontent.com/${REPO}/${VERSION}"
             info "Installing desktop entry..."
             if command -v curl &>/dev/null; then
-                curl -fsSL "$raw/lfff-gui.desktop" -o "$desktop_dir/lfff-gui.desktop"
-                curl -fsSL "$raw/logo.svg" -o "$icon_dir/lfff-gui.svg"
+                curl -fsSL "$raw/lfff-gui.desktop" -o "$desktop_dir/lfff-gui.desktop" || \
+                    warn "Could not download desktop entry (version tag may not exist yet, try main)"
+                curl -fsSL "$raw/lfff-gui.svg" -o "$icon_dir/lfff-gui.svg" || \
+                    warn "Could not download icon"
             else
-                wget -qO "$desktop_dir/lfff-gui.desktop" "$raw/lfff-gui.desktop"
-                wget -qO "$icon_dir/lfff-gui.svg" "$raw/logo.svg"
+                wget -qO "$desktop_dir/lfff-gui.desktop" "$raw/lfff-gui.desktop" || true
+                wget -qO "$icon_dir/lfff-gui.svg" "$raw/lfff-gui.svg" || true
             fi
 
-            # Replace Exec= with absolute path so DE finds the binary
-            # even if ~/.local/bin is not in the desktop session's PATH
+            # Replace Exec= with absolute path
             local gui_bin
             gui_bin="$(command -v lfff-gui 2>/dev/null || echo "$install_dir/lfff-gui")"
-            sed -i "s|^Exec=.*|Exec=$gui_bin|" "$desktop_dir/lfff-gui.desktop"
+            sed -i "s|^Exec=.*|Exec=$gui_bin|" "$desktop_dir/lfff-gui.desktop" 2>/dev/null || true
 
             command -v gtk-update-icon-cache &>/dev/null && \
                 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
             command -v update-desktop-database &>/dev/null && \
                 update-desktop-database "$desktop_dir" 2>/dev/null || true
 
-            ok "Desktop entry installed — lfff-gui will appear in app search"
+            ok "Desktop entry installed"
         fi
     fi
 
     # PATH warning
     if ! echo "$PATH" | tr ':' '\n' | grep -qx "$install_dir"; then
-        echo
-        warn "$install_dir is not in your PATH"
-        echo "  Add to your shell config:"
-        echo -e "  ${BOLD}export PATH=\"$install_dir:\$PATH\"${NC}"
-        echo
+        suggest_path "$install_dir"
     fi
 
     echo

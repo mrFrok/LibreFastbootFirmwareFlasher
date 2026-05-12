@@ -440,7 +440,7 @@ fn print_welcome() {
     println!("  ███████╗██║     ██║     ██║     ");
     println!("  ╚══════╝╚═╝     ╚═╝     ╚═╝     ");
     println!();
-    println!("  LibreFastbootFirmwareFlasher  v1.0.0");
+    println!("  LibreFastbootFirmwareFlasher  v{}", env!("CARGO_PKG_VERSION"));
     println!("  Flash Android firmware via fastboot — free, open, no bloat.");
     println!();
     println!("  Quick start:");
