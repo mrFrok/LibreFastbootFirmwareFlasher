@@ -90,6 +90,19 @@ fn is_critical_partition(name: &str) -> bool {
     CRITICAL_PARTITIONS.contains(&name)
 }
 
+pub fn is_xbl_abl(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.starts_with("xbl") || lower.starts_with("abl")
+}
+
+pub fn is_preloader(name: &str) -> bool {
+    name.eq_ignore_ascii_case("preloader")
+}
+
+pub fn is_mediatek_build(images: &HashMap<String, PathBuf>) -> bool {
+    images.keys().any(|k| is_preloader(k))
+}
+
 // ---------------------------------------------------------------------------
 // Data types
 // ---------------------------------------------------------------------------
@@ -1398,6 +1411,10 @@ pub struct FlashProgress {
 pub fn run_flash_session_with_log(
     source: &FirmwareSource,
     serial: Option<&str>,
+    skip_xbl_abl: bool,
+    skip_preloader: bool,
+    as_mediatek: bool,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     on_log: &dyn Fn(String),
     on_progress: &dyn Fn(FlashProgress),
 ) -> FlashSession {
@@ -1419,20 +1436,44 @@ pub fn run_flash_session_with_log(
         return session;
     }
 
-    let fastbootd_images: HashMap<&str, &PathBuf> = images
-        .iter()
-        .filter(|(k, _)| !is_bootloader_partition(k))
-        .map(|(k, v)| (k.as_str(), v))
-        .collect();
-    let bootloader_images: HashMap<&str, &PathBuf> = images
-        .iter()
-        .filter(|(k, _)| is_bootloader_partition(k))
-        .map(|(k, v)| (k.as_str(), v))
-        .collect();
-
     on_log(format!("{} images found", images.len()));
 
-    // -- Stage 1: fastbootd --
+    // Filter skipped partitions
+    let filtered: HashMap<String, PathBuf> = images.into_iter().filter(|(name, _)| {
+        if skip_xbl_abl && is_xbl_abl(name) { on_log(format!("Skipping {} (xbl/abl excluded)", name)); false }
+        else if skip_preloader && is_preloader(name) { on_log(format!("Skipping {} (preloader excluded)", name)); false }
+        else { true }
+    }).collect();
+
+    if filtered.is_empty() {
+        on_log("No images to flash after filtering — aborting".into());
+        return session;
+    }
+
+    let is_mediatek = as_mediatek || is_mediatek_build(&filtered);
+
+    if is_mediatek {
+        on_log("Mediatek device — all partitions will be flashed in fastbootd mode".into());
+    } else {
+        on_log("Qualcomm device — bootloader partitions go through bootloader mode".into());
+    }
+
+    let fastbootd_images: HashMap<&str, &PathBuf> = filtered
+        .iter()
+        .filter(|(k, _)| is_mediatek || !is_bootloader_partition(k))
+        .map(|(k, v)| (k.as_str(), v))
+        .collect();
+    let bootloader_images: HashMap<&str, &PathBuf> = if is_mediatek {
+        HashMap::new()
+    } else {
+        filtered
+            .iter()
+            .filter(|(k, _)| is_bootloader_partition(k))
+            .map(|(k, v)| (k.as_str(), v))
+            .collect()
+    };
+
+    // -- Stage 1: fastbootd (all partitions on Mediatek, non-bootloader on Qualcomm) --
     if !fastbootd_images.is_empty() {
         let active_slot = get_active_slot(serial);
         on_log(format!("Active slot: {}", active_slot.to_uppercase()));
@@ -1461,6 +1502,11 @@ pub fn run_flash_session_with_log(
 
         for slot in SLOTS {
             for (partition, image_path) in &sorted_non_super {
+                if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                    on_log("Flash cancelled by user".into());
+                    session.aborted = true;
+                    return session;
+                }
                 on_progress(FlashProgress {
                     partition: partition.to_string(),
                     slot: slot.to_string(),
@@ -1476,10 +1522,10 @@ pub fn run_flash_session_with_log(
                 let result = flash_partition(image_path, partition, slot, serial);
                 if result.success {
                     on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
+                    session.results.push(result);
                 } else {
                     on_log(format!("{}_{} FAILED: {}", partition, slot, result.error));
                     session.results.push(result.clone());
-                    // Retry once
                     on_log(format!("Retrying {}_{} ...", partition, slot));
                     let retry = flash_partition(image_path, partition, slot, serial);
                     if retry.success {
@@ -1489,9 +1535,7 @@ pub fn run_flash_session_with_log(
                         on_log(format!("{}_{} FAILED on retry — skipping", partition, slot));
                         *session.results.last_mut().unwrap() = retry;
                     }
-                    continue;
                 }
-                session.results.push(result);
             }
         }
 
@@ -1510,6 +1554,11 @@ pub fn run_flash_session_with_log(
             sorted_super.sort_by_key(|(k, _)| *k);
 
             for (partition, image_path) in &sorted_super {
+                if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                    on_log("Flash cancelled by user".into());
+                    session.aborted = true;
+                    return session;
+                }
                 on_progress(FlashProgress {
                     partition: partition.to_string(),
                     slot: active_slot.clone(),
@@ -1525,6 +1574,7 @@ pub fn run_flash_session_with_log(
                 let result = flash_partition(image_path, partition, &active_slot, serial);
                 if result.success {
                     on_log(format!("{}_{} OK ({:.1}s)", partition, active_slot, result.duration_s));
+                    session.results.push(result);
                 } else {
                     on_log(format!("{}_{} FAILED: {}", partition, active_slot, result.error));
                     session.results.push(result.clone());
@@ -1537,17 +1587,15 @@ pub fn run_flash_session_with_log(
                         on_log(format!("{}_{} FAILED on retry — skipping", partition, active_slot));
                         *session.results.last_mut().unwrap() = retry;
                     }
-                    continue;
                 }
-                session.results.push(result);
             }
         }
 
         let elapsed = flash_start.elapsed().as_secs();
-        on_log(format!("Stage 1 complete in {}m{:02}s", elapsed / 60, elapsed % 60));
+        on_log(format!("fastbootd stage complete in {}m{:02}s", elapsed / 60, elapsed % 60));
     }
 
-    // -- Stage 2: bootloader --
+    // -- Stage 2: bootloader (Qualcomm only) --
     if !bootloader_images.is_empty() {
         on_log("Rebooting to bootloader for modem/bootloader flash...".into());
         if !enter_bootloader(serial) {
@@ -1576,6 +1624,11 @@ pub fn run_flash_session_with_log(
 
         for &slot in SLOTS {
             for (partition, image_path) in &sorted_bl {
+                if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                    on_log("Flash cancelled by user".into());
+                    session.aborted = true;
+                    return session;
+                }
                 on_progress(FlashProgress {
                     partition: partition.to_string(),
                     slot: slot.to_string(),
@@ -1591,6 +1644,7 @@ pub fn run_flash_session_with_log(
                 let result = flash_partition(image_path, partition, slot, serial);
                 if result.success {
                     on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
+                    session.results.push(result);
                 } else {
                     on_log(format!("{}_{} FAILED: {}", partition, slot, result.error));
                     session.results.push(result.clone());
@@ -1603,9 +1657,7 @@ pub fn run_flash_session_with_log(
                         on_log(format!("{}_{} FAILED on retry — skipping", partition, slot));
                         *session.results.last_mut().unwrap() = retry;
                     }
-                    continue;
                 }
-                session.results.push(result);
             }
         }
 

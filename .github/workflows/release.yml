@@ -141,12 +141,6 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Attach desktop & icon files
-        run: |
-          cp lfff-gui.desktop artifacts/
-          cp lfff-gui.svg artifacts/
-          cp install.sh artifacts/
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:

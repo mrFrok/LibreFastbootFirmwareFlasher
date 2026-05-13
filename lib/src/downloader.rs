@@ -375,7 +375,11 @@ where
     };
     info!("CDN URL: {}", cdn_url);
 
-    let (expires_ts, expires_label) = parse_link_expiry(&cdn_url);
+    // Try original URL first, then CDN URL for expiry info
+    let (mut expires_ts, mut expires_label) = parse_link_expiry(url);
+    if expires_ts == 0 {
+        (expires_ts, expires_label) = parse_link_expiry(&cdn_url);
+    }
     on_progress(DownloadProgress {
         link_expires_in: expires_label.clone(),
         link_expires_ts: expires_ts,

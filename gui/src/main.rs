@@ -26,7 +26,7 @@ enum WMsg {
     DlProgress { percent: f32, speed: String, eta: String, downloaded: String, total: String, raw_line: String },
     Downloading(bool),
     TestStep { step: i32, status: String },
-    ArbWarning { version: u32 },
+    ArbWarning { version: u32, as_mediatek: bool },
     ArbDeviceWarning { path: String, is_source: bool, device_arb: u32 },
     ReadyToFlash,  // device is in fastbootd, show final confirm dialog
 }
@@ -38,8 +38,8 @@ enum Cmd {
     CancelFlash, CheckDeps, InstallDeps, Download { url: String }, Extract { path: String },
     DriverTest, RebootTo(String), CancelDownload,
     PostFlashReboot, PostFlashWipe,
-    ConfirmArbAndFlash { path: String },
-    ConfirmArbDeviceFlash { path: String, is_source: bool },
+    ConfirmArbAndFlash { path: String, skip_xbl_abl: bool, skip_preloader: bool },
+    ConfirmArbDeviceFlash { path: String, is_source: bool, skip_xbl_abl: bool, skip_preloader: bool },
     RebootForFlash { reboot_choice: u8 },
     FlashFromSource { dir: String },
 }
@@ -65,22 +65,10 @@ fn ts() -> String {
 fn lvl(l: &LogLevel) -> &'static str { match l { LogLevel::Info=>"info", LogLevel::Warn=>"warn", LogLevel::Error=>"error", LogLevel::Success=>"success" } }
 fn log(tx: &mpsc::Sender<WMsg>, l: LogLevel, tab: u8, m: impl Into<String>) { tx.send(WMsg::Log{level:l,message:m.into(),tab}).ok(); }
 
-fn output_dir_path() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let mut p = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
-            p.push(".config");
-            p
-        })
-        .join("lfff/output_dir")
-}
-
 fn get_output_dir() -> PathBuf {
-    let dir = std::fs::read_to_string(output_dir_path())
-        .ok()
+    let dir = load_config().output_dir
+        .filter(|p| Path::new(p).is_absolute())
         .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
         .unwrap_or_else(|| {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
             PathBuf::from(home).join("firmwares")
@@ -90,9 +78,9 @@ fn get_output_dir() -> PathBuf {
 }
 
 fn set_output_dir(path: &str) {
-    let p = output_dir_path();
-    if let Some(d) = p.parent() { let _ = std::fs::create_dir_all(d); }
-    let _ = std::fs::write(&p, path);
+    let mut config = load_config();
+    config.output_dir = Some(path.to_string());
+    save_config(&config);
 }
 
 /// Poll for a fastboot device to appear, with progress logs. Returns true if found.
@@ -120,13 +108,19 @@ fn wait_for_fastboot(tx: &mpsc::Sender<WMsg>, tab: u8, timeout_secs: u64) -> boo
     false
 }
 
-fn do_flash(tx: &mpsc::Sender<WMsg>, source: &lfff_lib::flasher::FirmwareSource, serial: &Option<String>) {
+fn do_flash(tx: &mpsc::Sender<WMsg>, source: &lfff_lib::flasher::FirmwareSource, serial: &Option<String>,
+    skip_xbl_abl: bool, skip_preloader: bool, as_mediatek: bool,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>) {
     let sref = serial.as_deref();
     let tx_log = tx.clone();
     let tx_prog = tx.clone();
     let session = lfff_lib::flasher::run_flash_session_with_log(
         source,
         sref,
+        skip_xbl_abl,
+        skip_preloader,
+        as_mediatek,
+        cancel,
         &|msg| { tx_log.send(WMsg::Log{level:LogLevel::Info,message:msg,tab:2}).ok(); },
         &|p| {
             let fraction = if p.total > 0 { p.done as f32 / p.total as f32 } else { 0.0 };
@@ -154,8 +148,12 @@ fn do_flash(tx: &mpsc::Sender<WMsg>, source: &lfff_lib::flasher::FirmwareSource,
     tx.send(WMsg::Flashing(false)).ok();
 }
 
-fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
+fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
+    flash_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>) {
     let mut serial: Option<String> = None;
+    let mut skip_xbl_abl: bool = false;
+    let mut skip_preloader: bool = false;
+    let mut as_mediatek: bool = false;
     let dl_cancel_token: std::sync::Arc<std::sync::Mutex<Option<lfff_lib::downloader::CancelToken>>> =
         std::sync::Arc::new(std::sync::Mutex::new(None));
     loop {
@@ -261,8 +259,8 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                     }
                 }
                 Cmd::Flash{path,skip_arb}=>{
+                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                     tx.send(WMsg::Flashing(true)).ok();
-                    // Reboot already done by RebootForFlash — device is in fastbootd
                     log(&tx,LogLevel::Info,2,"Starting flash...");
                     let fw=Path::new(&path);
                     let dir=if path.ends_with(".zip"){
@@ -301,29 +299,38 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                         if !r.success{log(&tx,LogLevel::Error,2,format!("Extract fail: {}",r.error));tx.send(WMsg::FlashComplete{success:false,message:r.error}).ok();tx.send(WMsg::Flashing(false)).ok();continue;}
                         log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
                     }else{fw.to_path_buf()};
-                    // ARB check — ARB>0 is always dangerous (raises counter, can't roll back)
-                    if !skip_arb {
+                    // Reset state, detect Mediatek
+                    skip_xbl_abl = false;
+                    skip_preloader = false;
+                    as_mediatek = lfff_lib::flasher::is_mediatek_build(&lfff_lib::flasher::collect_images(&dir));
+                    if as_mediatek {
+                        log(&tx,LogLevel::Info,2,"Mediatek platform detected — no ARB, skipping xbl/abl");
+                        skip_xbl_abl = true;
+                    } else {
+                        log(&tx,LogLevel::Info,2,"Qualcomm platform detected");
+                    }
+                    // ARB check — skip for Mediatek (no ARB on Mediatek)
+                    if !skip_arb && !as_mediatek {
                         if let Some(xbl)=lfff_lib::arb::find_xbl_config(&dir){
                             let a=lfff_lib::arb::extract_arb_from_xbl(&xbl);
                             let ver = a.version.unwrap_or(0);
                             if ver > 0 {
-                                // Pause and require explicit user confirmation
                                 tx.send(WMsg::Flashing(false)).ok();
-                                tx.send(WMsg::ArbWarning { version: ver }).ok();
+                                tx.send(WMsg::ArbWarning { version: ver, as_mediatek }).ok();
                                 log(&tx,LogLevel::Warn,2,format!("ARB={} — anti-rollback will be raised, waiting for confirmation...",ver));
                                 continue;
-                            } else {
-                                tx.send(WMsg::Flashing(false)).ok();
-                                tx.send(WMsg::ArbDeviceWarning{path:path.clone(),is_source:false,device_arb:0}).ok();
-                                log(&tx,LogLevel::Warn,2,"Firmware ARB=0 — if device was flashed with ARB>0 firmware before, this may brick");
-                                continue;
                             }
+                            // ARB=0 — warn: device may have higher ARB
+                            tx.send(WMsg::Flashing(false)).ok();
+                            tx.send(WMsg::ArbDeviceWarning{path:path.clone(),is_source:false,device_arb:0}).ok();
+                            log(&tx,LogLevel::Warn,2,"Firmware ARB=0 — device ARB unknown, may be unsafe to flash");
+                            continue;
                         }
                     }
-                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial);
+                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial, skip_xbl_abl, skip_preloader, as_mediatek, flash_cancel.clone());
                 }
-                Cmd::ConfirmArbAndFlash{path}=>{
-                    // User confirmed ARB warning, proceed with flash
+                Cmd::ConfirmArbAndFlash{path, skip_xbl_abl: cmd_skip_xbl_abl, skip_preloader: cmd_skip_preloader}=>{
+                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                     tx.send(WMsg::Flashing(true)).ok();
                     let fw=Path::new(&path);
                     let dir=if path.ends_with(".zip"){
@@ -363,14 +370,15 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                         log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
                     }else{fw.to_path_buf()};
                     log(&tx,LogLevel::Info,2,"ARB warning confirmed by user, proceeding...");
-                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial);
+                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial, cmd_skip_xbl_abl, cmd_skip_preloader, as_mediatek, flash_cancel.clone());
                 }
-                Cmd::ConfirmArbDeviceFlash{path,is_source}=>{
+                Cmd::ConfirmArbDeviceFlash{path,is_source,skip_xbl_abl: cmd_skip_xbl_abl, skip_preloader: cmd_skip_preloader}=>{
+                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                     tx.send(WMsg::Flashing(true)).ok();
                     if is_source {
                         log(&tx,LogLevel::Info,2,"Device ARB warning confirmed by user, flashing from source...");
                         let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&path));
-                        do_flash(&tx, &d, &serial);
+                        do_flash(&tx, &d, &serial, cmd_skip_xbl_abl, cmd_skip_preloader, as_mediatek, flash_cancel.clone());
                     } else {
                         log(&tx,LogLevel::Info,2,"Device ARB warning confirmed by user, proceeding...");
                         let dir = if path.ends_with(".zip"){
@@ -410,10 +418,11 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                             if !r.success{log(&tx,LogLevel::Error,2,format!("Extract fail: {}",r.error));tx.send(WMsg::FlashComplete{success:false,message:r.error}).ok();tx.send(WMsg::Flashing(false)).ok();continue;}
                             log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
                         }else{Path::new(&path).to_path_buf()};
-                        do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir), &serial);
+                        do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir), &serial, cmd_skip_xbl_abl, cmd_skip_preloader, as_mediatek, flash_cancel.clone());
                     }
                 }
                 Cmd::FlashFromSource{dir}=>{
+                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                     tx.send(WMsg::Flashing(true)).ok();
                     log(&tx,LogLevel::Info,2,&format!("Flashing from source dir: {}",dir));
                     let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&dir));
@@ -429,7 +438,13 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                         let size_mb = std::fs::metadata(path).map(|m|m.len() as f64/1024.0/1024.0).unwrap_or(0.0);
                         log(&tx,LogLevel::Info,2,&format!("  {} ({:.1} MB)",name,size_mb));
                     }
-                    do_flash(&tx, &d, &serial);
+                    as_mediatek = lfff_lib::flasher::is_mediatek_build(&images);
+                    if as_mediatek {
+                        log(&tx,LogLevel::Info,2,"Mediatek platform detected");
+                    } else {
+                        log(&tx,LogLevel::Info,2,"Qualcomm platform detected");
+                    }
+                    do_flash(&tx, &d, &serial, skip_xbl_abl, skip_preloader, as_mediatek, flash_cancel.clone());
                 }
                 Cmd::FlashSingle{path,partition,reboot_choice}=>{
                     tx.send(WMsg::Flashing(true)).ok();
@@ -479,7 +494,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>) {
                     tx.send(WMsg::FlashComplete{success:fail==0,message:if fail==0{format!("{} flashed OK",p)}else{format!("{} errors",fail)}}).ok();
                     tx.send(WMsg::Flashing(false)).ok();
                 }
-                Cmd::CancelFlash=>log(&tx,LogLevel::Warn,2,"Cancelled"),
+                Cmd::CancelFlash=>log(&tx,LogLevel::Warn,2,"Cancelling flash..."),
                 Cmd::PostFlashReboot => {
                     log(&tx,LogLevel::Info,2,"Rebooting to system...");
                     let mut args = vec!["fastboot"];
@@ -781,7 +796,6 @@ fn poll(w: &Weak<MainWindow>, rx: &mpsc::Receiver<WMsg>, last_dl_pct: &mut u32, 
                 if let Some(ref msg) = dl_log {
                     add_log(models, &ui, &LogLevel::Info, 1, msg);
                 } else if !raw_line.is_empty() {
-                    // Log everything except raw progress-bar lines (those update dl_percent)
                     let is_bar = raw_line.starts_with("[#") || raw_line.starts_with('#');
                     if !is_bar {
                         add_log(models, &ui, &LogLevel::Info, 1, &raw_line);
@@ -789,13 +803,14 @@ fn poll(w: &Weak<MainWindow>, rx: &mpsc::Receiver<WMsg>, last_dl_pct: &mut u32, 
                 }
             }
             WMsg::TestStep{step,status} => { ui.set_test_step(step); ui.set_test_status(status.into()); }
-            WMsg::ArbWarning{version} => {
+            WMsg::ArbWarning{version,as_mediatek} => {
                 add_log(models,&ui,&LogLevel::Warn,2,&format!("⚠ ARB={} — flashing will permanently raise the anti-rollback counter. You will NOT be able to downgrade firmware afterwards!",version));
                 ui.set_arb_warning_version(version as i32);
                 ui.set_show_arb_warning(true);
+                ui.set_as_mediatek(as_mediatek);
             }
             WMsg::ArbDeviceWarning{path,is_source,device_arb} => {
-                add_log(models,&ui,&LogLevel::Warn,2,&format!("⚠ Device has ARB={} — firmware ARB is lower or unknown, may brick!",device_arb));
+                add_log(models,&ui,&LogLevel::Warn,2,&format!("⚠ Device ARB unknown — firmware ARB may be lower, may brick device!"));
                 ui.set_arb_device_version(device_arb as i32);
                 ui.set_arb_device_is_source(is_source);
                 ui.set_firmware_path(path.into());
@@ -845,7 +860,28 @@ fn add_log(models: &LogModels, ui: &MainWindow, l: &LogLevel, tab: u8, m: &str) 
 
 
 
-fn scale_path() -> std::path::PathBuf {
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Config {
+    #[serde(default)]
+    scale: f32,
+    #[serde(default = "default_lang")]
+    lang: String,
+    #[serde(default = "default_theme")]
+    theme: String,
+    #[serde(default)]
+    output_dir: Option<String>,
+}
+
+fn default_lang() -> String { "en".to_string() }
+fn default_theme() -> String { "dark".to_string() }
+
+impl Default for Config {
+    fn default() -> Self {
+        Self { scale: 1.0, lang: default_lang(), theme: default_theme(), output_dir: None }
+    }
+}
+
+fn config_dir() -> std::path::PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
@@ -853,36 +889,44 @@ fn scale_path() -> std::path::PathBuf {
             p.push(".config");
             p
         })
-        .join("lfff/scale")
+        .join("lfff")
 }
 
-fn load_scale() -> f32 {
-    std::fs::read_to_string(scale_path())
+fn config_path() -> std::path::PathBuf {
+    config_dir().join("config.json")
+}
+
+fn load_config() -> Config {
+    std::fs::read_to_string(config_path())
         .ok()
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(1.0_f32)
-        .clamp(0.5, 2.5)
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
 }
 
-fn save_and_relaunch(scale: f32) {
-    let p = scale_path();
-    if let Some(d) = p.parent() { let _ = std::fs::create_dir_all(d); }
-    let _ = std::fs::write(&p, scale.to_string());
-    if let Ok(exe) = std::env::current_exe() {
-        let _ = std::process::Command::new(exe).spawn();
+fn save_config(config: &Config) {
+    if let Some(d) = config_path().parent() { let _ = std::fs::create_dir_all(d); }
+    if let Ok(s) = serde_json::to_string_pretty(config) {
+        let _ = std::fs::write(config_path(), s);
     }
-    std::process::exit(0);
+}
+
+fn save_scale(scale: f32) {
+    let mut config = load_config();
+    config.scale = scale;
+    save_config(&config);
 }
 
 fn main() -> Result<(), slint::PlatformError> {
     env_logger::init();
     unsafe { std::env::set_var("LFFF_SUDO_CMD", "pkexec"); }
 
-    let scale = load_scale();
-    unsafe { std::env::set_var("SLINT_SCALE_FACTOR", scale.to_string()); }
+    let config = load_config();
+    unsafe { std::env::set_var("SLINT_SCALE_FACTOR", config.scale.to_string()); }
 
     let ui=MainWindow::new()?;
-    ui.set_ui_scale(scale);
+    ui.set_ui_scale(config.scale);
+    ui.set_lang(config.lang.as_str().into());
+    ui.set_is_dark(config.theme == "dark");
 
     // Apply dark color scheme by default (user can toggle via the ☀/🌙 button in UI,
     // which writes directly to Palette.color-scheme in Slint — no Rust needed for toggle).
@@ -892,7 +936,9 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let(ctx,crx)=mpsc::channel::<Cmd>();
     let(mtx,mrx)=mpsc::channel::<WMsg>();
-    thread::spawn(move||worker(crx,mtx));
+    let flash_cancel: std::sync::Arc<std::sync::atomic::AtomicBool> = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flash_cancel_w = flash_cancel.clone();
+    thread::spawn(move||worker(crx,mtx,flash_cancel_w));
 
     // Persistent log models (push to these instead of replacing)
     let models = LogModels {
@@ -1071,16 +1117,45 @@ fn main() -> Result<(), slint::PlatformError> {
         t.send(Cmd::RebootTo(target.to_string())).ok();
     });}
 
-    // Scale — save and relaunch with new scale factor
-    ui.on_set_scale(move|scale|{
-        save_and_relaunch(scale);
+    // Scale — save and apply with fade animation
+    {let w=ui.as_weak();ui.on_set_scale(move|scale|{
+        save_scale(scale);
+        if let Some(ui)=w.upgrade(){
+            ui.set_pending_scale(scale);
+        }
+    });}
+    {let w=ui.as_weak();ui.on_apply_pending_scale(move||{
+        if let Some(ui)=w.upgrade(){
+            let s = ui.get_pending_scale();
+            if s > 0.0 {
+                ui.window().dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged { scale_factor: s });
+                ui.set_pending_scale(0.0);
+                ui.set_effect_opacity(0.0);
+            }
+        }
+    });}
+
+    // Persist language and theme preference
+    ui.on_save_lang(|l| {
+        let mut config = load_config();
+        config.lang = l.to_string();
+        save_config(&config);
+    });
+    ui.on_save_theme(|d| {
+        let mut config = load_config();
+        config.theme = if d { "dark".to_string() } else { "light".to_string() };
+        save_config(&config);
     });
 
-    // ARB warning confirmed — continue flash
+    // ARB warning confirmed — continue flash with user's skip flags
     {let t=ctx.clone();let w=ui.as_weak();ui.on_confirm_arb_and_flash(move||{
         if let Some(ui)=w.upgrade(){
             ui.set_is_flashing(true);ui.set_flash_progress(0.0);ui.set_flash_status("Starting...".into());
-            t.send(Cmd::ConfirmArbAndFlash{path:ui.get_firmware_path().to_string()}).ok();
+            t.send(Cmd::ConfirmArbAndFlash{
+                path: ui.get_firmware_path().to_string(),
+                skip_xbl_abl: ui.get_skip_xbl_abl(),
+                skip_preloader: ui.get_skip_preloader(),
+            }).ok();
         }
     });}
 
@@ -1089,7 +1164,12 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(ui)=w.upgrade(){
             ui.set_is_flashing(true);ui.set_flash_progress(0.0);ui.set_flash_status("Starting...".into());
             let is_source = ui.get_arb_device_is_source();
-            t.send(Cmd::ConfirmArbDeviceFlash{path:ui.get_firmware_path().to_string(),is_source}).ok();
+            t.send(Cmd::ConfirmArbDeviceFlash{
+                path: ui.get_firmware_path().to_string(),
+                is_source,
+                skip_xbl_abl: ui.get_skip_xbl_abl(),
+                skip_preloader: ui.get_skip_preloader(),
+            }).ok();
         }
     });}
 
@@ -1117,7 +1197,9 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Cancel
     {let t=ctx.clone();ui.on_cancel_download(move||{t.send(Cmd::CancelDownload).ok();});}
+    let fc_cancel = flash_cancel.clone();
     {let t=ctx.clone();let w=ui.as_weak();ui.on_cancel_flash(move||{
+        fc_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         t.send(Cmd::CancelFlash).ok();
         if let Some(ui)=w.upgrade(){ui.set_pending_source_flash(false);ui.set_is_flashing(false);ui.set_flash_status("Cancelled".into());}
     });}

@@ -193,134 +193,134 @@ export struct LogEntry   { timestamp: string, level: string, message: string }
 // ── Translations ──────────────────────────────────────────────────────────────
 
 global Tr {
-    in-out property <int> lang: 0; // 0=EN 1=RU
+    in-out property <string> lang: "en"; // "en" or "ru"
 
-    out property <string> home:         lang == 1 ? "Главная"      : "Home";
-    out property <string> nav-device:   lang == 1 ? "Устройство" : "Device & Drivers";
-    out property <string> nav-download: lang == 1 ? "Загрузка"     : "Download";
-    out property <string> nav-flash:    lang == 1 ? "Прошить всё"  : "Flash All";
-    out property <string> nav-part:     lang == 1 ? "Прошить раздел" : "Flash Partition";
-    out property <string> nav-about:    lang == 1 ? "О программе"  : "About";
+    out property <string> home:         lang == "ru" ? "Главная"      : "Home";
+    out property <string> nav-device:   lang == "ru" ? "Устройство" : "Device & Drivers";
+    out property <string> nav-download: lang == "ru" ? "Загрузка"     : "Download";
+    out property <string> nav-flash:    lang == "ru" ? "Прошить всё"  : "Flash All";
+    out property <string> nav-part:     lang == "ru" ? "Прошить раздел" : "Flash Partition";
+    out property <string> nav-about:    lang == "ru" ? "О программе"  : "About";
 
-    out property <string> no-device:    lang == 1 ? "Устройство не найдено" : "No device connected";
-    out property <string> find-device:  lang == 1 ? "Найти устройство"      : "Find device";
-    out property <string> check-deps:   lang == 1 ? "Проверить"             : "Check deps";
-    out property <string> install-deps: lang == 1 ? "Установить"            : "Install deps";
-    out property <string> driver-test:  lang == 1 ? "Тест драйвера"         : "Driver Test";
-    out property <string> run-test:     lang == 1 ? "Запустить"             : "Run test";
+    out property <string> no-device:    lang == "ru" ? "Устройство не найдено" : "No device connected";
+    out property <string> find-device:  lang == "ru" ? "Найти устройство"      : "Find device";
+    out property <string> check-deps:   lang == "ru" ? "Проверить"             : "Check deps";
+    out property <string> install-deps: lang == "ru" ? "Установить"            : "Install deps";
+    out property <string> driver-test:  lang == "ru" ? "Тест драйвера"         : "Driver Test";
+    out property <string> run-test:     lang == "ru" ? "Запустить"             : "Run test";
 
-    out property <string> ota-url:      lang == 1 ? "URL прошивки"   : "OTA URL";
-    out property <string> paste:        lang == 1 ? "Вставить"       : "Paste";
-    out property <string> dl-btn:       lang == 1 ? "Скачать"        : "Download";
-    out property <string> local-lbl:    lang == 1 ? "Распаковать прошивку:" : "Extract firmware:";
-    out property <string> select-zip:   lang == 1 ? "Выбрать ZIP"    : "Select ZIP";
-    out property <string> extract:      lang == 1 ? "Распаковать"    : "Extract";
+    out property <string> ota-url:      lang == "ru" ? "URL прошивки"   : "OTA URL";
+    out property <string> paste:        lang == "ru" ? "Вставить"       : "Paste";
+    out property <string> dl-btn:       lang == "ru" ? "Скачать"        : "Download";
+    out property <string> local-lbl:    lang == "ru" ? "Распаковать прошивку:" : "Extract firmware:";
+    out property <string> select-zip:   lang == "ru" ? "Выбрать ZIP"    : "Select ZIP";
+    out property <string> extract:      lang == "ru" ? "Распаковать"    : "Extract";
 
-    out property <string> select-folder:lang == 1 ? "Выбрать папку"  : "Select folder";
-    out property <string> flash-from-zip:lang == 1 ? "Из архива / папки" : "From ZIP / folder";
-    out property <string> flash-from-src:lang == 1 ? "Из исходников"     : "From build output";
-    out property <string> src-select:    lang == 1 ? "Выбрать папку"     : "Select folder";
-    out property <string> src-images:    lang == 1 ? "образов"           : "images";
-    out property <string> find-phone:   lang == 1 ? "Найти телефон"  : "Find phone";
-    out property <string> skip-arb:     lang == 1 ? "Пропустить проверку ARB" : "Skip ARB check";
-    out property <string> flash-all-btn:lang == 1 ? "Прошить всё"   : "Flash all";
-    out property <string> flashing:     lang == 1 ? "Прошивается…"   : "Flashing…";
-    out property <string> cancel:       lang == 1 ? "Отмена"         : "Cancel";
+    out property <string> select-folder:lang == "ru" ? "Выбрать папку"  : "Select folder";
+    out property <string> flash-from-folder:lang == "ru" ? "Из папки" : "From folder";
+    out property <string> flash-from-src:lang == "ru" ? "Из исходников"     : "From build output";
+    out property <string> src-select:    lang == "ru" ? "Выбрать папку"     : "Select folder";
+    out property <string> src-images:    lang == "ru" ? "образов"           : "images";
+    out property <string> find-phone:   lang == "ru" ? "Найти телефон"  : "Find phone";
+    out property <string> skip-arb:     lang == "ru" ? "Пропустить проверку ARB" : "Skip ARB check";
+    out property <string> flash-all-btn:lang == "ru" ? "Прошить всё"   : "Flash all";
+    out property <string> flashing:     lang == "ru" ? "Прошивается…"   : "Flashing…";
+    out property <string> cancel:       lang == "ru" ? "Отмена"         : "Cancel";
 
-    out property <string> part-lbl:     lang == 1 ? "Раздел: "       : "Partition: ";
-    out property <string> flash-part-btn:lang == 1 ? "Прошить раздел": "Flash partition";
+    out property <string> part-lbl:     lang == "ru" ? "Раздел: "       : "Partition: ";
+    out property <string> flash-part-btn:lang == "ru" ? "Прошить раздел": "Flash partition";
 
-    out property <string> confirm-title:lang == 1 ? "Подтверждение"  : "Confirm";
-    out property <string> confirm-flash:lang == 1 ? "Начать прошивку?\nВсе разделы будут перезаписаны." : "Start flashing?\nAll partitions will be overwritten.";
-    out property <string> flash-btn:    lang == 1 ? "Прошить"        : "Flash";
-    out property <string> slot-lbl:     lang == 1 ? "Слот "          : "Slot ";
-    out property <string> author-lbl:   lang == 1 ? "Автор: mrFrok"  : "Author: mrFrok";
-    out property <string> license-lbl:  lang == 1 ? "Лицензия: GPL-3.0" : "License: GPL-3.0";
+    out property <string> confirm-title:lang == "ru" ? "Подтверждение"  : "Confirm";
+    out property <string> confirm-flash:lang == "ru" ? "Начать прошивку?\nВсе разделы будут перезаписаны." : "Start flashing?\nAll partitions will be overwritten.";
+    out property <string> flash-btn:    lang == "ru" ? "Прошить"        : "Flash";
+    out property <string> slot-lbl:     lang == "ru" ? "Слот "          : "Slot ";
+    out property <string> author-lbl:   lang == "ru" ? "Автор: mrFrok"  : "Author: mrFrok";
+    out property <string> license-lbl:  lang == "ru" ? "Лицензия: GPL-3.0" : "License: GPL-3.0";
 
     // Reboot menu
-    out property <string> reboot-title:    lang == 1 ? "Перезагрузка" : "Reboot";
-    out property <string> reboot-recovery: lang == 1 ? "Recovery"     : "Recovery";
-    out property <string> reboot-bootloader: lang == 1 ? "Bootloader" : "Bootloader";
-    out property <string> reboot-fastbootd: lang == 1 ? "Fastbootd"   : "Fastbootd";
-    out property <string> reboot-system:   lang == 1 ? "Перезагрузить" : "Reboot";
+    out property <string> reboot-title:    lang == "ru" ? "Перезагрузка" : "Reboot";
+    out property <string> reboot-recovery: lang == "ru" ? "Recovery"     : "Recovery";
+    out property <string> reboot-bootloader: lang == "ru" ? "Bootloader" : "Bootloader";
+    out property <string> reboot-fastbootd: lang == "ru" ? "Fastbootd"   : "Fastbootd";
+    out property <string> reboot-system:   lang == "ru" ? "Перезагрузить" : "Reboot";
 
     // Flash All step 1 — reboot source dialog
-    out property <string> flash-reboot-title: lang == 1 ? "Откуда перезагрузиться в Fastbootd?" : "How to reboot into Fastbootd?";
-    out property <string> flash-reboot-from-system:     lang == 1 ? "Из системы\n(adb reboot fastboot)" : "From system\n(adb reboot fastboot)";
-    out property <string> flash-reboot-from-bootloader: lang == 1 ? "Из Bootloader\n(fastboot reboot fastboot)" : "From bootloader\n(fastboot reboot fastboot)";
-    out property <string> flash-reboot-skip:            lang == 1 ? "Уже в Fastbootd\n(не перезагружаться)" : "Already in Fastbootd\n(don't reboot)";
+    out property <string> flash-reboot-title: lang == "ru" ? "Откуда перезагрузиться в Fastbootd?" : "How to reboot into Fastbootd?";
+    out property <string> flash-reboot-from-system:     lang == "ru" ? "Из системы\n(adb reboot fastboot)" : "From system\n(adb reboot fastboot)";
+    out property <string> flash-reboot-from-bootloader: lang == "ru" ? "Из Bootloader\n(fastboot reboot fastboot)" : "From bootloader\n(fastboot reboot fastboot)";
+    out property <string> flash-reboot-skip:            lang == "ru" ? "Уже в Fastbootd\n(не перезагружаться)" : "Already in Fastbootd\n(don't reboot)";
 
     // Flash All step 2 — final confirm
-    out property <string> flash-final-title: lang == 1 ? "Последнее предупреждение" : "Final warning";
-    out property <string> flash-final-body:  lang == 1 ? "Устройство находится в Fastbootd. Все разделы будут перезаписаны. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd. All partitions will be overwritten. This action is irreversible.\n\nProceed with flashing?";
-    out property <string> src-final-title:  lang == 1 ? "Прошивка из исходников" : "Flash from source";
-    out property <string> src-final-body:   lang == 1 ? "Устройство находится в Fastbootd. Образы из папки исходников будут прошиты. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd. Images from the source build folder will be flashed. This action is irreversible.\n\nProceed with flashing?";
+    out property <string> flash-final-title: lang == "ru" ? "Последнее предупреждение" : "Final warning";
+    out property <string> flash-final-body:  lang == "ru" ? "Устройство находится в Fastbootd. Все разделы будут перезаписаны. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd. All partitions will be overwritten. This action is irreversible.\n\nProceed with flashing?";
+    out property <string> src-final-title:  lang == "ru" ? "Прошивка из исходников" : "Flash from source";
+    out property <string> src-final-body:   lang == "ru" ? "Устройство находится в Fastbootd. Образы из папки исходников будут прошиты. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd. Images from the source build folder will be flashed. This action is irreversible.\n\nProceed with flashing?";
 
     // Flash Partition step 1 — reboot to bootloader
-    out property <string> part-reboot-title:        lang == 1 ? "Откуда перезагрузиться в Bootloader?" : "How to reboot into Bootloader?";
-    out property <string> part-reboot-from-system:  lang == 1 ? "Из системы\n(adb reboot bootloader)"       : "From system\n(adb reboot bootloader)";
-    out property <string> part-reboot-from-fastboot:lang == 1 ? "Из Fastboot\n(fastboot reboot-bootloader)" : "From Fastboot\n(fastboot reboot-bootloader)";
-    out property <string> part-reboot-skip:         lang == 1 ? "Уже в Bootloader\n(не перезагружаться)"    : "Already in Bootloader\n(don't reboot)";
-    out property <string> part-final-title: lang == 1 ? "Прошить раздел" : "Flash partition";
-    out property <string> part-final-body:  lang == 1 ? "Раздел будет перезаписан. Продолжить?" : "The partition will be overwritten. Continue?";
+    out property <string> part-reboot-title:        lang == "ru" ? "Откуда перезагрузиться в Bootloader?" : "How to reboot into Bootloader?";
+    out property <string> part-reboot-from-system:  lang == "ru" ? "Из системы\n(adb reboot bootloader)"       : "From system\n(adb reboot bootloader)";
+    out property <string> part-reboot-from-fastboot:lang == "ru" ? "Из Fastboot\n(fastboot reboot-bootloader)" : "From Fastboot\n(fastboot reboot-bootloader)";
+    out property <string> part-reboot-skip:         lang == "ru" ? "Уже в Bootloader\n(не перезагружаться)"    : "Already in Bootloader\n(don't reboot)";
+    out property <string> part-final-title: lang == "ru" ? "Прошить раздел" : "Flash partition";
+    out property <string> part-final-body:  lang == "ru" ? "Раздел будет перезаписан. Продолжить?" : "The partition will be overwritten. Continue?";
 
     // Home page
-    out property <string> home-title:   lang == 1 ? "Добро пожаловать" : "Welcome";
-    out property <string> home-sub:     lang == 1 ? "Прошивальщик Android-устройств через fastboot" : "Android firmware flasher via fastboot";
+    out property <string> home-title:   lang == "ru" ? "Добро пожаловать" : "Welcome";
+    out property <string> home-sub:     lang == "ru" ? "Прошивальщик Android-устройств через fastboot" : "Android firmware flasher via fastboot";
 
-    out property <string> home-features-title: lang == 1 ? "Возможности:" : "Features:";
-    out property <string> home-feat1: lang == 1 ? "Автоматическая установка драйверов" : "Automatic installation of drivers";
-    out property <string> home-feat2: lang == 1 ? "Прошивка разделов boot, init_boot и recovery" : "Flashing of boot, init_boot and recovery images";
-    out property <string> home-feat3: lang == 1 ? "Распаковка OTA.zip и payload.bin для прошивки" : "Unpacking OTA.zip or payload.bin for subsequent flashing";
-    out property <string> home-feat4: lang == 1 ? "Прошивка пересоздаёт разделы — чистая система без остатков" : "Flashing recreates partitions, resulting in a clean system";
-    out property <string> home-feat5: lang == 1 ? "Меню перезагрузки: ADB / BOOTLOADER / FASTBOOTD" : "Reboot menu for quick switching: ADB / BOOTLOADER / FASTBOOTD";
+    out property <string> home-features-title: lang == "ru" ? "Возможности:" : "Features:";
+    out property <string> home-feat1: lang == "ru" ? "Автоматическая установка драйверов" : "Automatic installation of drivers";
+    out property <string> home-feat2: lang == "ru" ? "Прошивка разделов boot, init_boot и recovery" : "Flashing of boot, init_boot and recovery images";
+    out property <string> home-feat3: lang == "ru" ? "Распаковка OTA.zip и payload.bin для прошивки" : "Unpacking OTA.zip or payload.bin for subsequent flashing";
+    out property <string> home-feat4: lang == "ru" ? "Прошивка пересоздаёт разделы — чистая система без остатков" : "Flashing recreates partitions, resulting in a clean system";
+    out property <string> home-feat5: lang == "ru" ? "Меню перезагрузки: ADB / BOOTLOADER / FASTBOOTD" : "Reboot menu for quick switching: ADB / BOOTLOADER / FASTBOOTD";
 
-    out property <string> home-warning: lang == 1
+    out property <string> home-warning: lang == "ru"
         ? "Внимание! Я не несу ответственности за ваши действия. Всё делается на ваш страх и риск."
         : "Attention! I do not take responsibility for your actions. Everything you do at your own risk.";
 
-    out property <string> supported-devices: lang == 1
-        ? "Данная программа предназначена ТОЛЬКО для устройств Realme, OnePlus и OPPO на базе процессоров Qualcomm."
-        : "This tool is intended ONLY for Realme, OnePlus and OPPO devices based on Qualcomm processors.";
+    out property <string> supported-devices: lang == "ru"
+        ? "Данная программа предназначена для устройств Realme, OnePlus и OPPO на базе Qualcomm. Имеется частичная поддержка Mediatek."
+        : "This tool is intended for Realme, OnePlus and OPPO devices based on Qualcomm. Partial Mediatek support is available.";
 
-    out property <string> home-quicklinks: lang == 1 ? "Быстрые ссылки:" : "Quick links:";
-    out property <string> home-goto-device:   lang == 1 ? "Устройство и драйверы" : "Device & Drivers";
-    out property <string> home-goto-download: lang == 1 ? "Скачать прошивку"      : "Download Firmware";
-    out property <string> home-goto-flash:    lang == 1 ? "Прошить всё"           : "Flash All";
-    out property <string> home-goto-part:     lang == 1 ? "Прошить раздел"        : "Flash Partition";
+    out property <string> home-quicklinks: lang == "ru" ? "Быстрые ссылки:" : "Quick links:";
+    out property <string> home-goto-device:   lang == "ru" ? "Устройство и драйверы" : "Device & Drivers";
+    out property <string> home-goto-download: lang == "ru" ? "Скачать прошивку"      : "Download Firmware";
+    out property <string> home-goto-flash:    lang == "ru" ? "Прошить всё"           : "Flash All";
+    out property <string> home-goto-part:     lang == "ru" ? "Прошить раздел"        : "Flash Partition";
 
-    out property <string> arb-device-title: lang == 1
+    out property <string> arb-device-title: lang == "ru"
         ? "Предупреждение ARB устройства"
         : "Device ARB Warning";
-    out property <string> arb-device-body-fw: lang == 1
+    out property <string> arb-device-body-fw: lang == "ru"
         ? "Прошивка имеет ARB=0, но ваше устройство имеет ARB="
         : "Firmware has ARB=0, but your device has ARB=";
-    out property <string> arb-device-body-src: lang == 1
+    out property <string> arb-device-body-src: lang == "ru"
         ? "Версия ARB исходной сборки неизвестна, а ваше устройство имеет ARB="
         : "Source build ARB is unknown, but your device has ARB=";
-    out property <string> arb-device-body-suffix: lang == 1
+    out property <string> arb-device-body-suffix: lang == "ru"
         ? ".\n\nПрошивка с ARB ниже, чем у устройства, может привести к неработоспособности устройства (кирпич)!\n\nПродолжайте только если уверены, что не хотите делать даунгрейд."
         : ".\n\nFlashing firmware with ARB lower than the device's ARB can brick your device!\n\nOnly continue if you are sure you will never need to downgrade.";
-    out property <string> arb-device-continue: lang == 1
+    out property <string> arb-device-continue: lang == "ru"
         ? "Я понимаю риск, продолжить"
         : "I understand the risk, continue";
-    out property <string> flash-error-title: lang == 1
+    out property <string> flash-error-title: lang == "ru"
         ? "Ошибка прошивки"
         : "Flash Error";
-    out property <string> retry: lang == 1
+    out property <string> retry: lang == "ru"
         ? "Повторить"
         : "Retry";
-    out property <string> reboot: lang == 1
+    out property <string> reboot: lang == "ru"
         ? "Перезагрузить устройство"
         : "Reboot device";
-    out property <string> flash-error-hint: lang == 1
+    out property <string> flash-error-hint: lang == "ru"
         ? "Проверьте подключение и попробуйте снова."
         : "Check the connection and try again.";
 
-    out property <string> output-dir: lang == 1
+    out property <string> output-dir: lang == "ru"
         ? "Папка для сохранения:"
-        : "Output folder:";
-    out property <string> browse: lang == 1
+        : "Save to folder:";
+    out property <string> browse: lang == "ru"
         ? "Обзор"
         : "Browse";
 }
@@ -561,9 +561,16 @@ export component MainWindow inherits Window {
 
     // Pages: 0=Home 1=Device 2=Download 3=Flash 4=Partition 5=About
     in-out property <int>  page: 0;
-    in-out property <int>  lang: 0;
+    in-out property <string>  lang: "en";
+    in-out property <bool>  is-dark: true;
     in-out property <float> ui-scale: 1.0;
+    in-out property <float> pending-scale: 0;
+    in-out property <float> effect-opacity: 0;
     callback set-scale(float);
+    callback apply-pending-scale();
+    callback save-lang(string);
+    callback save-theme(bool);
+    changed is-dark => { Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
 
     // Page transition — overlay flashes white/dark then fades out
     private property <float> page-opacity: 0.0;  // 0 = invisible overlay
@@ -587,10 +594,28 @@ export component MainWindow inherits Window {
 
     animate page-opacity { duration: 300ms; easing: ease-in-out; }
     animate page-x       { duration: 300ms; easing: ease-out; }
+    animate effect-opacity { duration: 300ms; easing: ease-in-out; }
+
+    changed pending-scale => {
+        if pending-scale > 0 {
+            effect-opacity = 1;
+            scale-timer.running = true;
+        }
+    }
+
+    scale-timer := Timer {
+        interval: 350ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.apply-pending-scale();
+            root.effect-opacity = 0;
+        }
+    }
 
     in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—" };
     in-out property <string>  firmware-path;
-    in-out property <int>     flash-source-mode: 0;  // 0=zip/folder, 1=source dir
+    in-out property <int>     flash-source-mode: 0;  // 0=folder, 1=source dir
     in-out property <string>  source-dir;
     in-out property <int>     source-image-count: 0;
     in-out property <string>  single-image-path;
@@ -625,6 +650,9 @@ export component MainWindow inherits Window {
     // reboot-choice: 0=not chosen, 1=from system (adb), 2=from bootloader (fastboot), 3=no reboot
     in-out property <bool>    show-arb-warning: false;
     in-out property <int>     arb-warning-version: 0;
+    in-out property <bool>    as-mediatek: false;
+    in-out property <bool>    skip-xbl-abl: false;
+    in-out property <bool>    skip-preloader: false;
     in-out property <bool>    show-arb-device-warning: false;
     in-out property <int>     arb-device-version: 0;
     in-out property <bool>    arb-device-is-source: false;
@@ -633,7 +661,7 @@ export component MainWindow inherits Window {
     in-out property <string>  flash-error-message: "";
     in-out property <bool>    flash-error-is-source: false;
 
-    init => { Tr.lang = lang; }
+    init => { Tr.lang = lang; Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
     changed lang => { Tr.lang = lang; }
 
     callback check-device();       callback browse-firmware();
@@ -798,7 +826,7 @@ export component MainWindow inherits Window {
 
                         // Sliding pill indicator
                         Rectangle {
-                            x: root.lang == 0 ? 2px : 42px;
+                            x: root.lang == "en" ? 2px : 42px;
                             y: 2px;
                             width: 38px; height: 24px;
                             border-radius: 5px;
@@ -809,11 +837,11 @@ export component MainWindow inherits Window {
                         // EN touch zone
                         TouchArea {
                             x: 0; y: 0; width: 42px; height: 28px;
-                            clicked => { root.lang = 0; }
+                            clicked => { root.lang = "en"; root.save-lang("en"); }
                             Text {
                                 text: "EN";
                                 font-size: 13px; font-weight: 600;
-                                color: root.lang == 0
+                                color: root.lang == "en"
                                     ? MaterialPalette.on-primary
                                     : MaterialPalette.on-surface-variant;
                                 horizontal-alignment: center;
@@ -825,11 +853,11 @@ export component MainWindow inherits Window {
                         // RU touch zone
                         TouchArea {
                             x: 42px; y: 0; width: 40px; height: 28px;
-                            clicked => { root.lang = 1; }
+                            clicked => { root.lang = "ru"; root.save-lang("ru"); }
                             Text {
                                 text: "RU";
                                 font-size: 13px; font-weight: 600;
-                                color: root.lang == 1
+                                color: root.lang == "ru"
                                     ? MaterialPalette.on-primary
                                     : MaterialPalette.on-surface-variant;
                                 horizontal-alignment: center;
@@ -847,15 +875,15 @@ export component MainWindow inherits Window {
                         width: 36px; height: 28px;
                         y: (parent.height - 28px) / 2;
                         clicked => {
-                            Palette.color-scheme = Palette.color-scheme == ColorScheme.dark
-                                ? ColorScheme.light : ColorScheme.dark;
+                            root.is-dark = !root.is-dark;
+                            root.save-theme(root.is-dark);
                         }
                         Rectangle {
                             border-radius: 8px;
                             background: parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
                             animate background { duration: 80ms; }
                             Text {
-                                text: Palette.color-scheme == ColorScheme.dark ? "☀" : "🌙";
+                                text: root.is-dark ? "☀" : "🌙";
                                 font-size: 16px;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
@@ -922,7 +950,7 @@ export component MainWindow inherits Window {
                                 letter-spacing: 0.5px;
                             }
                             Text {
-                                text: "v2.0.0  •  " + (lang == 1 ? "Инструмент прошивки Android" : "Android firmware flashing tool");
+                                text: "v2.0.0  •  " + (lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
                                 font-size: 14px;
                                 color: MaterialPalette.on-surface-variant;
                                 horizontal-alignment: center;
@@ -1273,7 +1301,33 @@ export component MainWindow inherits Window {
 
                     SectionTitle { text: Tr.nav-download; }
 
-                    // URL row
+                    // Output directory selector — shown before download
+                    Text { text: Tr.output-dir; font-size: 15px; color: MaterialPalette.on-surface-variant; }
+                    HorizontalLayout { spacing: 8px; height: 44px;
+                        PathField { path: root.output-dir; horizontal-stretch: 1; }
+                        TouchArea {
+                            width: 90px;
+                            clicked => { root.browse-output-dir(); }
+                            Rectangle {
+                                border-radius: 12px;
+                                border-width: 1px;
+                                border-color: MaterialPalette.outline;
+                                background: parent.has-hover
+                                    ? MaterialPalette.surface-container-high
+                                    : MaterialPalette.surface-container;
+                                animate background { duration: 80ms; }
+                                Text {
+                                    text: Tr.browse;
+                                    font-size: 14px; font-weight: 600;
+                                    color: MaterialPalette.primary;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+
+                    // URL row with Paste & Download
                     HorizontalLayout { spacing: 8px; height: 44px;
                         Rectangle {
                             horizontal-stretch: 1;
@@ -1374,7 +1428,8 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    if dl-percent > 0: VerticalLayout { spacing: 6px;
+                    // Download progress + statistics
+                    if dl-percent > 0 || dl-total != "": VerticalLayout { spacing: 6px;
                         HorizontalLayout { spacing: 10px;
                             Text { text: Math.round(dl-percent) + "%"; font-size: 15px; font-weight: 700; color: MaterialPalette.primary; }
                             Text { text: dl-downloaded + " / " + dl-total; font-size: 14px; color: MaterialPalette.on-surface-variant; }
@@ -1383,32 +1438,6 @@ export component MainWindow inherits Window {
                             Text { text: "ETA " + dl-eta; font-size: 14px; color: MaterialPalette.on-surface-variant; }
                         }
                         LinearProgressIndicator { progress: dl-percent / 100; }
-                    }
-
-                    // Output directory selector
-                    Text { text: Tr.output-dir; font-size: 15px; color: MaterialPalette.on-surface-variant; }
-                    HorizontalLayout { spacing: 8px; height: 44px;
-                        PathField { path: root.output-dir; horizontal-stretch: 1; }
-                        TouchArea {
-                            width: 90px;
-                            clicked => { root.browse-output-dir(); }
-                            Rectangle {
-                                border-radius: 12px;
-                                border-width: 1px;
-                                border-color: MaterialPalette.outline;
-                                background: parent.has-hover
-                                    ? MaterialPalette.surface-container-high
-                                    : MaterialPalette.surface-container;
-                                animate background { duration: 80ms; }
-                                Text {
-                                    text: Tr.browse;
-                                    font-size: 14px; font-weight: 600;
-                                    color: MaterialPalette.primary;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
                     }
 
                     HorizontalDivider { }
@@ -1473,7 +1502,7 @@ export component MainWindow inherits Window {
 
                     HorizontalLayout { spacing: 6px; height: 36px;
                         for item in [
-                            { label: Tr.flash-from-zip, val: 0 },
+                            { label: Tr.flash-from-folder, val: 0 },
                             { label: Tr.flash-from-src, val: 1 },
                         ]: TouchArea {
                             horizontal-stretch: 1;
@@ -1667,7 +1696,7 @@ export component MainWindow inherits Window {
                             if custom-part-input.text == "": Text {
                                 x: 12px; y: 0;
                                 width: parent.width - 24px; height: parent.height;
-                                text: lang == 1 ? "или введите свой раздел…" : "or type custom partition…";
+                                text: lang == "ru" ? "или введите свой раздел…" : "or type custom partition…";
                                 font-size: 14px;
                                 color: MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
@@ -1835,7 +1864,7 @@ export component MainWindow inherits Window {
                     TextButton { text: Tr.cancel; clicked => { show-confirm = false; reboot-choice = 0; } }
                     // Next — reboot device, step 4 appears when device is ready
                     FilledButton {
-                        text: lang == 1 ? "Перезагрузить и прошить →" : "Reboot & flash →";
+                        text: lang == "ru" ? "Перезагрузить и прошить →" : "Reboot & flash →";
                         enabled: reboot-choice != 0;
                         clicked => {
                             show-confirm = false;
@@ -2009,9 +2038,9 @@ export component MainWindow inherits Window {
         }
 
         if confirm-action == 7: Rectangle {
-            x: (parent.width - 520px) / 2;
+            x: (parent.width - 560px) / 2;
             y: (parent.height - 240px) / 2;
-            width: 520px; height: 240px;
+            width: 560px; height: 240px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
             drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
@@ -2025,12 +2054,12 @@ export component MainWindow inherits Window {
                         y: (parent.height - 22px) / 2;
                     }
                     Text {
-                        text: lang == 1 ? "Прошивка завершена" : "Flash complete";
+                        text: lang == "ru" ? "Прошивка завершена" : "Flash complete";
                         font-size: 18px; font-weight: 700; color: #4caf50;
                     }
                 }
                 Text {
-                    text: lang == 1
+                    text: lang == "ru"
                         ? "Что сделать с устройством?"
                         : "What would you like to do next?";
                     font-size: 14px; color: MaterialPalette.on-surface-variant; wrap: word-wrap;
@@ -2039,17 +2068,17 @@ export component MainWindow inherits Window {
                 HorizontalLayout { spacing: 8px; alignment: end;
                     TextButton {
                         min-width: 90px;
-                        text: lang == 1 ? "Закрыть" : "Dismiss";
+                        text: lang == "ru" ? "Закрыть" : "Dismiss";
                         clicked => { show-confirm = false; }
                     }
                     OutlinedButton {
                         min-width: 150px;
-                        text: lang == 1 ? "Перезагрузить" : "Reboot";
+                        text: lang == "ru" ? "Перезагрузить" : "Reboot";
                         clicked => { show-confirm = false; root.post-flash-reboot(); }
                     }
                     FilledButton {
                         min-width: 220px;
-                        text: lang == 1 ? "Сброс данных + перезагрузка" : "Wipe data + reboot";
+                        text: lang == "ru" ? "Сброс данных + перезагрузка" : "Wipe data + reboot";
                         clicked => { show-confirm = false; root.post-flash-wipe(); }
                     }
                 }
@@ -2073,13 +2102,13 @@ export component MainWindow inherits Window {
                 HorizontalLayout { spacing: 12px;
                     Text { text: "⚠"; font-size: 24px; color: #f0b800; vertical-alignment: center; }
                     Text {
-                        text: lang == 1 ? "Предупреждение ARB" : "ARB Warning";
+                        text: lang == "ru" ? "Предупреждение ARB" : "ARB Warning";
                         font-size: 18px; font-weight: 700;
                         color: #f0b800; vertical-alignment: center;
                     }
                 }
                 Text {
-                    text: lang == 1
+                    text: lang == "ru"
                         ? "Прошивка содержит ARB=" + arb-warning-version + ".\n\nПосле прошивки счётчик anti-rollback на устройстве будет необратимо повышен. Вы НЕ сможете откатиться на более старую прошивку с меньшим ARB — это приведёт к кирпичу.\n\nПродолжайте только если уверены, что не захотите сделать даунгрейд!"
                         : "Firmware has ARB=" + arb-warning-version + ".\n\nAfter flashing, the anti-rollback counter on your device will be permanently raised. You will NOT be able to downgrade to firmware with a lower ARB — this will brick your device.\n\nOnly continue if you are sure you will never need to downgrade!";
                     font-size: 13px;
@@ -2087,13 +2116,69 @@ export component MainWindow inherits Window {
                     wrap: word-wrap;
                 }
                 Rectangle { vertical-stretch: 1; }
+                VerticalLayout { spacing: 6px;
+                    Text {
+                        text: lang == "ru"
+                            ? "⚠ Пропуск xbl/abl может сохранить ARB=0, но может привести к кирпичу!"
+                            : "⚠ Skipping xbl/abl may preserve ARB=0, but may also brick your device!";
+                        font-size: 12px; color: #f0b800; wrap: word-wrap;
+                    }
+                    TouchArea {
+                        height: 24px;
+                        clicked => { root.skip-xbl-abl = !root.skip-xbl-abl; }
+                        HorizontalLayout { spacing: 10px;
+                            Rectangle {
+                                width: 18px; height: 18px; border-radius: 4px;
+                                border-width: 2px;
+                                border-color: root.skip-xbl-abl ? MaterialPalette.primary : MaterialPalette.outline;
+                                background: root.skip-xbl-abl ? MaterialPalette.primary : transparent;
+                                animate background { duration: 100ms; }
+                                animate border-color { duration: 100ms; }
+                                y: (parent.height - 18px) / 2;
+                                if root.skip-xbl-abl: Text {
+                                    text: "✓"; font-size: 14px; font-weight: 700;
+                                    color: MaterialPalette.on-primary;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                }
+                            }
+                            Text {
+                                text: lang == "ru" ? "Пропустить xbl/abl (риск кирпича!)" : "Skip xbl/abl (brick risk!)";
+                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
+                            }
+                        }
+                    }
+                    if as-mediatek: TouchArea {
+                        height: 24px;
+                        clicked => { root.skip-preloader = !root.skip-preloader; }
+                        HorizontalLayout { spacing: 10px;
+                            Rectangle {
+                                width: 18px; height: 18px; border-radius: 4px;
+                                border-width: 2px;
+                                border-color: root.skip-preloader ? MaterialPalette.primary : MaterialPalette.outline;
+                                background: root.skip-preloader ? MaterialPalette.primary : transparent;
+                                animate background { duration: 100ms; }
+                                animate border-color { duration: 100ms; }
+                                y: (parent.height - 18px) / 2;
+                                if root.skip-preloader: Text {
+                                    text: "✓"; font-size: 14px; font-weight: 700;
+                                    color: MaterialPalette.on-primary;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                }
+                            }
+                            Text {
+                                text: lang == "ru" ? "Пропустить preloader (риск кирпича!)" : "Skip preloader (brick risk!)";
+                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
                 HorizontalLayout { spacing: 8px; alignment: end;
                     TextButton {
                         text: Tr.cancel;
                         clicked => { show-arb-warning = false; }
                     }
                     FilledButton {
-                        text: lang == 1 ? "Я понимаю, продолжить" : "I understand, continue";
+                        text: lang == "ru" ? "Я понимаю, продолжить" : "I understand, continue";
                         clicked => {
                             show-arb-warning = false;
                             root.confirm-arb-and-flash();
@@ -2128,14 +2213,74 @@ export component MainWindow inherits Window {
                     }
                 }
                 Text {
-                    text: arb-device-is-source
-                        ? Tr.arb-device-body-src + arb-device-version + Tr.arb-device-body-suffix
-                        : Tr.arb-device-body-fw + arb-device-version + Tr.arb-device-body-suffix;
+                    text: arb-device-version > 0
+                        ? arb-device-is-source
+                            ? Tr.arb-device-body-src + arb-device-version + Tr.arb-device-body-suffix
+                            : Tr.arb-device-body-fw + arb-device-version + Tr.arb-device-body-suffix
+                        : arb-device-is-source
+                            ? lang == "ru" ? "Версия ARB исходной сборки и вашего устройства неизвестны. Прошивка с неверным ARB может привести к кирпичу!\n\nПродолжайте только если уверены." : "Source build ARB and device ARB are unknown. Flashing with incorrect ARB can brick your device!\n\nOnly continue if you are sure."
+                            : lang == "ru" ? "Прошивка имеет ARB=0.\n\nВозможно, у вас стоит прошивка с версией ARB>0, и дальнейшая прошивка может привести к кирпичу." : "Firmware has ARB=0.\n\nYour device may have firmware with ARB>0 — further flashing may brick your device.";
                     font-size: 13px;
                     color: MaterialPalette.on-surface-variant;
                     wrap: word-wrap;
                 }
                 Rectangle { vertical-stretch: 1; }
+                VerticalLayout { spacing: 6px;
+                    Text {
+                        text: lang == "ru"
+                            ? "⚠ Пропуск этих разделов может помочь откатить устройство, если телефон имеет ARB>0, но так же может привести к кирпичу!"
+                            : "⚠ Skipping these partitions may help downgrade if your device has ARB>0, but may also brick your device!";
+                        font-size: 12px; color: #f0b800; wrap: word-wrap;
+                    }
+                    TouchArea {
+                        height: 24px;
+                        clicked => { root.skip-xbl-abl = !root.skip-xbl-abl; }
+                        HorizontalLayout { spacing: 10px;
+                            Rectangle {
+                                width: 18px; height: 18px; border-radius: 4px;
+                                border-width: 2px;
+                                border-color: root.skip-xbl-abl ? MaterialPalette.primary : MaterialPalette.outline;
+                                background: root.skip-xbl-abl ? MaterialPalette.primary : transparent;
+                                animate background { duration: 100ms; }
+                                animate border-color { duration: 100ms; }
+                                y: (parent.height - 18px) / 2;
+                                if root.skip-xbl-abl: Text {
+                                    text: "✓"; font-size: 14px; font-weight: 700;
+                                    color: MaterialPalette.on-primary;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                }
+                            }
+                            Text {
+                                text: lang == "ru" ? "Пропустить xbl/abl (риск кирпича!)" : "Skip xbl/abl (brick risk!)";
+                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
+                            }
+                        }
+                    }
+                    if as-mediatek: TouchArea {
+                        height: 24px;
+                        clicked => { root.skip-preloader = !root.skip-preloader; }
+                        HorizontalLayout { spacing: 10px;
+                            Rectangle {
+                                width: 18px; height: 18px; border-radius: 4px;
+                                border-width: 2px;
+                                border-color: root.skip-preloader ? MaterialPalette.primary : MaterialPalette.outline;
+                                background: root.skip-preloader ? MaterialPalette.primary : transparent;
+                                animate background { duration: 100ms; }
+                                animate border-color { duration: 100ms; }
+                                y: (parent.height - 18px) / 2;
+                                if root.skip-preloader: Text {
+                                    text: "✓"; font-size: 14px; font-weight: 700;
+                                    color: MaterialPalette.on-primary;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                }
+                            }
+                            Text {
+                                text: lang == "ru" ? "Пропустить preloader (риск кирпича!)" : "Skip preloader (brick risk!)";
+                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
                 HorizontalLayout { spacing: 8px; alignment: end;
                     TextButton {
                         text: Tr.cancel;
@@ -2162,7 +2307,7 @@ export component MainWindow inherits Window {
         VerticalLayout { alignment: center;
         HorizontalLayout { alignment: center;
         Rectangle {
-            width: 520px;
+            width: 640px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
             drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
@@ -2191,7 +2336,7 @@ export component MainWindow inherits Window {
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout { spacing: 8px; alignment: end;
                     FilledButton {
-                        min-width: 120px;
+                        min-width: 110px;
                         text: Tr.retry;
                         clicked => {
                             show-flash-error = false;
@@ -2199,8 +2344,8 @@ export component MainWindow inherits Window {
                         }
                     }
                     OutlinedButton {
-                        min-width: 90px;
-                        text: lang == 1 ? "Пропустить" : "Skip";
+                        min-width: 100px;
+                        text: lang == "ru" ? "Пропустить" : "Skip";
                         clicked => { show-flash-error = false; }
                     }
                     OutlinedButton {
@@ -2212,14 +2357,24 @@ export component MainWindow inherits Window {
                         }
                     }
                     TextButton {
-                        min-width: 90px;
+                        min-width: 100px;
                         text: Tr.cancel;
                         clicked => { show-flash-error = false; }
                     }
                 }
             }
         }
-        } // HorizontalLayout
-        } // VerticalLayout
+    } // HorizontalLayout
+    } // VerticalLayout
+    }
+
+    // ── Scale transition overlay — covers everything during scale change ─────
+    Rectangle {
+        z: 200;
+        width: 100%;
+        height: 100%;
+        background: is-dark ? #000000 : #ffffff;
+        opacity: root.effect-opacity;
+        animate opacity { duration: 300ms; easing: ease-in-out; }
     }
 }
