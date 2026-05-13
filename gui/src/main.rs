@@ -119,6 +119,7 @@ fn do_flash(tx: &mpsc::Sender<WMsg>, source: &lfff_lib::flasher::FirmwareSource,
     let session = lfff_lib::flasher::run_flash_session_with_log(
         source,
         sref,
+        false,
         skip_xbl_abl,
         skip_preloader,
         as_mediatek,

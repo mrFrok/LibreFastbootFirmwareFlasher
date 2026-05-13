@@ -114,6 +114,14 @@ enum Commands {
         /// Detect images and run checks without flashing
         #[arg(long)]
         dry_run: bool,
+
+        /// Skip xbl and abl partitions during flashing
+        #[arg(long)]
+        skip_xbl_abl: bool,
+
+        /// Skip preloader partition during flashing
+        #[arg(long)]
+        skip_preloader: bool,
     },
 
     /// Flash a single .img file to a specific partition
@@ -254,8 +262,19 @@ fn cmd_extract(
     if result.success { 0 } else { 1 }
 }
 
-fn cmd_flash(source: &lfff_lib::flasher::FirmwareSource, serial: Option<&str>, dry_run: bool) -> i32 {
-    use lfff_lib::flasher::{print_summary, run_flash_session};
+fn cmd_flash(
+    source: &lfff_lib::flasher::FirmwareSource,
+    serial: Option<&str>,
+    dry_run: bool,
+    skip_xbl_abl: bool,
+    skip_preloader: bool,
+) -> i32 {
+    use lfff_lib::flasher::{
+        collect_images, collect_images_from_source, is_mediatek_build,
+        print_summary, run_flash_session_with_log, FlashProgress,
+    };
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
 
     let dir = source.path();
     if !dir.is_dir() {
@@ -271,7 +290,68 @@ fn cmd_flash(source: &lfff_lib::flasher::FirmwareSource, serial: Option<&str>, d
         return 1;
     }
 
-    let session = run_flash_session(source, serial, dry_run);
+    // Check for Mediatek firmware — warn about preloader
+    let images = if source.is_source() {
+        collect_images_from_source(dir)
+    } else {
+        collect_images(dir)
+    };
+
+    let mut skip_preloader = skip_preloader;
+
+    if !images.is_empty() && is_mediatek_build(&images) {
+        if dry_run {
+            println!("⚠  Mediatek firmware detected (preloader found).");
+            println!("   Use --skip-preloader to exclude it during actual flashing.");
+        } else if !skip_preloader {
+            println!("\n⚠  Mediatek firmware detected (preloader found).");
+            println!("   Flashing preloader on Mediatek devices is risky and may brick your device.");
+            println!("   It is recommended to skip the preloader unless you know what you are doing.\n");
+            print!("Skip preloader? [Y/n/a] (Y=skip, n=flash preloader, a=abort): ");
+            use std::io::Write;
+            std::io::stdout().flush().ok();
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).ok();
+            match input.trim().to_lowercase().as_str() {
+                "" | "y" | "yes" => {
+                    println!("→ Skipping preloader.");
+                    skip_preloader = true;
+                }
+                "n" | "no" => {
+                    println!("→ Will flash preloader.");
+                }
+                "a" | "abort" => {
+                    println!("Aborted by user.");
+                    return 1;
+                }
+                _ => {
+                    println!("→ Skipping preloader (default).");
+                    skip_preloader = true;
+                }
+            }
+        }
+    }
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let on_log = |msg: String| println!("{}", msg);
+    let on_progress = |p: FlashProgress| {
+        if p.done == p.total {
+            println!("  ✓ {} (slot {}): {}/{} done", p.partition, p.slot, p.done, p.total);
+        }
+    };
+
+    let session = run_flash_session_with_log(
+        source,
+        serial,
+        dry_run,
+        skip_xbl_abl,
+        skip_preloader,
+        false,
+        cancel,
+        &on_log,
+        &on_progress,
+    );
+
     print_summary(&session);
 
     if session.critical_failed().is_empty() {
@@ -534,11 +614,13 @@ fn main() {
             ref source,
             ref serial,
             dry_run,
+            skip_xbl_abl,
+            skip_preloader,
         }) => {
             if let Some(dir) = firmware_dir {
-                cmd_flash(&lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), serial.as_deref(), dry_run)
+                cmd_flash(&lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), serial.as_deref(), dry_run, skip_xbl_abl, skip_preloader)
             } else if let Some(dir) = source {
-                cmd_flash(&lfff_lib::flasher::FirmwareSource::SourceBuild(dir.clone()), serial.as_deref(), dry_run)
+                cmd_flash(&lfff_lib::flasher::FirmwareSource::SourceBuild(dir.clone()), serial.as_deref(), dry_run, skip_xbl_abl, skip_preloader)
             } else {
                 println!("✗ Specify a firmware directory or --source DIR");
                 eprintln!("Usage: lfff flash <DIR>  or  lfff flash --source <DIR>");

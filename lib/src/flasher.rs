@@ -1411,6 +1411,7 @@ pub struct FlashProgress {
 pub fn run_flash_session_with_log(
     source: &FirmwareSource,
     serial: Option<&str>,
+    dry_run: bool,
     skip_xbl_abl: bool,
     skip_preloader: bool,
     as_mediatek: bool,
@@ -1419,7 +1420,7 @@ pub fn run_flash_session_with_log(
     on_progress: &dyn Fn(FlashProgress),
 ) -> FlashSession {
     let firmware_dir = source.path();
-    let mut session = FlashSession::new(source, serial, false);
+    let mut session = FlashSession::new(source, serial, dry_run);
 
     let images = if source.is_source() {
         collect_images_from_source(firmware_dir)
