@@ -28,6 +28,7 @@ enum WMsg {
     TestStep { step: i32, status: String },
     ArbWarning { version: u32, as_mediatek: bool },
     ArbDeviceWarning { path: String, is_source: bool, device_arb: u32 },
+    PreloaderWarning { path: String, is_source: bool },
     ReadyToFlash,  // device is in fastbootd, show final confirm dialog
 }
 
@@ -38,8 +39,9 @@ enum Cmd {
     CancelFlash, CheckDeps, InstallDeps, Download { url: String }, Extract { path: String },
     DriverTest, RebootTo(String), CancelDownload,
     PostFlashReboot, PostFlashWipe,
-    ConfirmArbAndFlash { path: String, skip_xbl_abl: bool, skip_preloader: bool },
-    ConfirmArbDeviceFlash { path: String, is_source: bool, skip_xbl_abl: bool, skip_preloader: bool },
+    ConfirmArbAndFlash { path: String, skip_xbl_abl: bool },
+    ConfirmArbDeviceFlash { path: String, is_source: bool, skip_xbl_abl: bool },
+    ConfirmPreloaderFlash { path: String, is_source: bool, skip_preloader: bool },
     RebootForFlash { reboot_choice: u8 },
     FlashFromSource { dir: String },
 }
@@ -304,7 +306,7 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                     skip_preloader = false;
                     as_mediatek = lfff_lib::flasher::is_mediatek_build(&lfff_lib::flasher::collect_images(&dir));
                     if as_mediatek {
-                        log(&tx,LogLevel::Info,2,"Mediatek platform detected — no ARB, skipping xbl/abl");
+                        log(&tx,LogLevel::Info,2,"Mediatek platform detected");
                         skip_xbl_abl = true;
                     } else {
                         log(&tx,LogLevel::Info,2,"Qualcomm platform detected");
@@ -327,9 +329,16 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                             continue;
                         }
                     }
+                    // Mediatek: show preloader warning before flashing
+                    if as_mediatek {
+                        tx.send(WMsg::Flashing(false)).ok();
+                        tx.send(WMsg::PreloaderWarning{path: path.clone(), is_source: false}).ok();
+                        log(&tx,LogLevel::Warn,2,"preloader.img detected — Mediatek firmware, waiting for confirmation...");
+                        continue;
+                    }
                     do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial, skip_xbl_abl, skip_preloader, as_mediatek, flash_cancel.clone());
                 }
-                Cmd::ConfirmArbAndFlash{path, skip_xbl_abl: cmd_skip_xbl_abl, skip_preloader: cmd_skip_preloader}=>{
+                Cmd::ConfirmArbAndFlash{path, skip_xbl_abl: cmd_skip_xbl_abl}=>{
                     flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                     tx.send(WMsg::Flashing(true)).ok();
                     let fw=Path::new(&path);
@@ -370,15 +379,15 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                         log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
                     }else{fw.to_path_buf()};
                     log(&tx,LogLevel::Info,2,"ARB warning confirmed by user, proceeding...");
-                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial, cmd_skip_xbl_abl, cmd_skip_preloader, as_mediatek, flash_cancel.clone());
+                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()), &serial, cmd_skip_xbl_abl, false, as_mediatek, flash_cancel.clone());
                 }
-                Cmd::ConfirmArbDeviceFlash{path,is_source,skip_xbl_abl: cmd_skip_xbl_abl, skip_preloader: cmd_skip_preloader}=>{
+                Cmd::ConfirmArbDeviceFlash{path,is_source,skip_xbl_abl: cmd_skip_xbl_abl}=>{
                     flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                     tx.send(WMsg::Flashing(true)).ok();
                     if is_source {
                         log(&tx,LogLevel::Info,2,"Device ARB warning confirmed by user, flashing from source...");
                         let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&path));
-                        do_flash(&tx, &d, &serial, cmd_skip_xbl_abl, cmd_skip_preloader, as_mediatek, flash_cancel.clone());
+                        do_flash(&tx, &d, &serial, cmd_skip_xbl_abl, false, as_mediatek, flash_cancel.clone());
                     } else {
                         log(&tx,LogLevel::Info,2,"Device ARB warning confirmed by user, proceeding...");
                         let dir = if path.ends_with(".zip"){
@@ -418,7 +427,55 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                             if !r.success{log(&tx,LogLevel::Error,2,format!("Extract fail: {}",r.error));tx.send(WMsg::FlashComplete{success:false,message:r.error}).ok();tx.send(WMsg::Flashing(false)).ok();continue;}
                             log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
                         }else{Path::new(&path).to_path_buf()};
-                        do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir), &serial, cmd_skip_xbl_abl, cmd_skip_preloader, as_mediatek, flash_cancel.clone());
+                        do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir), &serial, cmd_skip_xbl_abl, false, as_mediatek, flash_cancel.clone());
+                    }
+                }
+                Cmd::ConfirmPreloaderFlash{path,is_source,skip_preloader: cmd_skip_preloader}=>{
+                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+                    tx.send(WMsg::Flashing(true)).ok();
+                    log(&tx,LogLevel::Info,2,"Preloader warning confirmed by user, proceeding...");
+                    if is_source {
+                        let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&path));
+                        do_flash(&tx, &d, &serial, true, cmd_skip_preloader, as_mediatek, flash_cancel.clone());
+                    } else {
+                        let dir = if path.ends_with(".zip"){
+                            let fw=Path::new(&path);
+                            let fw_name=lfff_lib::extractor::get_firmware_name(fw);
+                            let out=get_output_dir().join(&fw_name);
+                            log(&tx,LogLevel::Info,2,format!("Extracting to {}...",out.display()));
+                            let tx_ex=tx.clone();
+                            let staging2=out.join("_staging");
+                            std::fs::create_dir_all(&staging2).ok();
+                            let tx_w2=tx.clone();
+                            let wd2=staging2.clone();
+                            let (stx2,srx2)=std::sync::mpsc::channel::<()>();
+                            std::thread::spawn(move||{
+                                let mut known=std::collections::HashSet::<String>::new();
+                                let mut secs=0u32;
+                                loop{
+                                    std::thread::sleep(std::time::Duration::from_secs(1));
+                                    if srx2.try_recv().is_ok(){break;}
+                                    secs+=1;
+                                    let mut q=vec![wd2.clone()];
+                                    while let Some(d)=q.pop(){
+                                        if let Ok(rd)=std::fs::read_dir(&d){
+                                            for e in rd.flatten(){let p=e.path();if p.is_dir(){q.push(p);continue;}
+                                                let name=p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                                if name.ends_with(".img")&&known.insert(name.clone()){
+                                                    tx_w2.send(WMsg::Log{level:LogLevel::Info,message:format!("Extracted: {}",name),tab:2}).ok();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if secs%5==0&&known.is_empty(){tx_w2.send(WMsg::Log{level:LogLevel::Info,message:format!("Extracting... ({}s)",secs),tab:2}).ok();}
+                                }
+                            });
+                            let r=lfff_lib::extractor::extract_firmware_with_log(Path::new(&path),&out,None,None,Some(&|line:String|{tx_ex.send(WMsg::Log{level:LogLevel::Info,message:line,tab:2}).ok();}));
+                            stx2.send(()).ok();
+                            if !r.success{log(&tx,LogLevel::Error,2,format!("Extract fail: {}",r.error));tx.send(WMsg::FlashComplete{success:false,message:r.error}).ok();tx.send(WMsg::Flashing(false)).ok();continue;}
+                            log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
+                        }else{Path::new(&path).to_path_buf()};
+                        do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir), &serial, true, cmd_skip_preloader, as_mediatek, flash_cancel.clone());
                     }
                 }
                 Cmd::FlashFromSource{dir}=>{
@@ -441,6 +498,10 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                     as_mediatek = lfff_lib::flasher::is_mediatek_build(&images);
                     if as_mediatek {
                         log(&tx,LogLevel::Info,2,"Mediatek platform detected");
+                        tx.send(WMsg::Flashing(false)).ok();
+                        tx.send(WMsg::PreloaderWarning{path: dir.clone(), is_source: true}).ok();
+                        log(&tx,LogLevel::Warn,2,"preloader.img detected — Mediatek firmware, waiting for confirmation...");
+                        continue;
                     } else {
                         log(&tx,LogLevel::Info,2,"Qualcomm platform detected");
                     }
@@ -816,6 +877,12 @@ fn poll(w: &Weak<MainWindow>, rx: &mpsc::Receiver<WMsg>, last_dl_pct: &mut u32, 
                 ui.set_firmware_path(path.into());
                 ui.set_show_arb_device_warning(true);
             }
+            WMsg::PreloaderWarning{path,is_source} => {
+                add_log(models,&ui,&LogLevel::Warn,2,&format!("⚠ preloader.img detected — Mediatek platform"));
+                ui.set_preloader_is_source(is_source);
+                ui.set_firmware_path(path.into());
+                ui.set_show_preloader_warning(true);
+            }
             WMsg::ReadyToFlash => {
                 if ui.get_pending_source_flash() {
                     ui.set_confirm_action(8);
@@ -1154,7 +1221,6 @@ fn main() -> Result<(), slint::PlatformError> {
             t.send(Cmd::ConfirmArbAndFlash{
                 path: ui.get_firmware_path().to_string(),
                 skip_xbl_abl: ui.get_skip_xbl_abl(),
-                skip_preloader: ui.get_skip_preloader(),
             }).ok();
         }
     });}
@@ -1168,6 +1234,18 @@ fn main() -> Result<(), slint::PlatformError> {
                 path: ui.get_firmware_path().to_string(),
                 is_source,
                 skip_xbl_abl: ui.get_skip_xbl_abl(),
+            }).ok();
+        }
+    });}
+
+    // Preloader warning confirmed — continue flash
+    {let t=ctx.clone();let w=ui.as_weak();ui.on_confirm_preloader_flash(move||{
+        if let Some(ui)=w.upgrade(){
+            ui.set_is_flashing(true);ui.set_flash_progress(0.0);ui.set_flash_status("Starting...".into());
+            let is_source = ui.get_preloader_is_source();
+            t.send(Cmd::ConfirmPreloaderFlash{
+                path: ui.get_firmware_path().to_string(),
+                is_source,
                 skip_preloader: ui.get_skip_preloader(),
             }).ok();
         }

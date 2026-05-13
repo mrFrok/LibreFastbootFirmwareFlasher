@@ -653,6 +653,8 @@ export component MainWindow inherits Window {
     in-out property <bool>    as-mediatek: false;
     in-out property <bool>    skip-xbl-abl: false;
     in-out property <bool>    skip-preloader: false;
+    in-out property <bool>    show-preloader-warning: false;
+    in-out property <bool>    preloader-is-source: false;
     in-out property <bool>    show-arb-device-warning: false;
     in-out property <int>     arb-device-version: 0;
     in-out property <bool>    arb-device-is-source: false;
@@ -679,6 +681,7 @@ export component MainWindow inherits Window {
     callback reboot-to(string);
     callback confirm-arb-and-flash();
     callback confirm-arb-device-flash();
+    callback confirm-preloader-flash();
     callback confirm-source-flash();
     callback retry-flash();
     callback reboot-device();
@@ -2123,54 +2126,6 @@ export component MainWindow inherits Window {
                             : "⚠ Skipping xbl/abl may preserve ARB=0, but may also brick your device!";
                         font-size: 12px; color: #f0b800; wrap: word-wrap;
                     }
-                    TouchArea {
-                        height: 24px;
-                        clicked => { root.skip-xbl-abl = !root.skip-xbl-abl; }
-                        HorizontalLayout { spacing: 10px;
-                            Rectangle {
-                                width: 18px; height: 18px; border-radius: 4px;
-                                border-width: 2px;
-                                border-color: root.skip-xbl-abl ? MaterialPalette.primary : MaterialPalette.outline;
-                                background: root.skip-xbl-abl ? MaterialPalette.primary : transparent;
-                                animate background { duration: 100ms; }
-                                animate border-color { duration: 100ms; }
-                                y: (parent.height - 18px) / 2;
-                                if root.skip-xbl-abl: Text {
-                                    text: "✓"; font-size: 14px; font-weight: 700;
-                                    color: MaterialPalette.on-primary;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                }
-                            }
-                            Text {
-                                text: lang == "ru" ? "Пропустить xbl/abl (риск кирпича!)" : "Skip xbl/abl (brick risk!)";
-                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
-                            }
-                        }
-                    }
-                    if as-mediatek: TouchArea {
-                        height: 24px;
-                        clicked => { root.skip-preloader = !root.skip-preloader; }
-                        HorizontalLayout { spacing: 10px;
-                            Rectangle {
-                                width: 18px; height: 18px; border-radius: 4px;
-                                border-width: 2px;
-                                border-color: root.skip-preloader ? MaterialPalette.primary : MaterialPalette.outline;
-                                background: root.skip-preloader ? MaterialPalette.primary : transparent;
-                                animate background { duration: 100ms; }
-                                animate border-color { duration: 100ms; }
-                                y: (parent.height - 18px) / 2;
-                                if root.skip-preloader: Text {
-                                    text: "✓"; font-size: 14px; font-weight: 700;
-                                    color: MaterialPalette.on-primary;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                }
-                            }
-                            Text {
-                                text: lang == "ru" ? "Пропустить preloader (риск кирпича!)" : "Skip preloader (brick risk!)";
-                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
-                            }
-                        }
-                    }
                 }
                 HorizontalLayout { spacing: 8px; alignment: end;
                     TextButton {
@@ -2232,31 +2187,64 @@ export component MainWindow inherits Window {
                             : "⚠ Skipping these partitions may help downgrade if your device has ARB>0, but may also brick your device!";
                         font-size: 12px; color: #f0b800; wrap: word-wrap;
                     }
-                    TouchArea {
-                        height: 24px;
-                        clicked => { root.skip-xbl-abl = !root.skip-xbl-abl; }
-                        HorizontalLayout { spacing: 10px;
-                            Rectangle {
-                                width: 18px; height: 18px; border-radius: 4px;
-                                border-width: 2px;
-                                border-color: root.skip-xbl-abl ? MaterialPalette.primary : MaterialPalette.outline;
-                                background: root.skip-xbl-abl ? MaterialPalette.primary : transparent;
-                                animate background { duration: 100ms; }
-                                animate border-color { duration: 100ms; }
-                                y: (parent.height - 18px) / 2;
-                                if root.skip-xbl-abl: Text {
-                                    text: "✓"; font-size: 14px; font-weight: 700;
-                                    color: MaterialPalette.on-primary;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                }
-                            }
-                            Text {
-                                text: lang == "ru" ? "Пропустить xbl/abl (риск кирпича!)" : "Skip xbl/abl (brick risk!)";
-                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
-                            }
+                }
+                HorizontalLayout { spacing: 8px; alignment: end;
+                    TextButton {
+                        text: Tr.cancel;
+                        clicked => { show-arb-device-warning = false; }
+                    }
+                    FilledButton {
+                        text: Tr.arb-device-continue;
+                        clicked => {
+                            show-arb-device-warning = false;
+                            root.confirm-arb-device-flash();
                         }
                     }
-                    if as-mediatek: TouchArea {
+                }
+            }
+        }
+        } // HorizontalLayout
+        } // VerticalLayout
+    }
+
+    // ── Preloader Warning dialog (Mediatek) ──────────────────────────────────────
+    if show-preloader-warning: Rectangle {
+        z: 110; background: #00000070; width: 100%; height: 100%;
+
+        VerticalLayout { alignment: center;
+        HorizontalLayout { alignment: center;
+        Rectangle {
+            width: 480px;
+            border-radius: 16px;
+            background: MaterialPalette.surface-container-high;
+            drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
+
+            VerticalLayout { padding: 28px; spacing: 12px;
+                HorizontalLayout { spacing: 12px;
+                    Text { text: "⚠"; font-size: 24px; color: #f0b800; vertical-alignment: center; }
+                    Text {
+                        text: lang == "ru" ? "Предупреждение preloader" : "Preloader Warning";
+                        font-size: 18px; font-weight: 700;
+                        color: #f0b800; vertical-alignment: center;
+                    }
+                }
+                Text {
+                    text: lang == "ru"
+                        ? "В прошивке обнаружен preloader.img. Preloader нельзя прошить через fastbootd — требуется bootloader mode.\n\nПропуск preloader может привести к кирпичу!"
+                        : "preloader.img found in firmware. Preloader cannot be flashed via fastbootd — bootloader mode required.\n\nSkipping preloader may brick your device!";
+                    font-size: 13px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
+                }
+                Rectangle { vertical-stretch: 1; }
+                VerticalLayout { spacing: 6px;
+                    Text {
+                        text: lang == "ru"
+                            ? "⚠ Пропуск preloader сделает устройство неработоспособным, но в некоторых случаях позволяет спасти «кирпич»"
+                            : "⚠ Skipping preloader will make the device unbootable, but may help recover a bricked device in some cases";
+                        font-size: 12px; color: #f0b800; wrap: word-wrap;
+                    }
+                    TouchArea {
                         height: 24px;
                         clicked => { root.skip-preloader = !root.skip-preloader; }
                         HorizontalLayout { spacing: 10px;
@@ -2284,13 +2272,13 @@ export component MainWindow inherits Window {
                 HorizontalLayout { spacing: 8px; alignment: end;
                     TextButton {
                         text: Tr.cancel;
-                        clicked => { show-arb-device-warning = false; }
+                        clicked => { show-preloader-warning = false; }
                     }
                     FilledButton {
-                        text: Tr.arb-device-continue;
+                        text: lang == "ru" ? "Продолжить" : "Continue";
                         clicked => {
-                            show-arb-device-warning = false;
-                            root.confirm-arb-device-flash();
+                            show-preloader-warning = false;
+                            root.confirm-preloader-flash();
                         }
                     }
                 }
