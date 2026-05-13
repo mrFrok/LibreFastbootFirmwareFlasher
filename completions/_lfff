@@ -1,0 +1,297 @@
+#compdef lfff
+
+autoload -U is-at-least
+
+_lfff() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'-v[Enable debug logging]' \
+'--verbose[Enable debug logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_lfff_commands" \
+"*::: :->lfff" \
+&& ret=0
+    case $state in
+    (lfff)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:lfff-command-$line[1]:"
+        case $line[1] in
+            (deps)
+_arguments "${_arguments_options[@]}" : \
+'--check[Only check, do not install anything]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::tools -- Specific tools to install (default\: all):_default' \
+&& ret=0
+;;
+(download)
+_arguments "${_arguments_options[@]}" : \
+'-o+[Directory to save the firmware (default\: current directory)]:DIR:_files' \
+'--output=[Directory to save the firmware (default\: current directory)]:DIR:_files' \
+'-c+[Number of parallel connections for aria2c]:CONNECTIONS:_default' \
+'--connections=[Number of parallel connections for aria2c]:CONNECTIONS:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':url -- OTA download link or 4PDA redirect URL:_default' \
+&& ret=0
+;;
+(extract)
+_arguments "${_arguments_options[@]}" : \
+'-o+[Output directory (prompted if not given)]:DIR:_files' \
+'--output=[Output directory (prompted if not given)]:DIR:_files' \
+'-p+[Comma-separated partitions to extract]:LIST:_default' \
+'--partitions=[Comma-separated partitions to extract]:LIST:_default' \
+'--checksum=[Expected SHA-256 checksum of the archive]:SHA256:_default' \
+'--list[List archive contents without extracting]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':zip -- Path to the firmware .zip:_files' \
+&& ret=0
+;;
+(devices)
+_arguments "${_arguments_options[@]}" : \
+'-s+[Target a specific device by serial number]:SERIAL:_default' \
+'--serial=[Target a specific device by serial number]:SERIAL:_default' \
+'--check[Run full pre-flash diagnostics]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(arb)
+_arguments "${_arguments_options[@]}" : \
+'--xbl=[Direct path to xbl_config.img]:XBL_IMG:_files' \
+'--firmware-dir=[Extracted firmware directory (xbl_config.img located automatically)]:DIR:_files' \
+'-s+[Target a specific device by serial number]:SERIAL:_default' \
+'--serial=[Target a specific device by serial number]:SERIAL:_default' \
+'--device[Also read ARB version from connected device and compare]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(flash)
+_arguments "${_arguments_options[@]}" : \
+'()--source=[Android source build output directory (skips ARB check)]:DIR:_files' \
+'-s+[Target a specific device by serial number]:SERIAL:_default' \
+'--serial=[Target a specific device by serial number]:SERIAL:_default' \
+'--dry-run[Detect images and run checks without flashing]' \
+'--skip-xbl-abl[Skip xbl and abl partitions during flashing]' \
+'--skip-preloader[Skip preloader partition during flashing]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::firmware_dir -- Path to the extracted firmware directory:_files' \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':shell -- Shell to generate completions for:(bash elvish fish powershell zsh)' \
+&& ret=0
+;;
+(flash-partition)
+_arguments "${_arguments_options[@]}" : \
+'--firmware-dir=[Extracted firmware directory to search for the partition image]:DIR:_files' \
+'-p+[Partition name override (default\: image filename stem)]:NAME:_default' \
+'--partition=[Partition name override (default\: image filename stem)]:NAME:_default' \
+'--slot=[Slot(s) to flash\: a, b, or a,b (default\: both)]:SLOT:_default' \
+'-s+[Target a specific device]:SERIAL:_default' \
+'--serial=[Target a specific device]:SERIAL:_default' \
+'--no-ab[Flash without slot suffix (for non-A/B partitions)]' \
+'--dry-run[Show what would be flashed without actually flashing]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::image -- Path to .img file, or partition name (requires --firmware-dir):_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_lfff__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:lfff-help-command-$line[1]:"
+        case $line[1] in
+            (deps)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(download)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(extract)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(devices)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(arb)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(flash)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(flash-partition)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_lfff_commands] )) ||
+_lfff_commands() {
+    local commands; commands=(
+'deps:Install and verify external dependencies' \
+'download:Download firmware via OTA link (supports 4PDA redirects)' \
+'extract:Extract a firmware .zip archive' \
+'devices:List connected devices, run pre-flash diagnostics' \
+'arb:Check Anti-Rollback version of a firmware' \
+'flash:Flash an extracted firmware directory (or source build with --source)' \
+'completions:Generate shell completion script' \
+'flash-partition:Flash a single .img file to a specific partition' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'lfff commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__arb_commands] )) ||
+_lfff__subcmd__arb_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff arb commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__completions_commands] )) ||
+_lfff__subcmd__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff completions commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__deps_commands] )) ||
+_lfff__subcmd__deps_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff deps commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__devices_commands] )) ||
+_lfff__subcmd__devices_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff devices commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__download_commands] )) ||
+_lfff__subcmd__download_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff download commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__extract_commands] )) ||
+_lfff__subcmd__extract_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff extract commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__flash_commands] )) ||
+_lfff__subcmd__flash_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff flash commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__flash-partition_commands] )) ||
+_lfff__subcmd__flash-partition_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff flash-partition commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help_commands] )) ||
+_lfff__subcmd__help_commands() {
+    local commands; commands=(
+'deps:Install and verify external dependencies' \
+'download:Download firmware via OTA link (supports 4PDA redirects)' \
+'extract:Extract a firmware .zip archive' \
+'devices:List connected devices, run pre-flash diagnostics' \
+'arb:Check Anti-Rollback version of a firmware' \
+'flash:Flash an extracted firmware directory (or source build with --source)' \
+'completions:Generate shell completion script' \
+'flash-partition:Flash a single .img file to a specific partition' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'lfff help commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__arb_commands] )) ||
+_lfff__subcmd__help__subcmd__arb_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help arb commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__completions_commands] )) ||
+_lfff__subcmd__help__subcmd__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help completions commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__deps_commands] )) ||
+_lfff__subcmd__help__subcmd__deps_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help deps commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__devices_commands] )) ||
+_lfff__subcmd__help__subcmd__devices_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help devices commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__download_commands] )) ||
+_lfff__subcmd__help__subcmd__download_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help download commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__extract_commands] )) ||
+_lfff__subcmd__help__subcmd__extract_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help extract commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__flash_commands] )) ||
+_lfff__subcmd__help__subcmd__flash_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help flash commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__flash-partition_commands] )) ||
+_lfff__subcmd__help__subcmd__flash-partition_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help flash-partition commands' commands "$@"
+}
+(( $+functions[_lfff__subcmd__help__subcmd__help_commands] )) ||
+_lfff__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'lfff help help commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_lfff" ]; then
+    _lfff "$@"
+else
+    compdef _lfff lfff
+fi

@@ -5,7 +5,9 @@
 //!   - aria2c via system package manager
 //!   - payload_dumper via `cargo install payload_dumper`
 //!
-//! Supported package managers: pacman, apt, dnf, zypper, emerge, brew
+//! Supported package managers: pacman, apt, dnf, zypper, emerge, brew,
+//!                        xbps (Void), apk (Alpine), rpm-ostree (atomic Fedora),
+//!                        nix-env (NixOS)
 
 use std::fs;
 use std::path::Path;
@@ -31,6 +33,12 @@ fn pkg_for_tool(pm: &str, tool: &str) -> Option<&'static str> {
         ("emerge", "aria2c") => Some("net-misc/aria2"),
         ("brew", "fastboot") | ("brew", "adb") => Some("android-platform-tools"),
         ("brew", "aria2c") => Some("aria2"),
+        ("xbps", "fastboot") | ("xbps", "adb") => Some("android-tools"),
+        ("xbps", "aria2c") => Some("aria2"),
+        ("apk", "fastboot") | ("apk", "adb") => Some("android-tools"),
+        ("apk", "aria2c") => Some("aria2"),
+        ("rpm-ostree", "fastboot") | ("rpm-ostree", "adb") => Some("android-tools"),
+        ("rpm-ostree", "aria2c") => Some("aria2"),
         _ => None,
     }
 }
@@ -42,8 +50,11 @@ fn install_cmd(pm: &str) -> Vec<&'static str> {
         "apt" => vec!["apt-get", "install", "-y"],
         "dnf" => vec!["dnf", "install", "-y"],
         "zypper" => vec!["zypper", "install", "-y"],
-        "emerge" => vec!["emerge"],
+        "emerge" => vec!["emerge", "--noreplace", "--quiet"],
         "brew" => vec!["brew", "install"],
+        "xbps" => vec!["xbps-install", "-y"],
+        "apk" => vec!["apk", "add"],
+        "rpm-ostree" => vec!["rpm-ostree", "install", "-y"],
         _ => vec![],
     }
 }
@@ -122,26 +133,45 @@ fn is_atomic_distro() -> bool {
                     return true;
                 }
             }
+            // Also match ID_LIKE (e.g. ID_LIKE="fedora" on Silverblue)
+            if line.starts_with("ID_LIKE=") {
+                let id_like = line[8..].trim().trim_matches('"').to_lowercase();
+                for part in id_like.split_whitespace() {
+                    if atomic_ids.contains(&part) {
+                        return true;
+                    }
+                }
+            }
         }
     }
 
-    Path::new("/ostree").is_dir() || Path::new("/etc/NIXOS").exists()
+    Path::new("/ostree").is_dir()
+        || Path::new("/etc/NIXOS").exists()
+        || which::which("rpm-ostree").is_ok()
 }
 
 /// Detect the best available package manager.
 fn detect_pkg_manager() -> Option<String> {
     if is_atomic_distro() {
-        if which::which("brew").is_ok() {
-            return Some("brew".into());
+        // Atomic distros: try native layering, then per-user installers
+        for pm in &["rpm-ostree", "nix-env", "brew"] {
+            if which::which(pm).is_ok() {
+                return Some((*pm).into());
+            }
         }
         return None;
     }
 
     for pm in &[
-        "pacman", "apt", "apt-get", "dnf", "zypper", "emerge", "brew",
+        "pacman", "apt", "apt-get", "dnf", "zypper", "emerge",
+        "xbps-install", "apk", "brew",
     ] {
         if which::which(pm).is_ok() {
-            return Some(if *pm == "apt-get" { "apt" } else { pm }.to_string());
+            return Some(match *pm {
+                "apt-get" => "apt",
+                "xbps-install" => "xbps",
+                other => other,
+            }.to_string());
         }
     }
     None
@@ -152,7 +182,8 @@ fn sudo_cmd() -> String {
 }
 
 fn needs_sudo(pm: &str) -> bool {
-    if pm == "brew" {
+    // Per-user package managers don't need sudo
+    if matches!(pm, "brew" | "nix-env") {
         return false;
     }
     // Check if running as root via env
@@ -425,17 +456,18 @@ fn install_via_pkg_manager(tools: &[&str], pm: &str) -> Vec<DepResult> {
 
     match status {
         Ok(s) if s.success() => {
+            let is_ostree = pm == "rpm-ostree";
             for (tool, _) in &to_install {
                 let found = which::which(tool).is_ok();
                 results.push(DepResult {
                     tool: tool.to_string(),
                     already_installed: false,
-                    installed: found,
+                    installed: found || is_ostree,
                     skipped: false,
-                    error: if found {
+                    error: if found || !is_ostree {
                         String::new()
                     } else {
-                        "Installed but binary not found in PATH".into()
+                        "Layered via rpm-ostree — reboot to make available".into()
                     },
                 });
             }
@@ -482,9 +514,15 @@ pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsRepo
     if pm.is_none() && !dry_run {
         if is_atomic_distro() {
             println!("  ⚠  Atomic/immutable distro detected.");
-            println!("  System package manager cannot install packages in the current session.");
+            println!("  No compatible package manager found in this session.");
             println!();
-            println!("  Recommended: install Homebrew on Linux, then re-run 'lfff deps'");
+            println!("  Options:");
+            println!("    a) Install Homebrew on Linux and re-run 'lfff deps'");
+            println!("    b) Use toolbox/distrobox to enter a mutable container:");
+            println!("         toolbox enter");
+            println!("         sudo dnf install android-tools aria2");
+            println!("         lfff deps");
+            println!("    c) Manually download binaries and place them in PATH");
         } else {
             println!("  ✗ No supported package manager found.");
             println!("    Install manually: fastboot, adb, aria2c, payload_dumper");
@@ -579,6 +617,8 @@ pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsRepo
     for r in &report.results {
         if r.already_installed {
             println!("  ✓  {:<25} already installed", r.tool);
+        } else if r.installed && !r.error.is_empty() {
+            println!("  ✓  {:<25} {} {}", r.tool, "layered", "(reboot required)");
         } else if r.installed {
             println!("  ✓  {:<25} installed", r.tool);
         } else if r.skipped {
@@ -597,6 +637,15 @@ pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsRepo
     } else if !report.failed().is_empty() {
         println!("{}", "━".repeat(56));
         println!("  ✗  Some dependencies failed to install");
+        println!("{}", "━".repeat(56));
+    }
+
+    // Reboot notice for rpm-ostree layering
+    let needs_reboot = report.results.iter().any(|r| r.error.contains("rpm-ostree"));
+    if needs_reboot {
+        println!("{}", "━".repeat(56));
+        println!("  ⚠  Packages layered via rpm-ostree.");
+        println!("     Reboot to make them available in PATH.");
         println!("{}", "━".repeat(56));
     }
     println!("────────────────────────────────────────────────────────");

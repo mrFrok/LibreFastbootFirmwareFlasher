@@ -72,8 +72,10 @@ fn get_output_dir() -> PathBuf {
         .filter(|p| Path::new(p).is_absolute())
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-            PathBuf::from(home).join("firmwares")
+            dirs::data_local_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("lfff")
+                .join("firmwares")
         });
     std::fs::create_dir_all(&dir).ok();
     dir
@@ -950,13 +952,8 @@ impl Default for Config {
 }
 
 fn config_dir() -> std::path::PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| {
-            let mut p = std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
-            p.push(".config");
-            p
-        })
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("lfff")
 }
 
@@ -984,8 +981,71 @@ fn save_scale(scale: f32) {
     save_config(&config);
 }
 
+fn select_renderer() {
+    // If user already set a renderer, respect it
+    if std::env::var("SLINT_RENDERER").is_ok() {
+        log::info!("Renderer: {} (from env)", std::env::var("SLINT_RENDERER").unwrap());
+        return;
+    }
+
+    #[cfg(target_os = "linux")]
+    if std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err() {
+        unsafe { std::env::set_var("SLINT_RENDERER", "software"); }
+        log::info!("Renderer: software (no display server)");
+        return;
+    }
+
+    #[cfg(feature = "vulkan")]
+    {
+        let vulkan_ok = {
+            #[cfg(target_os = "linux")]
+            {
+                let loader_paths = [
+                    "/usr/lib/libvulkan.so.1",
+                    "/usr/lib/x86_64-linux-gnu/libvulkan.so.1",
+                    "/usr/lib/aarch64-linux-gnu/libvulkan.so.1",
+                    "/lib/libvulkan.so.1",
+                ];
+                if loader_paths.iter().any(|p| std::path::Path::new(p).exists()) {
+                    std::process::Command::new("vulkaninfo")
+                        .arg("--summary")
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false)
+                } else {
+                    false
+                }
+            }
+            #[cfg(target_os = "windows")]
+            {
+                if std::path::Path::new(r"C:\Windows\System32\vulkan-1.dll").exists() {
+                    std::process::Command::new("vulkaninfo")
+                        .arg("--summary")
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(true)
+                } else {
+                    false
+                }
+            }
+            #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+            false
+        };
+
+        if vulkan_ok {
+            unsafe { std::env::set_var("SLINT_RENDERER", "skia-vulkan"); }
+            log::info!("Renderer: skia-vulkan (detected)");
+            return;
+        }
+    }
+
+    log::info!("Renderer: skia-opengl (default)");
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     env_logger::init();
+    select_renderer();
+    #[cfg(target_os = "linux")]
     unsafe { std::env::set_var("LFFF_SUDO_CMD", "pkexec"); }
 
     let config = load_config();
@@ -993,6 +1053,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let ui=MainWindow::new()?;
     ui.set_ui_scale(config.scale);
+    ui.set_app_version(env!("CARGO_PKG_VERSION").into());
     ui.set_lang(config.lang.as_str().into());
     ui.set_is_dark(config.theme == "dark");
 

@@ -16,7 +16,7 @@ log = "0.4"
 sha2 = "0.10"
 digest = "0.10"
 regex = "1"
-which = "7"
+which = "8"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 url = "2"
 colored = "3"

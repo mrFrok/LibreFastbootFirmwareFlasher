@@ -5,7 +5,8 @@
 use std::path::PathBuf;
 use std::process;
 
-use clap::{Parser, Subcommand};
+use clap::{Command, CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 
 /// LibreFastbootFirmwareFlasher — extract, check, and flash Android firmware.
 #[derive(Parser)]
@@ -122,6 +123,12 @@ enum Commands {
         /// Skip preloader partition during flashing
         #[arg(long)]
         skip_preloader: bool,
+    },
+
+    /// Generate shell completion script
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
     },
 
     /// Flash a single .img file to a specific partition
@@ -540,6 +547,13 @@ fn print_welcome() {
     println!("  arb               compare Anti-Rollback version");
     println!("  flash             flash full firmware (A/B, super)");
     println!("  flash-partition   flash a single partition by name");
+    println!("  completions       generate shell completion script");
+    println!();
+    println!("  Tab completion:");
+    println!("    lfff completions bash   > /etc/bash_completion.d/lfff");
+    println!("    lfff completions zsh    > /usr/share/zsh/site-functions/_lfff");
+    println!("    lfff completions fish   > ~/.config/fish/completions/lfff.fish");
+    println!("    lfff completions powershell >> $PROFILE");
     println!();
     println!("  Links:");
     println!("  ─────────────────────────────────────────────────────");
@@ -627,6 +641,12 @@ fn main() {
                 1
             }
         },
+
+        Some(Commands::Completions { shell }) => {
+            let mut cmd: Command = Cli::command();
+            generate(shell, &mut cmd, "lfff", &mut std::io::stdout());
+            0
+        }
 
         Some(Commands::FlashPartition {
             ref image,

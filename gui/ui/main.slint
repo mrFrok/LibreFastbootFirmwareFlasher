@@ -34,11 +34,11 @@ component FilledButton {
     Rectangle {
         border-radius: 20px; clip: true;
         background: root.enabled ? MaterialPalette.primary : MaterialPalette.surface-container;
-        animate background { duration: 200ms; easing: ease-out; }
+        animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
         Rectangle {
             width: 100%; height: 100%; border-radius: 20px;
             background: ta.has-hover ? MaterialPalette.on-primary.with-alpha(0.12) : transparent;
-            animate background { duration: 200ms; easing: ease-out; }
+            animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
         }
         ta := TouchArea {
             width: 100%; height: 100%;
@@ -49,7 +49,7 @@ component FilledButton {
                     color: root.enabled ? MaterialPalette.on-primary : MaterialPalette.on-surface-variant;
                     horizontal-alignment: center; vertical-alignment: center;
                     overflow: elide; horizontal-stretch: 1;
-                    animate color { duration: 200ms; easing: ease-out; }
+                    animate color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                 }
             }
         }
@@ -66,8 +66,8 @@ component OutlinedButton {
         border-width: 1px;
         border-color: root.enabled ? MaterialPalette.outline : MaterialPalette.outline-variant;
         background: ta.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
-        animate background { duration: 200ms; easing: ease-out; }
-        animate border-color { duration: 200ms; easing: ease-out; }
+        animate background { duration: 250ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+        animate border-color { duration: 250ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
         ta := TouchArea {
             width: 100%; height: 100%;
             clicked => { root.clicked(); }
@@ -77,7 +77,7 @@ component OutlinedButton {
                     color: root.enabled ? MaterialPalette.primary : MaterialPalette.on-surface-variant;
                     horizontal-alignment: center; vertical-alignment: center;
                     overflow: elide; horizontal-stretch: 1;
-                    animate color { duration: 200ms; easing: ease-out; }
+                    animate color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                 }
             }
         }
@@ -92,7 +92,7 @@ component TextButton {
     Rectangle {
         border-radius: 20px; clip: true;
         background: ta.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
-        animate background { duration: 200ms; easing: ease-out; }
+        animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
         ta := TouchArea {
             width: 100%; height: 100%;
             clicked => { root.clicked(); }
@@ -102,7 +102,7 @@ component TextButton {
                     color: root.enabled ? MaterialPalette.primary : MaterialPalette.on-surface-variant;
                     horizontal-alignment: center; vertical-alignment: center;
                     overflow: elide; horizontal-stretch: 1;
-                    animate color { duration: 200ms; easing: ease-out; }
+                    animate color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                 }
             }
         }
@@ -117,11 +117,11 @@ component FilledTonalButton {
     Rectangle {
         border-radius: 20px; clip: true;
         background: MaterialPalette.secondary-container;
-        animate background { duration: 200ms; easing: ease-out; }
+        animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
         Rectangle {
             width: 100%; height: 100%; border-radius: 20px;
             background: ta.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
-            animate background { duration: 200ms; easing: ease-out; }
+            animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
         }
         ta := TouchArea {
             width: 100%; height: 100%;
@@ -132,7 +132,7 @@ component FilledTonalButton {
                     color: MaterialPalette.on-secondary-container;
                     horizontal-alignment: center; vertical-alignment: center;
                     overflow: elide; horizontal-stretch: 1;
-                    animate color { duration: 200ms; easing: ease-out; }
+                    animate color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                 }
             }
         }
@@ -159,7 +159,7 @@ component LinearProgressIndicator {
             width: parent.width * root.progress;
             height: 100%;
             background: MaterialPalette.primary;
-            animate width { duration: 200ms; easing: ease-out; }
+            animate width { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
         }
     }
 }
@@ -346,6 +346,7 @@ component LogView inherits Rectangle {
             for e in entries: Rectangle {
                 height: 20px;
                 background: transparent;
+                animate opacity { duration: 200ms; }
                 HorizontalLayout { spacing: 6px; padding-left: 8px; padding-right: 8px;
                     Text {
                         text: e.timestamp;
@@ -393,15 +394,18 @@ component DeviceBanner inherits Rectangle {
     background: device.connected
         ? MaterialPalette.primary-container
         : MaterialPalette.error-container;
+    animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
     border-width: 1px;
     border-color: device.connected
         ? MaterialPalette.primary
         : MaterialPalette.error;
+    animate border-color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
 
     HorizontalLayout { padding-left: 14px; padding-right: 14px; spacing: 10px;
         Rectangle {
             width: 8px; height: 8px; border-radius: 4px;
             background: device.connected ? MaterialPalette.primary : MaterialPalette.error;
+            animate background { duration: 250ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             y: (parent.height - 8px) / 2;
         }
         if device.connected: HorizontalLayout { spacing: 10px;
@@ -593,7 +597,7 @@ export component MainWindow inherits Window {
     }
 
     animate page-opacity { duration: 300ms; easing: ease-in-out; }
-    animate page-x       { duration: 300ms; easing: ease-out; }
+    animate page-x       { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
     animate effect-opacity { duration: 300ms; easing: ease-in-out; }
 
     changed pending-scale => {
@@ -662,6 +666,7 @@ export component MainWindow inherits Window {
     in-out property <bool>    show-flash-error: false;
     in-out property <string>  flash-error-message: "";
     in-out property <bool>    flash-error-is-source: false;
+    in-out property <string>  app-version: "dev";
 
     init => { Tr.lang = lang; Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
     changed lang => { Tr.lang = lang; }
@@ -953,7 +958,7 @@ export component MainWindow inherits Window {
                                 letter-spacing: 0.5px;
                             }
                             Text {
-                                text: "v2.0.0  •  " + (lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
+                                text: root.app-version + "  •  " + (lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
                                 font-size: 14px;
                                 color: MaterialPalette.on-surface-variant;
                                 horizontal-alignment: center;
@@ -989,6 +994,7 @@ export component MainWindow inherits Window {
                                             colorize: ta0.has-hover
                                                 ? MaterialPalette.on-primary-container
                                                 : MaterialPalette.on-surface-variant;
+                                            animate colorize { duration: 150ms; }
                                         }
                                     }
                                     Text {
@@ -1028,6 +1034,7 @@ export component MainWindow inherits Window {
                                             colorize: ta1.has-hover
                                                 ? MaterialPalette.on-primary-container
                                                 : MaterialPalette.on-surface-variant;
+                                            animate colorize { duration: 150ms; }
                                         }
                                     }
                                     Text {
@@ -1067,6 +1074,7 @@ export component MainWindow inherits Window {
                                             colorize: ta2.has-hover
                                                 ? MaterialPalette.on-primary-container
                                                 : MaterialPalette.on-surface-variant;
+                                            animate colorize { duration: 150ms; }
                                         }
                                     }
                                     Text {
@@ -1106,6 +1114,7 @@ export component MainWindow inherits Window {
                                             colorize: ta3.has-hover
                                                 ? MaterialPalette.on-primary-container
                                                 : MaterialPalette.on-surface-variant;
+                                            animate colorize { duration: 150ms; }
                                         }
                                     }
                                     Text {
@@ -1202,7 +1211,7 @@ export component MainWindow inherits Window {
                                         ? #4caf50
                                     : test-step < 0 ? MaterialPalette.error
                                     : MaterialPalette.outline-variant;
-                                animate background { duration: 200ms; }
+                                animate background { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                                 y: (parent.height - 10px) / 2;
                             }
                             Text {
@@ -1211,14 +1220,19 @@ export component MainWindow inherits Window {
                                     ? #4caf50
                                     : MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
+                                animate color { duration: 200ms; }
                             }
                         }
                     }
 
-                    if test-status != "": Rectangle { height: 4px; }
-                    if test-status != "": Text {
+                    Rectangle { height: 4px; visible: test-status != ""; }
+                    Text {
+                        visible: test-status != "";
+                        opacity: test-status != "" ? 1.0 : 0.0;
                         text: test-status; font-size: 14px;
                         color: test-step < 0 ? MaterialPalette.error : MaterialPalette.primary;
+                        animate color { duration: 200ms; }
+                        animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                     }
 
                     Rectangle { height: 12px; }
@@ -1344,14 +1358,17 @@ export component MainWindow inherits Window {
                                 : MaterialPalette.outline-variant;
                             animate border-color { duration: 80ms; }
 
-                            if download-url == "" && !url-input.has-focus: Text {
+                            Text {
                                 x: 14px; y: 0px;
                                 width: parent.width - 28px; height: parent.height;
+                                visible: download-url == "" && !url-input.has-focus;
+                                opacity: download-url == "" && !url-input.has-focus ? 1.0 : 0.0;
                                 text: Tr.ota-url;
                                 font-size: 14px;
                                 color: MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
                                 overflow: elide;
+                                animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                             }
 
                             url-input := TextInput {
@@ -1520,14 +1537,16 @@ export component MainWindow inherits Window {
                                     : (parent.has-hover
                                         ? MaterialPalette.surface-container-high
                                         : MaterialPalette.surface-container);
-                                animate background    { duration: 120ms; easing: ease-out; }
-                                animate border-color  { duration: 120ms; easing: ease-out; }
+                                animate background    { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+                                animate border-color  { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+                                animate border-width  { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
                                 Text {
                                     text: item.label;
                                     font-size: 13px; font-weight: 500;
                                     color: root.flash-source-mode == item.val
                                         ? MaterialPalette.on-secondary-container
                                         : MaterialPalette.on-surface;
+                                    animate color { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
                                     horizontal-alignment: center; vertical-alignment: center;
                                 }
                             }
@@ -1545,17 +1564,19 @@ export component MainWindow inherits Window {
                     if flash-source-mode == 1: VerticalLayout { spacing: 8px;
                         HorizontalLayout { spacing: 8px;
                             PathField { path: source-dir; horizontal-stretch: 1; }
-                            FilledTonalButton {
+                            OutlinedButton {
                                 text: Tr.src-select;
                                 enabled: !is-flashing;
                                 clicked => { root.browse-source-dir(); }
                             }
                             OutlinedButton { text: Tr.find-phone; enabled: !is-flashing; clicked => { root.check-device(); } }
                         }
-                        if source-image-count > 0: Rectangle {
+                        Rectangle {
                             height: 28px; border-radius: 8px; border-width: 1px;
                             border-color: MaterialPalette.primary;
                             background: MaterialPalette.primary-container;
+                            visible: source-image-count > 0;
+                            opacity: source-image-count > 0 ? 1.0 : 0.0;
                             HorizontalLayout { padding-left: 12px; padding-right: 12px;
                                 Text {
                                     text: "✓ " + source-image-count + " " + Tr.src-images;
@@ -1564,6 +1585,7 @@ export component MainWindow inherits Window {
                                     vertical-alignment: center;
                                 }
                             }
+                            animate opacity { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
                         }
                     }
 
@@ -1586,12 +1608,15 @@ export component MainWindow inherits Window {
                                 animate border-color { duration: 100ms; }
                                 y: (parent.height - 18px) / 2;
 
-                                if root.skip-arb-check: Text {
+                                Text {
+                                    visible: root.skip-arb-check;
+                                    opacity: root.skip-arb-check ? 1.0 : 0.0;
                                     text: "✓";
                                     font-size: 14px; font-weight: 700;
                                     color: MaterialPalette.on-primary;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
+                                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                                 }
                             }
                             Text {
@@ -1663,12 +1688,15 @@ export component MainWindow inherits Window {
                                 border-width: root.partition-name == p ? 2px : 1px;
                                 border-color: root.partition-name == p
                                     ? MaterialPalette.primary : MaterialPalette.outline-variant;
-                                animate background { duration: 80ms; }
+                                animate background   { duration: 80ms; }
+                                animate border-color { duration: 80ms; }
+                                animate border-width { duration: 80ms; }
                                 Text {
                                     text: p; font-size: 13px;
                                     font-weight: root.partition-name == p ? 700 : 400;
                                     color: root.partition-name == p
                                         ? MaterialPalette.on-primary-container : MaterialPalette.on-surface;
+                                    animate color { duration: 80ms; }
                                     horizontal-alignment: center; vertical-alignment: center;
                                 }
                             }
@@ -1696,13 +1724,16 @@ export component MainWindow inherits Window {
                                 single-line: true;
                             }
 
-                            if custom-part-input.text == "": Text {
+                            Text {
                                 x: 12px; y: 0;
                                 width: parent.width - 24px; height: parent.height;
+                                visible: custom-part-input.text == "";
+                                opacity: custom-part-input.text == "" ? 1.0 : 0.0;
                                 text: lang == "ru" ? "или введите свой раздел…" : "or type custom partition…";
                                 font-size: 14px;
                                 color: MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
+                                animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                             }
                         }
                     }
@@ -1737,7 +1768,7 @@ export component MainWindow inherits Window {
                             letter-spacing: 2px;
                         }
                         Text {
-                            text: "v2.0.0";
+                            text: root.app-version;
                             font-size: 15px; color: MaterialPalette.on-surface-variant;
                             horizontal-alignment: center;
                         }
@@ -1803,11 +1834,18 @@ export component MainWindow inherits Window {
     } // root
 
     // ── Confirm dialog ────────────────────────────────────────────────────────
-    if show-confirm: Rectangle {
+    Rectangle {
+        visible: show-confirm;
+        opacity: show-confirm ? 1.0 : 0.0;
+        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
         z: 100; background: #00000060; width: 100%; height: 100%;
 
         // ── Step 1: choose reboot source before Flash All ─────────────────────
-        if confirm-action == 3: Rectangle {
+        Rectangle {
+            visible: show-confirm && confirm-action == 3;
+            opacity: show-confirm && confirm-action == 3 ? 1.0 : 0.0;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             x: (parent.width - 460px) / 2;
             y: (parent.height - 275px) / 2;
             width: 460px; height: 275px;
@@ -1879,7 +1917,11 @@ export component MainWindow inherits Window {
         }
 
         // ── Step 2: final confirmation ────────────────────────────────────────
-        if confirm-action == 4: Rectangle {
+        Rectangle {
+            visible: show-confirm && confirm-action == 4;
+            opacity: show-confirm && confirm-action == 4 ? 1.0 : 0.0;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             x: (parent.width - 420px) / 2;
             y: (parent.height - 240px) / 2;
             width: 420px; height: 240px;
@@ -1922,7 +1964,11 @@ export component MainWindow inherits Window {
         }
 
         // ── Source Flash step 2: final confirmation ────────────────────────────
-        if confirm-action == 8: Rectangle {
+        Rectangle {
+            visible: show-confirm && confirm-action == 8;
+            opacity: show-confirm && confirm-action == 8 ? 1.0 : 0.0;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             x: (parent.width - 420px) / 2;
             y: (parent.height - 240px) / 2;
             width: 420px; height: 240px;
@@ -1966,7 +2012,11 @@ export component MainWindow inherits Window {
 
         // ── Flash Partition step 1: choose reboot to bootloader ──────────────
         // ── Flash Partition step 1: choose reboot to bootloader ──────────────
-        if confirm-action == 5: Rectangle {
+        Rectangle {
+            visible: show-confirm && confirm-action == 5;
+            opacity: show-confirm && confirm-action == 5 ? 1.0 : 0.0;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             x: (parent.width - 440px) / 2;
             y: (parent.height - 280px) / 2;
             width: 440px; height: 280px;
@@ -2011,7 +2061,11 @@ export component MainWindow inherits Window {
         }
 
         // ── Flash Partition step 2: final confirm ─────────────────────────────
-        if confirm-action == 6: Rectangle {
+        Rectangle {
+            visible: show-confirm && confirm-action == 6;
+            opacity: show-confirm && confirm-action == 6 ? 1.0 : 0.0;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             x: (parent.width - 400px) / 2;
             y: (parent.height - 220px) / 2;
             width: 400px; height: 220px;
@@ -2040,7 +2094,11 @@ export component MainWindow inherits Window {
             }
         }
 
-        if confirm-action == 7: Rectangle {
+        Rectangle {
+            visible: show-confirm && confirm-action == 7;
+            opacity: show-confirm && confirm-action == 7 ? 1.0 : 0.0;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             x: (parent.width - 560px) / 2;
             y: (parent.height - 240px) / 2;
             width: 560px; height: 240px;
@@ -2090,7 +2148,10 @@ export component MainWindow inherits Window {
     }
 
     // ── ARB Warning dialog ────────────────────────────────────────────────────
-    if show-arb-warning: Rectangle {
+    Rectangle {
+        visible: show-arb-warning;
+        opacity: show-arb-warning ? 1.0 : 0.0;
+        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
         z: 110; background: #00000070; width: 100%; height: 100%;
 
         VerticalLayout { alignment: center;
@@ -2099,6 +2160,8 @@ export component MainWindow inherits Window {
             width: 460px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
 
             VerticalLayout { padding: 28px; spacing: 12px;
@@ -2147,7 +2210,10 @@ export component MainWindow inherits Window {
     }
 
     // ── Device ARB Warning dialog ────────────────────────────────────────────────
-    if show-arb-device-warning: Rectangle {
+    Rectangle {
+        visible: show-arb-device-warning;
+        opacity: show-arb-device-warning ? 1.0 : 0.0;
+        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
         z: 110; background: #00000070; width: 100%; height: 100%;
 
         VerticalLayout { alignment: center;
@@ -2156,6 +2222,8 @@ export component MainWindow inherits Window {
             width: 460px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
 
             VerticalLayout { padding: 28px; spacing: 12px;
@@ -2208,7 +2276,10 @@ export component MainWindow inherits Window {
     }
 
     // ── Preloader Warning dialog (Mediatek) ──────────────────────────────────────
-    if show-preloader-warning: Rectangle {
+    Rectangle {
+        visible: show-preloader-warning;
+        opacity: show-preloader-warning ? 1.0 : 0.0;
+        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
         z: 110; background: #00000070; width: 100%; height: 100%;
 
         VerticalLayout { alignment: center;
@@ -2217,6 +2288,8 @@ export component MainWindow inherits Window {
             width: 480px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
 
             VerticalLayout { padding: 28px; spacing: 12px;
@@ -2256,10 +2329,13 @@ export component MainWindow inherits Window {
                                 animate background { duration: 100ms; }
                                 animate border-color { duration: 100ms; }
                                 y: (parent.height - 18px) / 2;
-                                if root.skip-preloader: Text {
+                                Text {
+                                    visible: root.skip-preloader;
+                                    opacity: root.skip-preloader ? 1.0 : 0.0;
                                     text: "✓"; font-size: 14px; font-weight: 700;
                                     color: MaterialPalette.on-primary;
                                     horizontal-alignment: center; vertical-alignment: center;
+                                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
                                 }
                             }
                             Text {
@@ -2289,7 +2365,10 @@ export component MainWindow inherits Window {
     }
 
     // ── Flash Error dialog ──────────────────────────────────────────────────
-    if show-flash-error: Rectangle {
+    Rectangle {
+        visible: show-flash-error;
+        opacity: show-flash-error ? 1.0 : 0.0;
+        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
         z: 110; background: #00000070; width: 100%; height: 100%;
 
         VerticalLayout { alignment: center;
@@ -2298,6 +2377,8 @@ export component MainWindow inherits Window {
             width: 640px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
 
             VerticalLayout { padding: 28px; spacing: 12px;
