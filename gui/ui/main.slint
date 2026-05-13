@@ -2230,8 +2230,8 @@ export component MainWindow inherits Window {
                 }
                 Text {
                     text: lang == "ru"
-                        ? "В прошивке обнаружен preloader.img. Preloader нельзя прошить через fastbootd — требуется bootloader mode.\n\nПропуск preloader может привести к кирпичу!"
-                        : "preloader.img found in firmware. Preloader cannot be flashed via fastbootd — bootloader mode required.\n\nSkipping preloader may brick your device!";
+                        ? "В прошивке обнаружен preloader.img. Для прошивки preloader требуется preloader mode или brom mode — эти режимы недоступны без авторизации в сервисных утилитах.\n\nПропуск preloader может помочь установить новую прошивку, если стандартный метод не работает, но также может привести к кирпичу!"
+                        : "preloader.img found in firmware. Flashing preloader requires preloader mode or brom mode — these modes are unavailable without authorization in service utilities.\n\nSkipping preloader may help flash new firmware if the standard method fails, but may also brick your device!";
                     font-size: 13px;
                     color: MaterialPalette.on-surface-variant;
                     wrap: word-wrap;
@@ -2240,8 +2240,8 @@ export component MainWindow inherits Window {
                 VerticalLayout { spacing: 6px;
                     Text {
                         text: lang == "ru"
-                            ? "⚠ Пропуск preloader сделает устройство неработоспособным, но в некоторых случаях позволяет спасти «кирпич»"
-                            : "⚠ Skipping preloader will make the device unbootable, but may help recover a bricked device in some cases";
+                            ? "⚠ Пропуск preloader может помочь установить новую прошивку, если стандартный метод не срабатывает, но также может сделать устройство неработоспособным"
+                            : "⚠ Skipping preloader may help flash new firmware when the standard method fails, but may also render the device unbootable";
                         font-size: 12px; color: #f0b800; wrap: word-wrap;
                     }
                     TouchArea {
