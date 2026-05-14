@@ -32,6 +32,7 @@ LFFF flashes full firmware on **OnePlus / OPPO / Realme** devices with Qualcomm 
 
 ## Installation
 
+**Any Linux / macOS (one-liner)**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
 
@@ -39,6 +40,18 @@ curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher
 ```
 
 Installs to `~/.local/bin` — works on **all** Linux distros including atomic/immutable (Fedora Silverblue, Bazzite, NixOS, SteamOS) and macOS.
+
+**Arch Linux (AUR)**
+```bash
+yay -S lfff         # build from source
+yay -S lfff-bin     # prebuilt binary
+```
+
+**Homebrew (macOS / Linux)**
+```bash
+brew tap mrFrok/lfff
+brew install lfff
+```
 
 Then install external tools:
 ```bash
