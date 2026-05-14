@@ -146,17 +146,50 @@ install_binary() {
     ok "Downloaded"
 
     tar xzf "$tmp/$asset_name" -C "$tmp"
-    [ -f "$tmp/$binary" ] || err "Binary '$binary' not found in archive"
-    chmod +x "$tmp/$binary"
+
+    local binary_path="$tmp/$binary"
+    local is_app_bundle=false
+    if [ ! -f "$binary_path" ]; then
+        # macOS .app bundle
+        binary_path="$tmp/LFFF.app/Contents/MacOS/$binary"
+        if [ -f "$binary_path" ]; then
+            is_app_bundle=true
+        else
+            err "Binary '$binary' not found in archive"
+        fi
+    fi
+    chmod +x "$binary_path"
 
     if [ "$install_dir" = "/usr/local/bin" ] && [ "$(id -u)" -ne 0 ]; then
         info "Installing to $install_dir (requires sudo)..."
-        sudo cp "$tmp/$binary" "$install_dir/$binary"
+        sudo cp "$binary_path" "$install_dir/$binary"
     else
-        cp "$tmp/$binary" "$install_dir/$binary"
+        cp "$binary_path" "$install_dir/$binary"
     fi
 
     ok "Installed $binary to $install_dir/$binary"
+
+    # On macOS, offer to copy the .app bundle to /Applications
+    if $is_app_bundle; then
+        local app_src="$tmp/LFFF.app"
+        local app_dst="/Applications/LFFF.app"
+        if [ -d "$app_src" ] && [ ! -e "$app_dst" ]; then
+            echo
+            info "LFFF.app bundle found in archive."
+            if command -v sudo &>/dev/null; then
+                if sudo cp -r "$app_src" "$app_dst" 2>/dev/null; then
+                    ok "Copied LFFF.app to /Applications"
+                else
+                    warn "Could not copy to /Applications. To install manually:"
+                    echo "  sudo cp -r '$tmp/LFFF.app' /Applications"
+                fi
+            else
+                warn "To use LFFF from Launchpad, copy the app bundle:"
+                echo "  sudo cp -r '$tmp/LFFF.app' /Applications"
+            fi
+            echo
+        fi
+    fi
 }
 
 # Suggest shell PATH update
