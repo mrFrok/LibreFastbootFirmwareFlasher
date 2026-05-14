@@ -137,7 +137,6 @@ LibreFastbootFirmwareFlasher/
 ├── lfff-gui.desktop
 ├── lfff-gui.svg
 ├── install.sh
-├── completions/          # shell completion scripts
 ├── lib/
 │   └── src/
 │       ├── lib.rs
