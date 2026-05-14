@@ -1,6 +1,7 @@
 // src/main.rs — LFFF GUI
 
 use slint::Model;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -610,23 +611,27 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                 }
                 Cmd::CheckDeps=>{
                     log(&tx,LogLevel::Info,0,"Checking dependencies...");
-                    let r=lfff_lib::deps::install_dependencies(None,true);
-                    for d in &r.results{
-                        if d.already_installed{log(&tx,LogLevel::Success,0,format!("{}: OK",d.tool));}
-                        else if d.skipped{log(&tx,LogLevel::Warn,0,format!("{}: skipped",d.tool));}
-                        else if !d.error.is_empty(){log(&tx,LogLevel::Error,0,format!("{}: {}",d.tool,d.error));}
-                    }
-                    tx.send(WMsg::DepsResult{ok:r.all_ok(),message:if r.all_ok(){"All dependencies OK".into()}else{"Some missing".into()}}).ok();
+                    with_captured_stdout(&tx, 0, || {
+                        let r=lfff_lib::deps::install_dependencies(None,true);
+                        for d in &r.results{
+                            if d.already_installed{log(&tx,LogLevel::Success,0,format!("{}: OK",d.tool));}
+                            else if d.skipped{log(&tx,LogLevel::Warn,0,format!("{}: skipped",d.tool));}
+                            else if !d.error.is_empty(){log(&tx,LogLevel::Error,0,format!("{}: {}",d.tool,d.error));}
+                        }
+                        tx.send(WMsg::DepsResult{ok:r.all_ok(),message:if r.all_ok(){"All dependencies OK".into()}else{"Some missing".into()}}).ok();
+                    });
                 }
                 Cmd::InstallDeps=>{
                     log(&tx,LogLevel::Info,0,"Installing dependencies...");
-                    let r=lfff_lib::deps::install_dependencies(None,false);
-                    for d in &r.results{
-                        if d.installed{log(&tx,LogLevel::Success,0,format!("{}: installed",d.tool));}
-                        else if d.already_installed{log(&tx,LogLevel::Success,0,format!("{}: already OK",d.tool));}
-                        else if !d.error.is_empty(){log(&tx,LogLevel::Error,0,format!("{}: {}",d.tool,d.error));}
-                    }
-                    tx.send(WMsg::DepsResult{ok:r.all_ok(),message:if r.all_ok(){"All OK".into()}else{"Some failed".into()}}).ok();
+                    with_captured_stdout(&tx, 0, || {
+                        let r=lfff_lib::deps::install_dependencies(None,false);
+                        for d in &r.results{
+                            if d.installed{log(&tx,LogLevel::Success,0,format!("{}: installed",d.tool));}
+                            else if d.already_installed{log(&tx,LogLevel::Success,0,format!("{}: already OK",d.tool));}
+                            else if !d.error.is_empty(){log(&tx,LogLevel::Error,0,format!("{}: {}",d.tool,d.error));}
+                        }
+                        tx.send(WMsg::DepsResult{ok:r.all_ok(),message:if r.all_ok(){"All OK".into()}else{"Some failed".into()}}).ok();
+                    });
                 }
                 Cmd::Download{url}=>{
                     tx.send(WMsg::Downloading(true)).ok();
@@ -1040,6 +1045,48 @@ fn select_renderer() {
     }
 
     log::info!("Renderer: skia-opengl (default)");
+}
+
+/// Run a closure while capturing its stdout lines and forwarding them to the GUI log.
+fn with_captured_stdout<F: FnOnce()>(tx: &mpsc::Sender<WMsg>, tab: u8, f: F) {
+    unsafe {
+        let mut fds = [-1i32; 2];
+        if libc::pipe(fds.as_mut_ptr()) != 0 { f(); return; }
+        let rd_fd = fds[0];
+        let wr_fd = fds[1];
+        let saved = libc::dup(libc::STDOUT_FILENO);
+        libc::dup2(wr_fd, libc::STDOUT_FILENO);
+        libc::close(wr_fd);
+
+        let tx2 = tx.clone();
+        let reader = thread::spawn(move || {
+            use std::os::unix::io::FromRawFd;
+            let mut rd = std::fs::File::from_raw_fd(rd_fd);
+            let mut buf = [0u8; 4096];
+            let mut partial = String::new();
+            while let Ok(n) = rd.read(&mut buf) {
+                if n == 0 { break; }
+                partial.push_str(&String::from_utf8_lossy(&buf[..n]));
+                while let Some(pos) = partial.find('\n') {
+                    let line = partial[..pos].trim().to_string();
+                    if !line.is_empty() {
+                        tx2.send(WMsg::Log { level: LogLevel::Info, message: line, tab }).ok();
+                    }
+                    partial = partial[pos + 1..].to_string();
+                }
+            }
+            let last = partial.trim().to_string();
+            if !last.is_empty() {
+                tx2.send(WMsg::Log { level: LogLevel::Info, message: last, tab }).ok();
+            }
+        });
+
+        f();
+
+        libc::dup2(saved, libc::STDOUT_FILENO);
+        libc::close(saved);
+        reader.join().ok();
+    }
 }
 
 fn main() -> Result<(), slint::PlatformError> {

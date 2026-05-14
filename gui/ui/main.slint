@@ -1310,7 +1310,7 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    Rectangle { vertical-stretch: 1; }
+                    LogView { entries: root.device-log; vertical-stretch: 1; }
                 }
 
                 // ── P2: Download ──────────────────────────────────────────────
@@ -1801,6 +1801,12 @@ export component MainWindow inherits Window {
                                 icon: @image-url("icons/telegram.png");
                                 label: "Telegram group";
                                 url: "https://t.me/gt3neo5hub";
+                                open(u) => { root.open-url(u); }
+                            }
+                            AboutLink {
+                                icon: @image-url("icons/globe.png");
+                                label: "Donate — Boosty";
+                                url: "https://boosty.to/mrfrok/donate";
                                 open(u) => { root.open-url(u); }
                             }
                         }

@@ -113,7 +113,31 @@ jobs:
       - name: Build GUI
         run: cargo build --release --target ${{ matrix.target }} -p lfff-gui
 
-      - name: Package
+      - name: Package (macOS .app)
+        if: contains(matrix.name, 'macos')
+        run: |
+          brew install librsvg
+          APP="LFFF.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" dist
+          cp "target/${{ matrix.target }}/release/lfff-gui" "$APP/Contents/MacOS/lfff-gui"
+          cp gui/macOS/Info.plist "$APP/Contents/Info.plist"
+          sed -i '' 's/\$(CARGO_PKG_VERSION)/${{ github.ref_name }}/' "$APP/Contents/Info.plist"
+          # Generate .icns from logo.svg
+          mkdir -p AppIcon.iconset
+          for size in 16 32 128 256 512; do
+            rsvg-convert -w $size -h $size logo.svg \
+              > "AppIcon.iconset/icon_${size}x${size}.png"
+            rsvg-convert -w $((size*2)) -h $((size*2)) logo.svg \
+              > "AppIcon.iconset/icon_${size}x${size}@2x.png"
+          done
+          iconutil -c icns AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
+          mv "$APP" dist/
+          cd dist
+          tar czf lfff-gui-${{ matrix.name }}.tar.gz LFFF.app
+          sha256sum lfff-gui-${{ matrix.name }}.tar.gz > lfff-gui-${{ matrix.name }}.tar.gz.sha256
+
+      - name: Package (Linux)
+        if: contains(matrix.name, 'linux')
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/lfff-gui dist/

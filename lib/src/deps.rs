@@ -318,6 +318,13 @@ fn install_payload_dumper() -> DepResult {
         return result;
     }
 
+    // unzip may not be installed on minimal systems (e.g. Alpine, Docker)
+    if which::which("unzip").is_err() {
+        result.error = "unzip not found — install it (e.g. sudo apt install unzip) and re-run".into();
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return result;
+    }
+
     // Extract ZIP
     let unzip_ok = Command::new("unzip")
         .args(["-o", "-q"])
