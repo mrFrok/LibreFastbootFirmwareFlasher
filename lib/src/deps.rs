@@ -18,6 +18,19 @@ use std::process::Command;
 // ---------------------------------------------------------------------------
 
 /// Return the package name for a given tool on a given package manager.
+/// Locate brew binary on macOS (may be outside PATH when launched from .app).
+fn find_brew() -> Option<String> {
+    if which::which("brew").is_ok() {
+        return Some("brew".into());
+    }
+    for p in &["/opt/homebrew/bin/brew", "/usr/local/bin/brew"] {
+        if Path::new(p).is_file() {
+            return Some((*p).into());
+        }
+    }
+    None
+}
+
 fn pkg_for_tool(pm: &str, tool: &str) -> Option<&'static str> {
     match (pm, tool) {
         ("pacman", "fastboot") | ("pacman", "adb") => Some("android-tools"),
@@ -174,6 +187,12 @@ fn detect_pkg_manager() -> Option<String> {
             }.to_string());
         }
     }
+
+    // macOS: GUI launched from .app may not have /opt/homebrew/bin in PATH
+    if cfg!(target_os = "macos") && find_brew().is_some() {
+        return Some("brew".into());
+    }
+
     None
 }
 
@@ -459,7 +478,13 @@ fn install_via_pkg_manager(tools: &[&str], pm: &str) -> Vec<DepResult> {
 
     println!("  Running: {}", cmd.join(" "));
 
-    let status = Command::new(cmd[0]).args(&cmd[1..]).status();
+    // Resolve brew to full path if not in PATH (macOS .app launch)
+    let cmd0 = if pm == "brew" {
+        find_brew().unwrap_or_else(|| cmd[0].to_string())
+    } else {
+        cmd[0].to_string()
+    };
+    let status = Command::new(&cmd0).args(&cmd[1..]).status();
 
     match status {
         Ok(s) if s.success() => {

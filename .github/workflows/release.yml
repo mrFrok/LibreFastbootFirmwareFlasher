@@ -122,12 +122,12 @@ jobs:
           cp "target/${{ matrix.target }}/release/lfff-gui" "$APP/Contents/MacOS/lfff-gui"
           cp gui/macOS/Info.plist "$APP/Contents/Info.plist"
           sed -i '' 's/\$(CARGO_PKG_VERSION)/${{ github.ref_name }}/' "$APP/Contents/Info.plist"
-          # Generate .icns from logo.svg
+          # Generate .icns from app icon
           mkdir -p AppIcon.iconset
           for size in 16 32 128 256 512; do
-            rsvg-convert -w $size -h $size logo.svg \
+            rsvg-convert -w $size -h $size lfff-gui.svg \
               > "AppIcon.iconset/icon_${size}x${size}.png"
-            rsvg-convert -w $((size*2)) -h $((size*2)) logo.svg \
+            rsvg-convert -w $((size*2)) -h $((size*2)) lfff-gui.svg \
               > "AppIcon.iconset/icon_${size}x${size}@2x.png"
           done
           iconutil -c icns AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
