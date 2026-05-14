@@ -117,7 +117,7 @@ jobs:
         if: contains(matrix.name, 'macos')
         run: |
           brew install librsvg
-          APP="LFFF.app"
+          APP="LibreFastbootFirmwareFlasher.app"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" dist
           cp "target/${{ matrix.target }}/release/lfff-gui" "$APP/Contents/MacOS/lfff-gui"
           cp gui/macOS/Info.plist "$APP/Contents/Info.plist"
@@ -133,7 +133,7 @@ jobs:
           iconutil -c icns AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
           mv "$APP" dist/
           cd dist
-          tar czf lfff-gui-${{ matrix.name }}.tar.gz LFFF.app
+          tar czf lfff-gui-${{ matrix.name }}.tar.gz "LibreFastbootFirmwareFlasher.app"
           sha256sum lfff-gui-${{ matrix.name }}.tar.gz > lfff-gui-${{ matrix.name }}.tar.gz.sha256
 
       - name: Package (Linux)

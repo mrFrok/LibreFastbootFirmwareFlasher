@@ -151,7 +151,7 @@ install_binary() {
     local is_app_bundle=false
     if [ ! -f "$binary_path" ]; then
         # macOS .app bundle
-        binary_path="$tmp/LFFF.app/Contents/MacOS/$binary"
+        binary_path="$tmp/LibreFastbootFirmwareFlasher.app/Contents/MacOS/$binary"
         if [ -f "$binary_path" ]; then
             is_app_bundle=true
         else
@@ -171,21 +171,21 @@ install_binary() {
 
     # On macOS, offer to copy the .app bundle to /Applications
     if $is_app_bundle; then
-        local app_src="$tmp/LFFF.app"
-        local app_dst="/Applications/LFFF.app"
+        local app_src="$tmp/LibreFastbootFirmwareFlasher.app"
+        local app_dst="/Applications/LibreFastbootFirmwareFlasher.app"
         if [ -d "$app_src" ] && [ ! -e "$app_dst" ]; then
             echo
-            info "LFFF.app bundle found in archive."
+            info "LibreFastbootFirmwareFlasher.app bundle found in archive."
             if command -v sudo &>/dev/null; then
                 if sudo cp -r "$app_src" "$app_dst" 2>/dev/null; then
-                    ok "Copied LFFF.app to /Applications"
+                    ok "Copied LibreFastbootFirmwareFlasher.app to /Applications"
                 else
                     warn "Could not copy to /Applications. To install manually:"
-                    echo "  sudo cp -r '$tmp/LFFF.app' /Applications"
+                    echo "  sudo cp -r '$tmp/LibreFastbootFirmwareFlasher.app' /Applications"
                 fi
             else
-                warn "To use LFFF from Launchpad, copy the app bundle:"
-                echo "  sudo cp -r '$tmp/LFFF.app' /Applications"
+                warn "To use LibreFastbootFirmwareFlasher from Launchpad, copy the app bundle:"
+                echo "  sudo cp -r '$tmp/LibreFastbootFirmwareFlasher.app' /Applications"
             fi
             echo
         fi
