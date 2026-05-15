@@ -1,6 +1,6 @@
 // LibreFastbootFirmwareFlasher — Material Design 3 GUI (Slint built-in material)
 
-import { Palette, ScrollView } from "std-widgets.slint";
+import { Palette, ScrollView, CheckBox } from "std-widgets.slint";
 
 // MD3 color roles — Blue palette, clean dark/light
 global MaterialPalette {
@@ -2195,6 +2195,10 @@ export component MainWindow inherits Window {
                             : "⚠ Skipping xbl/abl may preserve ARB=0, but may also brick your device!";
                         font-size: 12px; color: #f0b800; wrap: word-wrap;
                     }
+                }
+                CheckBox {
+                    text: lang == "ru" ? "Пропустить xbl/abl разделы" : "Skip xbl/abl partitions";
+                    checked <=> skip-xbl-abl;
                 }
                 HorizontalLayout { spacing: 8px; alignment: end;
                     TextButton {

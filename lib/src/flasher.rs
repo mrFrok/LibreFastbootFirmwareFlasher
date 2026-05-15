@@ -15,7 +15,6 @@ use std::thread;
 use std::time::Instant;
 
 use log::{info, warn};
-use rayon::prelude::*;
 
 use crate::arb::{
     ArbInfo, arb_confirmation_gate, compare_arb_versions, extract_arb_from_xbl, find_xbl_config,
@@ -623,9 +622,8 @@ pub fn wipe_super_with_log(serial: Option<&str>, super_names: &[String], on_log:
 /// Scan firmware_dir for .img files.
 /// Strips _a/_b suffix so abl_a.img -> key "abl" (prevents abl_a_a bug).
 /// Shallower paths win on duplicates.
-/// Uses rayon for parallel directory scanning.
 pub fn collect_images(firmware_dir: &Path) -> HashMap<String, PathBuf> {
-    // Collect all entries first (sequential for safety with nested dirs)
+    let mut images: HashMap<String, PathBuf> = HashMap::new();
     let mut entries: Vec<PathBuf> = Vec::new();
 
     fn collect_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -642,32 +640,21 @@ pub fn collect_images(firmware_dir: &Path) -> HashMap<String, PathBuf> {
     }
 
     collect_recursive(firmware_dir, &mut entries);
-    // Sort by path depth (shallower first)
     entries.sort_by_key(|p| p.components().count());
 
-    // Process entries in parallel to build the HashMap
-    let results: Vec<(String, PathBuf)> = entries
-        .par_iter()
-        .map(|img| {
-            let mut stem = img
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_lowercase();
-            for suffix in &["_a", "_b"] {
-                if stem.ends_with(suffix) {
-                    stem = stem[..stem.len() - suffix.len()].to_string();
-                    break;
-                }
+    for img in entries {
+        let mut stem = img
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
+        for suffix in &["_a", "_b"] {
+            if stem.ends_with(suffix) {
+                stem = stem[..stem.len() - suffix.len()].to_string();
+                break;
             }
-            (stem, img.clone())
-        })
-        .collect();
-
-    // Merge results (first occurrence wins due to sorting by depth)
-    let mut images: HashMap<String, PathBuf> = HashMap::with_capacity(results.len());
-    for (stem, path) in results {
-        images.entry(stem).or_insert(path);
+        }
+        images.entry(stem).or_insert(img);
     }
 
     images
@@ -677,7 +664,6 @@ pub fn collect_images(firmware_dir: &Path) -> HashMap<String, PathBuf> {
 /// Applies Android build output filtering — ignores debug images, test images,
 /// temporary files, metadata, and build artifacts. Exception: `vendor_ramdump.img`
 /// is NOT ignored.
-/// Uses rayon for parallel file processing.
 pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
     fn is_ignored_file(name: &str) -> bool {
         let lower = name.to_lowercase();
@@ -695,6 +681,7 @@ pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
             || lower.ends_with(".pb")
     }
 
+    let mut images: HashMap<String, PathBuf> = HashMap::new();
     let mut entries: Vec<PathBuf> = Vec::new();
 
     if let Ok(rd) = fs::read_dir(dir) {
@@ -711,71 +698,18 @@ pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
 
     entries.sort();
 
-    // Process entries in parallel
-    let results: Vec<(String, PathBuf)> = entries
-        .par_iter()
-        .map(|img| {
-            let mut stem = img.file_stem().unwrap_or_default().to_string_lossy().to_lowercase();
-            for suffix in &["_a", "_b"] {
-                if stem.ends_with(suffix) {
-                    stem = stem[..stem.len() - suffix.len()].to_string();
-                    break;
-                }
+    for img in entries {
+        let mut stem = img.file_stem().unwrap_or_default().to_string_lossy().to_lowercase();
+        for suffix in &["_a", "_b"] {
+            if stem.ends_with(suffix) {
+                stem = stem[..stem.len() - suffix.len()].to_string();
+                break;
             }
-            (stem, img.clone())
-        })
-        .collect();
-
-    // Merge results
-    let mut images: HashMap<String, PathBuf> = HashMap::with_capacity(results.len());
-    for (stem, path) in results {
-        images.entry(stem).or_insert(path);
+        }
+        images.entry(stem).or_insert(img);
     }
 
     images
-}
-
-/// Check whether `fastboot getvar partition-size:<name>` returns a valid size.
-/// Returns `false` for non-existent partitions (so we skip them silently).
-/// Checks multiple partitions in parallel using rayon.
-pub fn check_partitions_exist(serial: Option<&str>, names: &[&str]) -> Vec<bool> {
-    names
-        .par_iter()
-        .map(|&name| {
-            let mut args: Vec<&str> = Vec::new();
-            let serial_str;
-            if let Some(s) = serial {
-                serial_str = s.to_string();
-                args.push("-s");
-                args.push(&serial_str);
-            }
-            let var = format!("partition-size:{}", name);
-            args.push("getvar");
-            args.push(&var);
-            let (code, out, err) = fastboot_cmd(&args, 5);
-            if code != 0 { return false; }
-            let combined = format!("{} {}", out, err).to_lowercase();
-            !combined.contains("not found")
-        })
-        .collect()
-}
-
-/// Check single partition (backward compat for GUI/cli single-partition flash).
-fn device_has_partition(serial: Option<&str>, name: &str) -> bool {
-    let mut args: Vec<&str> = Vec::new();
-    let serial_str;
-    if let Some(s) = serial {
-        serial_str = s.to_string();
-        args.push("-s");
-        args.push(&serial_str);
-    }
-    let var = format!("partition-size:{}", name);
-    args.push("getvar");
-    args.push(&var);
-    let (code, out, err) = fastboot_cmd(&args, 5);
-    if code != 0 { return false; }
-    let combined = format!("{} {}", out, err).to_lowercase();
-    !combined.contains("not found")
 }
 
 // ---------------------------------------------------------------------------
@@ -935,6 +869,8 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
         std::process::exit(1);
     }
 
+    // ALL partitions go to fastbootd except modem (Qualcomm) or all partitions (MediaTek)
+    // modem.img is the ONLY partition that goes to bootloader mode on Qualcomm
     let fastbootd_images: HashMap<&str, &PathBuf> = images
         .iter()
         .filter(|(k, _)| !is_bootloader_partition(k))
@@ -1111,16 +1047,6 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             .collect();
         sorted_non_super.sort_by_key(|(k, _)| *k);
 
-        // Pre-check which partitions exist on device (parallel)
-        let part_names: Vec<&str> = sorted_non_super.iter().map(|(k, _)| *k).collect();
-        let exists_map = check_partitions_exist(serial_ref, &part_names);
-        let sorted_non_super: Vec<(&str, &PathBuf)> = sorted_non_super
-            .into_iter()
-            .zip(exists_map)
-            .filter(|(_, exists)| *exists)
-            .map(|((k, v), _)| (k, v))
-            .collect();
-
         for slot in SLOTS {
             let (aborted, new_done) = flash_partition_batch(
                 &sorted_non_super,
@@ -1151,32 +1077,18 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 .collect();
             sorted_super.sort_by_key(|(k, _)| *k);
 
-            // Pre-check which super partitions exist on device (parallel)
-            let super_names: Vec<&str> = sorted_super.iter().map(|(k, _)| *k).collect();
-            let exists_map = check_partitions_exist(serial_ref, &super_names);
-            let sorted_super: Vec<(&str, &PathBuf)> = sorted_super
-                .into_iter()
-                .zip(exists_map)
-                .filter(|(_, exists)| *exists)
-                .map(|((k, v), _)| (k, v))
-                .collect();
-
-            if sorted_super.is_empty() {
-                // All super partitions already cleared, nothing to flash
-            } else {
-                let (aborted, _new_done) = flash_partition_batch(
-                    &sorted_super,
-                    serial_ref,
-                    &active_slot,
-                    total_ops,
-                    done_ops,
-                    flash_start,
-                    DeviceMode::Fastbootd,
-                    &mut session,
-                );
-                if aborted {
-                    return session;
-                }
+            let (aborted, _new_done) = flash_partition_batch(
+                &sorted_super,
+                serial_ref,
+                &active_slot,
+                total_ops,
+                done_ops,
+                flash_start,
+                DeviceMode::Fastbootd,
+                &mut session,
+            );
+            if aborted {
+                return session;
             }
         }
 
@@ -1221,16 +1133,6 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             .map(|(k, v)| (*k, *v))
             .collect();
         sorted_bl.sort_by_key(|(k, _)| *k);
-
-        // Pre-check which bootloader partitions exist on device (parallel)
-        let bl_names: Vec<&str> = sorted_bl.iter().map(|(k, _)| *k).collect();
-        let exists_map = check_partitions_exist(serial_ref, &bl_names);
-        let sorted_bl: Vec<(&str, &PathBuf)> = sorted_bl
-            .into_iter()
-            .zip(exists_map)
-            .filter(|(_, exists)| *exists)
-            .map(|((k, v), _)| (k, v))
-            .collect();
 
         for &slot in SLOTS {
             let (aborted, new_done) = flash_partition_batch(
@@ -1641,10 +1543,6 @@ pub fn run_flash_session_with_log(
                     total: total_ops,
                 });
                 done_ops += 1;
-                if !device_has_partition(serial, partition) {
-                    on_log(format!("Skipping {}_{} — not a device partition", partition, slot));
-                    continue;
-                }
                 let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log);
                 session.results.push(result);
             }
@@ -1654,7 +1552,6 @@ pub fn run_flash_session_with_log(
         if !super_imgs.is_empty() {
             on_log("Clearing super partition...".into());
             let super_names: Vec<String> = super_imgs.keys()
-                .filter(|k| device_has_partition(serial, k))
                 .map(|k| k.to_string())
                 .collect();
             if !super_names.is_empty() {
@@ -1677,10 +1574,6 @@ pub fn run_flash_session_with_log(
                     total: total_ops,
                 });
                 done_ops += 1;
-                if !device_has_partition(serial, partition) {
-                    on_log(format!("Skipping {} ({}) — not a device partition", partition, active_slot));
-                    continue;
-                }
                 let result = flash_partition_with_log(image_path, partition, &active_slot, serial, &on_log);
                 session.results.push(result);
             }
@@ -1731,10 +1624,6 @@ pub fn run_flash_session_with_log(
                     total: total_ops2,
                 });
                 done_ops2 += 1;
-                if !device_has_partition(serial, partition) {
-                    on_log(format!("Skipping {}_{} — not a device partition", partition, slot));
-                    continue;
-                }
                 let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log);
                 session.results.push(result);
             }

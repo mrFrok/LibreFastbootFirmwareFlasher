@@ -259,10 +259,19 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                             std::thread::sleep(Duration::from_secs(4));
                             wait_for_fastboot(&tx, 2, 90)
                         }
-                        _ => {
-                            log(&tx,LogLevel::Info,2,"Checking device is in fastbootd...");
-                            wait_for_fastboot(&tx, 2, 10)
+                        3 => {
+                            // Already in fastbootd — just verify device is present
+                            log(&tx,LogLevel::Info,2,"Device already in fastbootd — verifying...");
+                            let fb = lfff_lib::device::list_fastboot_devices();
+                            if !fb.is_empty() {
+                                log(&tx,LogLevel::Success,2,"Device confirmed in fastbootd");
+                                true
+                            } else {
+                                log(&tx,LogLevel::Error,2,"No device found in fastboot");
+                                false
+                            }
                         }
+                        _ => false,
                     };
                     if ready {
                         tx.send(WMsg::ReadyToFlash).ok();
