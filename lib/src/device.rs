@@ -156,7 +156,7 @@ pub fn wait_for_device(timeout: u64) -> Option<String> {
     while Instant::now() < deadline {
         let serials = list_fastboot_devices();
         if !serials.is_empty() {
-            return Some(serials.into_iter().next().unwrap());
+            return serials.into_iter().next();
         }
         let remaining = (deadline - Instant::now()).as_secs();
         info!("No device found — retrying … ({}s remaining)", remaining);
@@ -236,6 +236,48 @@ pub fn get_device_info(serial: Option<&str>) -> Option<DeviceInfo> {
         current_slot: get(&["current-slot"]),
         raw,
     })
+}
+
+/// Detect if device is MediaTek-based via fastboot getvar.
+/// 
+/// MediaTek devices report `occt` in fastboot getvar all.
+/// Qualcomm devices report `ocdt` instead.
+/// Returns true if occt is present (MediaTek), false otherwise.
+pub fn is_device_mediatek(serial: Option<&str>) -> Option<bool> {
+    let device_info = get_device_info(serial)?;
+    
+    // Check for MediaTek-specific variables
+    if device_info.raw.contains_key("occt") {
+        info!("Detected MediaTek device (occt variable present)");
+        return Some(true);
+    }
+    
+    // Check for Qualcomm-specific variables
+    if device_info.raw.contains_key("ocdt") {
+        info!("Detected Qualcomm device (ocdt variable present)");
+        return Some(false);
+    }
+    
+    // Also check for other MTK-specific variables as fallback
+    for key in device_info.raw.keys() {
+        let lower = key.to_lowercase();
+        if lower.contains("mtk") || lower.contains("mediatek") {
+            info!("Detected MediaTek device (variable '{}' contains 'mtk')", key);
+            return Some(true);
+        }
+    }
+    
+    // Check if preloader is present in device (via getvar) - some devices may report it
+    if let Some(bootloaders) = device_info.raw.get("bootloaders") {
+        if bootloaders.to_lowercase().contains("preloader") {
+            info!("Detected MediaTek device (preloader in bootloaders)");
+            return Some(true);
+        }
+    }
+    
+    // Cannot determine - return None to indicate unknown
+    info!("Cannot determine device type from fastboot getvar (assuming Qualcomm)");
+    Some(false)
 }
 
 // ---------------------------------------------------------------------------

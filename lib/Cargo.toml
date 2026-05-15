@@ -20,6 +20,7 @@ which = "8"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 url = "2"
 colored = "3"
+wait-timeout = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

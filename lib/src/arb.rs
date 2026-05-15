@@ -120,9 +120,13 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
         return ArbInfo::unknown("not a valid ELF64 file");
     }
 
-    let e_phoff = u64::from_le_bytes(data[0x20..0x28].try_into().unwrap()) as usize;
-    let e_phentsz = u16::from_le_bytes(data[0x36..0x38].try_into().unwrap()) as usize;
-    let e_phnum = u16::from_le_bytes(data[0x38..0x3A].try_into().unwrap()) as usize;
+    let e_phoff = u64::from_le_bytes(data[0x20..0x28].try_into().unwrap_or([0; 8])) as usize;
+    let e_phentsz = u16::from_le_bytes(data[0x36..0x38].try_into().unwrap_or([0; 2])) as usize;
+    let e_phnum = u16::from_le_bytes(data[0x38..0x3A].try_into().unwrap_or([0; 2])) as usize;
+    
+    if e_phentsz == 0 {
+        return ArbInfo::unknown("invalid ELF program header entry size");
+    }
 
     debug!(
         "ELF64: e_phoff={:#x} e_phentsz={} e_phnum={}",
@@ -136,9 +140,15 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
         if ph + 56 > data.len() {
             continue;
         }
-        let p_type = u32::from_le_bytes(data[ph..ph + 4].try_into().unwrap());
-        let p_offset = u64::from_le_bytes(data[ph + 8..ph + 16].try_into().unwrap()) as usize;
-        let p_filesz = u64::from_le_bytes(data[ph + 32..ph + 40].try_into().unwrap()) as usize;
+        let p_type = u32::from_le_bytes(
+            data[ph..ph + 4].try_into().unwrap_or([0; 4])
+        );
+        let p_offset = u64::from_le_bytes(
+            data[ph + 8..ph + 16].try_into().unwrap_or([0; 8])
+        ) as usize;
+        let p_filesz = u64::from_le_bytes(
+            data[ph + 32..ph + 40].try_into().unwrap_or([0; 8])
+        ) as usize;
         if p_type == PT_NULL && p_filesz > 0 {
             hash_off = p_offset;
             hash_size = p_filesz;
@@ -164,11 +174,21 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
         if off + 20 > seg.len() {
             break;
         }
-        let version = u32::from_le_bytes(seg[off..off + 4].try_into().unwrap());
-        let common_sz = u32::from_le_bytes(seg[off + 4..off + 8].try_into().unwrap()) as usize;
-        let qti_sz = u32::from_le_bytes(seg[off + 8..off + 12].try_into().unwrap()) as usize;
-        let oem_sz = u32::from_le_bytes(seg[off + 12..off + 16].try_into().unwrap()) as usize;
-        let hash_tbl_sz = u32::from_le_bytes(seg[off + 16..off + 20].try_into().unwrap()) as usize;
+        let version = u32::from_le_bytes(
+            seg[off..off + 4].try_into().unwrap_or([0; 4])
+        );
+        let common_sz = u32::from_le_bytes(
+            seg[off + 4..off + 8].try_into().unwrap_or([0; 4])
+        ) as usize;
+        let qti_sz = u32::from_le_bytes(
+            seg[off + 8..off + 12].try_into().unwrap_or([0; 4])
+        ) as usize;
+        let oem_sz = u32::from_le_bytes(
+            seg[off + 12..off + 16].try_into().unwrap_or([0; 4])
+        ) as usize;
+        let hash_tbl_sz = u32::from_le_bytes(
+            seg[off + 16..off + 20].try_into().unwrap_or([0; 4])
+        ) as usize;
 
         if (1..=10).contains(&version)
             && common_sz <= 0x1000
@@ -192,21 +212,32 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
     };
 
     // Read OEM metadata
-    let common_sz =
-        u32::from_le_bytes(seg[header_off + 4..header_off + 8].try_into().unwrap()) as usize;
-    let qti_sz =
-        u32::from_le_bytes(seg[header_off + 8..header_off + 12].try_into().unwrap()) as usize;
+    let common_sz = u32::from_le_bytes(
+        seg[header_off + 4..header_off + 8].try_into().unwrap_or([0; 4])
+    ) as usize;
+    let qti_sz = u32::from_le_bytes(
+        seg[header_off + 8..header_off + 12].try_into().unwrap_or([0; 4])
+    ) as usize;
     let oem_off = header_off + 36 + common_sz + qti_sz;
 
     if oem_off + 12 > seg.len() {
         return ArbInfo::unknown("OEM metadata offset out of bounds");
     }
 
-    let oem_major = u32::from_le_bytes(seg[oem_off..oem_off + 4].try_into().unwrap());
-    let oem_minor = u32::from_le_bytes(seg[oem_off + 4..oem_off + 8].try_into().unwrap());
-    let arb = u32::from_le_bytes(seg[oem_off + 8..oem_off + 12].try_into().unwrap());
+    let oem_major = u32::from_le_bytes(
+        seg[oem_off..oem_off + 4].try_into().unwrap_or([0; 4])
+    );
+    let oem_minor = u32::from_le_bytes(
+        seg[oem_off + 4..oem_off + 8].try_into().unwrap_or([0; 4])
+    );
+    let arb = u32::from_le_bytes(
+        seg[oem_off + 8..oem_off + 12].try_into().unwrap_or([0; 4])
+    );
 
-    let fname = path.file_name().unwrap_or_default().to_string_lossy();
+    let fname = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown");
     info!(
         "OEM Metadata Major={} Minor={} ARB={} (from {})",
         oem_major, oem_minor, arb, fname
@@ -243,9 +274,9 @@ pub fn find_xbl_config(search_dir: &Path) -> Option<PathBuf> {
             } else {
                 let fname = p
                     .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_lowercase();
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_lowercase())
+                    .unwrap_or_default();
                 if fname.starts_with("xbl_config") && fname.ends_with(".img") {
                     return Some(p);
                 }
@@ -327,10 +358,11 @@ pub fn get_device_arb_version(serial: Option<&str>) -> (ArbInfo, DeviceArbMethod
     if let Some(dumped) = dump_xbl_config_from_device(serial, None) {
         let mut arb = extract_arb_from_xbl_config(&dumped);
         if arb.version.is_some() {
-            arb.source = format!(
-                "dumped {} from device",
-                dumped.file_name().unwrap_or_default().to_string_lossy()
-            );
+            let dumped_name = dumped
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("xbl_config.img");
+            arb.source = format!("dumped {} from device", dumped_name);
             let _ = fs::remove_file(&dumped);
             return (arb, DeviceArbMethod::Dump);
         }

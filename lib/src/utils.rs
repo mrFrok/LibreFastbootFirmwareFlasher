@@ -7,9 +7,10 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 use std::process::Command;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
-use log::{error, info};
+use log::{error, info, warn};
 use sha2::{Digest, Sha256};
 
 // ---------------------------------------------------------------------------
@@ -35,8 +36,8 @@ impl CmdResult {
 // ---------------------------------------------------------------------------
 
 /// Run an external command and return (code, stdout, stderr).
-/// Never panics — callers decide how to handle failures.
-pub fn run_cmd(cmd: &[&str], _timeout_secs: u64) -> CmdResult {
+/// Enforces timeout if timeout_secs > 0. Never panics — callers decide how to handle failures.
+pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
     if cmd.is_empty() {
         return CmdResult {
             code: -1,
@@ -44,22 +45,73 @@ pub fn run_cmd(cmd: &[&str], _timeout_secs: u64) -> CmdResult {
             stderr: "Empty command".into(),
         };
     }
-    // TODO: real timeout via wait-timeout crate or tokio
-    match Command::new(cmd[0]).args(&cmd[1..]).output() {
-        Ok(output) => CmdResult {
-            code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        },
-        Err(e) => CmdResult {
-            code: -1,
-            stdout: String::new(),
-            stderr: if e.kind() == std::io::ErrorKind::NotFound {
-                format!("Binary not found: {}", cmd[0])
-            } else {
-                format!("Failed to execute {}: {}", cmd[0], e)
-            },
-        },
+    
+    // Start the command
+    let mut child = match Command::new(cmd[0]).args(&cmd[1..]).spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return CmdResult {
+                code: -1,
+                stdout: String::new(),
+                stderr: if e.kind() == std::io::ErrorKind::NotFound {
+                    format!("Binary not found: {}", cmd[0])
+                } else {
+                    format!("Failed to execute {}: {}", cmd[0], e)
+                },
+            };
+        }
+    };
+
+    // Apply timeout if specified (> 0 means use timeout)
+    if timeout_secs > 0 {
+        match wait_timeout::ChildExt::wait_timeout(&mut child, Duration::from_secs(timeout_secs)) {
+            Ok(Some(status)) => {
+                // Process exited within timeout
+                return CmdResult {
+                    code: status.code().unwrap_or(-1),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                };
+            }
+            Ok(None) => {
+                // Timeout occurred, kill the process
+                warn!("Command '{}' exceeded timeout of {}s, killing process", cmd[0], timeout_secs);
+                let _ = child.kill();
+                let _ = child.wait(); // Reap the zombie process
+                return CmdResult {
+                    code: -124, // Standard timeout exit code
+                    stdout: String::new(),
+                    stderr: format!("Command '{}' exceeded timeout of {}s", cmd[0], timeout_secs),
+                };
+            }
+            Err(e) => {
+                warn!("Error waiting for command {}: {}", cmd[0], e);
+                let _ = child.kill();
+                return CmdResult {
+                    code: -1,
+                    stdout: String::new(),
+                    stderr: format!("Error waiting for command: {}", e),
+                };
+            }
+        }
+    } else {
+        // No timeout, use output() to capture stdout/stderr
+        match Command::new(cmd[0]).args(&cmd[1..]).output() {
+            Ok(output) => {
+                return CmdResult {
+                    code: output.status.code().unwrap_or(-1),
+                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                };
+            }
+            Err(e) => {
+                return CmdResult {
+                    code: -1,
+                    stdout: String::new(),
+                    stderr: format!("Failed to execute {}: {}", cmd[0], e),
+                };
+            }
+        }
     }
 }
 
@@ -111,7 +163,10 @@ pub fn verify_sha256(file_path: &Path, expected: &str) -> Result<bool> {
     if actual != expected {
         error!(
             "Checksum mismatch for {}: expected {}, got {}",
-            file_path.file_name().unwrap_or_default().to_string_lossy(),
+            file_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown"),
             expected,
             actual
         );

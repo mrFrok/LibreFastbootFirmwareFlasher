@@ -592,7 +592,7 @@ mod tests {
     #[test]
     fn test_parse_progress_percent() {
         let line = "[#a1b2c3 245MiB/1.2GiB(19%) CN:8 DL:45MiB/s ETA:22s]";
-        let p = parse_aria2c_progress(line, 0).unwrap();
+        let p = parse_aria2c_progress(line, 0).expect("failed to parse progress");
         assert!((p.percent - 19.0).abs() < 0.01);
         assert_eq!(p.speed, "45MiB/s");
         assert_eq!(p.eta, "22s");
@@ -602,7 +602,7 @@ mod tests {
     fn test_link_expiry_future() {
         let future_ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system time error")
             .as_secs()
             + 7500; // ~2h 5m
         let url = format!("https://cdn.example.com/fw.zip?e={}&sig=abc", future_ts);

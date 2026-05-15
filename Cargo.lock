@@ -2872,7 +2872,7 @@ checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
 name = "lfff-cli"
-version = "2.0.4"
+version = "2.0.5"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -2885,7 +2885,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-gui"
-version = "2.0.4"
+version = "2.0.5"
 dependencies = [
  "arboard",
  "dirs",
@@ -2902,7 +2902,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-lib"
-version = "2.0.4"
+version = "2.0.5"
 dependencies = [
  "anyhow",
  "colored",
@@ -2912,6 +2912,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "url",
+ "wait-timeout",
  "which",
  "zip",
 ]

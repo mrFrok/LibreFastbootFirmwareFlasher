@@ -19,7 +19,7 @@ use log::{info, warn};
 use crate::arb::{
     ArbInfo, arb_confirmation_gate, compare_arb_versions, extract_arb_from_xbl, find_xbl_config,
 };
-use crate::device::run_pre_flash_checks;
+use crate::device::{run_pre_flash_checks, is_device_mediatek};
 use crate::utils::run_cmd;
 
 // ---------------------------------------------------------------------------
@@ -101,6 +101,25 @@ pub fn is_preloader(name: &str) -> bool {
 
 pub fn is_mediatek_build(images: &HashMap<String, PathBuf>) -> bool {
     images.keys().any(|k| is_preloader(k))
+}
+
+/// Detect MediaTek device by combining multiple methods:
+/// 1. Check for preloader.img in firmware (offline check)
+/// 2. Check fastboot getvar for occt/ocdt variables (online check)
+pub fn detect_device_type(serial: Option<&str>, images: &HashMap<String, PathBuf>) -> Option<bool> {
+    // First, check if firmware contains preloader.img (offline)
+    if is_mediatek_build(images) {
+        info!("Detected MediaTek device from firmware (preloader.img present)");
+        return Some(true);
+    }
+
+    // Second, try fastboot getvar check (online)
+    if let Some(is_mtk) = is_device_mediatek(serial) {
+        return Some(is_mtk);
+    }
+
+    // If both checks fail, we can't determine
+    None
 }
 
 // ---------------------------------------------------------------------------
