@@ -10,7 +10,6 @@ pub mod deps;
 pub mod device;
 pub mod downloader;
 pub mod errors;
-pub mod config;
 pub mod extractor;
 pub mod file_ops;
 pub mod flasher;
