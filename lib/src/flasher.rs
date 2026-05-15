@@ -1427,6 +1427,31 @@ pub struct FlashProgress {
     pub total: usize,
 }
 
+/// Flash a single partition with retry and logging.
+fn flash_partition_with_log(
+    image_path: &PathBuf,
+    partition: &str,
+    slot: &str,
+    serial: Option<&str>,
+    on_log: &dyn Fn(String),
+) -> FlashResult {
+    on_log(format!("Flashing {}_{} ...", partition, slot));
+    let result = flash_partition(image_path, partition, slot, serial);
+    if result.success {
+        on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
+        return result;
+    }
+    on_log(format!("{}_{} FAILED: {}", partition, slot, result.error));
+    on_log(format!("Retrying {}_{} ...", partition, slot));
+    let retry = flash_partition(image_path, partition, slot, serial);
+    if retry.success {
+        on_log(format!("{}_{} OK on retry ({:.1}s)", partition, slot, retry.duration_s));
+    } else {
+        on_log(format!("{}_{} FAILED on retry — skipping", partition, slot));
+    }
+    retry
+}
+
 pub fn run_flash_session_with_log(
     source: &FirmwareSource,
     serial: Option<&str>,
@@ -1538,24 +1563,8 @@ pub fn run_flash_session_with_log(
                     on_log(format!("Skipping {}_{} — not a device partition", partition, slot));
                     continue;
                 }
-                on_log(format!("Flashing {}_{} ...", partition, slot));
-                let result = flash_partition(image_path, partition, slot, serial);
-                if result.success {
-                    on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
-                    session.results.push(result);
-                } else {
-                    on_log(format!("{}_{} FAILED: {}", partition, slot, result.error));
-                    session.results.push(result.clone());
-                    on_log(format!("Retrying {}_{} ...", partition, slot));
-                    let retry = flash_partition(image_path, partition, slot, serial);
-                    if retry.success {
-                        on_log(format!("{}_{} OK on retry ({:.1}s)", partition, slot, retry.duration_s));
-                        *session.results.last_mut().unwrap() = retry;
-                    } else {
-                        on_log(format!("{}_{} FAILED on retry — skipping", partition, slot));
-                        *session.results.last_mut().unwrap() = retry;
-                    }
-                }
+                let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log);
+                session.results.push(result);
             }
         }
 
@@ -1590,24 +1599,8 @@ pub fn run_flash_session_with_log(
                     on_log(format!("Skipping {} ({}) — not a device partition", partition, active_slot));
                     continue;
                 }
-                on_log(format!("Flashing {}_{} (super) ...", partition, active_slot));
-                let result = flash_partition(image_path, partition, &active_slot, serial);
-                if result.success {
-                    on_log(format!("{}_{} OK ({:.1}s)", partition, active_slot, result.duration_s));
-                    session.results.push(result);
-                } else {
-                    on_log(format!("{}_{} FAILED: {}", partition, active_slot, result.error));
-                    session.results.push(result.clone());
-                    on_log(format!("Retrying {}_{} ...", partition, active_slot));
-                    let retry = flash_partition(image_path, partition, &active_slot, serial);
-                    if retry.success {
-                        on_log(format!("{}_{} OK on retry ({:.1}s)", partition, active_slot, retry.duration_s));
-                        *session.results.last_mut().unwrap() = retry;
-                    } else {
-                        on_log(format!("{}_{} FAILED on retry — skipping", partition, active_slot));
-                        *session.results.last_mut().unwrap() = retry;
-                    }
-                }
+                let result = flash_partition_with_log(image_path, partition, &active_slot, serial, &on_log);
+                session.results.push(result);
             }
         }
 
@@ -1660,24 +1653,8 @@ pub fn run_flash_session_with_log(
                     on_log(format!("Skipping {}_{} — not a device partition", partition, slot));
                     continue;
                 }
-                on_log(format!("Flashing {}_{} ...", partition, slot));
-                let result = flash_partition(image_path, partition, slot, serial);
-                if result.success {
-                    on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
-                    session.results.push(result);
-                } else {
-                    on_log(format!("{}_{} FAILED: {}", partition, slot, result.error));
-                    session.results.push(result.clone());
-                    on_log(format!("Retrying {}_{} ...", partition, slot));
-                    let retry = flash_partition(image_path, partition, slot, serial);
-                    if retry.success {
-                        on_log(format!("{}_{} OK on retry ({:.1}s)", partition, slot, retry.duration_s));
-                        *session.results.last_mut().unwrap() = retry;
-                    } else {
-                        on_log(format!("{}_{} FAILED on retry — skipping", partition, slot));
-                        *session.results.last_mut().unwrap() = retry;
-                    }
-                }
+                let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log);
+                session.results.push(result);
             }
         }
 
