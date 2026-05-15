@@ -448,65 +448,6 @@ fn print_progress(done: usize, total: usize, partition: &str, slot: &str, elapse
     io::stdout().flush().ok();
 }
 
-/// Flash a single partition with retry logic and progress bar.
-fn flash_partition_with_retry(
-    image_path: &PathBuf,
-    partition: &str,
-    slot: &str,
-    serial: Option<&str>,
-    done: usize,
-    total: usize,
-    flash_start: Instant,
-    mode: DeviceMode,
-) -> FlashResult {
-    let result = flash_with_progress(
-        image_path,
-        partition,
-        slot,
-        serial,
-        done,
-        total,
-        flash_start,
-    );
-    
-    if result.success {
-        return result;
-    }
-    
-    // First attempt failed — ask user what to do
-    println!();
-    match on_flash_error(&result, serial, mode) {
-        ErrorAction::Skip => return result,
-        ErrorAction::Abort => {
-            return FlashResult {
-                partition: partition.into(),
-                slot: slot.into(),
-                success: false,
-                error: "Aborted by user".into(),
-                duration_s: result.duration_s,
-            };
-        }
-        ErrorAction::Retry => {}
-    }
-    
-    // Retry the flash
-    let retry = flash_with_progress(
-        image_path,
-        partition,
-        slot,
-        serial,
-        done,
-        total,
-        flash_start,
-    );
-    
-    if !retry.success {
-        println!("\n✗ Retry failed. Aborting.");
-    }
-    
-    retry
-}
-
 /// Flash a batch of partitions with retry logic and progress tracking.
 /// Returns (aborted, new_done_ops) — session may have aborted flag set.
 fn flash_partition_batch(
@@ -1155,7 +1096,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 .collect();
             sorted_super.sort_by_key(|(k, _)| *k);
 
-            let (aborted, new_done) = flash_partition_batch(
+            let (aborted, _new_done) = flash_partition_batch(
                 &sorted_super,
                 serial_ref,
                 &active_slot,
@@ -1165,7 +1106,6 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 DeviceMode::Fastbootd,
                 &mut session,
             );
-            done_ops = new_done;
             if aborted {
                 return session;
             }
