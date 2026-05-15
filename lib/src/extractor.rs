@@ -14,6 +14,7 @@ use log::{debug, info};
 
 use crate::arb::{ArbInfo, extract_arb_from_xbl, find_xbl_config};
 use crate::utils::verify_sha256;
+use crate::file_ops::safe_move;
 
 // ---------------------------------------------------------------------------
 // Partition grouping (OnePlus / Qualcomm)
@@ -126,13 +127,9 @@ fn move_into_groups(images: &[PathBuf], base: &Path) -> Result<HashMap<String, V
         fs::create_dir_all(&dest_dir)?;
         let dest = dest_dir.join(img.file_name().unwrap());
         if img.canonicalize().ok() != dest.canonicalize().ok() {
-            fs::rename(img, &dest)
-                .or_else(|_| {
-                    fs::copy(img, &dest)?;
-                    fs::remove_file(img)?;
-                    Ok::<(), io::Error>(())
-                })
-                .with_context(|| format!("Failed to move {}", img.display()))?;
+            // Use safe_move which prevents symlink attacks
+            safe_move(img, &dest)
+                .with_context(|| format!("Failed to move {} to {}", img.display(), dest.display()))?;
         }
         groups.entry(group.to_string()).or_default().push(dest);
     }
