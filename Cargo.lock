@@ -2908,6 +2908,7 @@ dependencies = [
  "colored",
  "digest",
  "log",
+ "rayon",
  "regex",
  "sha2",
  "tempfile",
