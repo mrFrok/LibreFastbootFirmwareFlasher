@@ -240,42 +240,48 @@ pub fn get_device_info(serial: Option<&str>) -> Option<DeviceInfo> {
 
 /// Detect if device is MediaTek-based via fastboot getvar.
 /// 
-/// MediaTek devices report `occt` in fastboot getvar all.
-/// Qualcomm devices report `ocdt` instead.
-/// Returns true if occt is present (MediaTek), false otherwise.
+/// Checks `has-slot:occt` (MediaTek) vs `has-slot:ocdt` (Qualcomm).
+/// These are partition slot variables that indicate SoC type.
+/// Returns true if occt is present (MediaTek), false if ocdt (Qualcomm).
 pub fn is_device_mediatek(serial: Option<&str>) -> Option<bool> {
     let device_info = get_device_info(serial)?;
     
-    // Check for MediaTek-specific variables
-    if device_info.raw.contains_key("occt") {
-        info!("Detected MediaTek device (occt variable present)");
-        return Some(true);
+    // Check has-slot:occt (MediaTek partition)
+    if let Some(val) = device_info.raw.get("has-slot:occt") {
+        if val.to_lowercase() == "yes" || val == "true" || val == "1" {
+            info!("Detected MediaTek device (has-slot:occt = {})", val);
+            return Some(true);
+        }
     }
     
-    // Check for Qualcomm-specific variables
-    if device_info.raw.contains_key("ocdt") {
-        info!("Detected Qualcomm device (ocdt variable present)");
+    // Check has-slot:ocdt (Qualcomm partition)
+    if let Some(val) = device_info.raw.get("has-slot:ocdt") {
+        if val.to_lowercase() == "yes" || val == "true" || val == "1" {
+            info!("Detected Qualcomm device (has-slot:ocdt = {})", val);
+            return Some(false);
+        }
+    }
+    
+    // Fallback: check partition-type:occt/ocdt
+    if device_info.raw.contains_key("partition-type:occt") {
+        info!("Detected MediaTek device (partition-type:occt present)");
+        return Some(true);
+    }
+    if device_info.raw.contains_key("partition-type:ocdt") {
+        info!("Detected Qualcomm device (partition-type:ocdt present)");
         return Some(false);
     }
     
-    // Also check for other MTK-specific variables as fallback
-    for key in device_info.raw.keys() {
-        let lower = key.to_lowercase();
-        if lower.contains("mtk") || lower.contains("mediatek") {
+    // Fallback: search for mtk/mediatek in any getvar value
+    for (key, value) in &device_info.raw {
+        let combined = format!("{}:{}", key, value).to_lowercase();
+        if combined.contains("mtk") || combined.contains("mediatek") {
             info!("Detected MediaTek device (variable '{}' contains 'mtk')", key);
             return Some(true);
         }
     }
     
-    // Check if preloader is present in device (via getvar) - some devices may report it
-    if let Some(bootloaders) = device_info.raw.get("bootloaders") {
-        if bootloaders.to_lowercase().contains("preloader") {
-            info!("Detected MediaTek device (preloader in bootloaders)");
-            return Some(true);
-        }
-    }
-    
-    // Cannot determine - return None to indicate unknown
+    // Cannot determine — assume Qualcomm (more common in supported devices)
     info!("Cannot determine device type from fastboot getvar (assuming Qualcomm)");
     Some(false)
 }
