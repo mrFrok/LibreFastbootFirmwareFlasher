@@ -137,16 +137,23 @@ fn do_flash(tx: &mpsc::Sender<WMsg>, source: &lfff_lib::flasher::FirmwareSource,
     let failed = session.failed().len();
     let total = session.results.len();
     for r in session.failed() {
-        tx.send(WMsg::Log{level:LogLevel::Error,message:format!("FAILED: {}_{} — {}",r.partition,r.slot,r.error),tab:2}).ok();
+        let level = if session.critical_failed().iter().any(|c| c.partition == r.partition && c.slot == r.slot) {
+            LogLevel::Error
+        } else {
+            LogLevel::Warn
+        };
+        tx.send(WMsg::Log{level,message:format!("FAILED: {}_{} — {}",r.partition,r.slot,r.error),tab:2}).ok();
     }
-    let success = !session.aborted;
+    let success = !session.aborted && failed == 0;
     let crit_failed = session.critical_failed().len();
     let detail_lines: Vec<String> = session.failed().iter()
         .map(|r| format!("{}_{}: {}", r.partition, r.slot, r.error))
         .collect();
     let msg = if failed > 0 {
-        let crit = if crit_failed > 0 { format!("\n⚠ {} critical", crit_failed) } else { String::new() };
+        let crit = if crit_failed > 0 { format!("\n⚠ {} critical partition(s) failed!", crit_failed) } else { String::new() };
         format!("{}/{} failed:{}\n{}", failed, total, crit, detail_lines.join("\n"))
+    } else if session.aborted {
+        "Flash aborted by user".into()
     } else {
         format!("Done! {}/{} OK", total, total)
     };
@@ -305,10 +312,11 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                         if !r.success{log(&tx,LogLevel::Error,2,format!("Extract fail: {}",r.error));tx.send(WMsg::FlashComplete{success:false,message:r.error}).ok();tx.send(WMsg::Flashing(false)).ok();continue;}
                         log(&tx,LogLevel::Success,2,format!("{} groups extracted",r.groups.len()));r.output_dir
                     }else{fw.to_path_buf()};
-                    // Reset state, detect Mediatek
+                    // Reset state, detect Mediatek using combined method
                     skip_xbl_abl = false;
                     skip_preloader = false;
-                    as_mediatek = lfff_lib::flasher::is_mediatek_build(&lfff_lib::flasher::collect_images(&dir));
+                    let images = lfff_lib::flasher::collect_images(&dir);
+                    as_mediatek = lfff_lib::flasher::detect_device_type(serial.as_deref(), &images).unwrap_or(false);
                     if as_mediatek {
                         log(&tx,LogLevel::Info,2,"Mediatek platform detected");
                         skip_xbl_abl = true;
@@ -499,7 +507,9 @@ fn worker(rx: mpsc::Receiver<Cmd>, tx: mpsc::Sender<WMsg>,
                         let size_mb = std::fs::metadata(path).map(|m|m.len() as f64/1024.0/1024.0).unwrap_or(0.0);
                         log(&tx,LogLevel::Info,2,&format!("  {} ({:.1} MB)",name,size_mb));
                     }
-                    as_mediatek = lfff_lib::flasher::is_mediatek_build(&images);
+                    // Combined MTK detection: preloader.img + fastboot getvar occt/ocdt
+                    let is_mtk = lfff_lib::flasher::detect_device_type(serial.as_deref(), &images).unwrap_or(false);
+                    as_mediatek = is_mtk;
                     if as_mediatek {
                         log(&tx,LogLevel::Info,2,"Mediatek platform detected");
                         tx.send(WMsg::Flashing(false)).ok();
