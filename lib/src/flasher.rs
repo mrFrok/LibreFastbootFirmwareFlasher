@@ -19,59 +19,18 @@ use log::{info, warn};
 use crate::arb::{
     ArbInfo, arb_confirmation_gate, compare_arb_versions, extract_arb_from_xbl, find_xbl_config,
 };
+use crate::config::load_partitions;
 use crate::device::{run_pre_flash_checks, is_device_mediatek};
 use crate::utils::run_cmd;
+use once_cell::sync::Lazy;
+
+static PARTITIONS: Lazy<crate::config::Partitions> = Lazy::new(|| load_partitions());
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/// Partitions flashed in bootloader mode (everything else goes through fastbootd).
-const BOOTLOADER_MODE_PARTITIONS: &[&str] = &["modem"];
-
-/// Dynamic partitions inside super — flash to active slot only.
-const SUPER_PARTITIONS: &[&str] = &[
-    "system",
-    "system_ext",
-    "system_dlkm",
-    "product",
-    "odm",
-    "odm_dlkm",
-    "vendor",
-    "vendor_dlkm",
-    "my_bigball",
-    "my_carrier",
-    "my_engineering",
-    "my_heytap",
-    "my_manifest",
-    "my_product",
-    "my_region",
-    "my_stock",
-];
-
-/// Critical partitions — failure aborts flash immediately.
-const CRITICAL_PARTITIONS: &[&str] = &[
-    "abl",
-    "xbl",
-    "xbl_config",
-    "xbl_ramdump",
-    "aop",
-    "aop_config",
-    "devcfg",
-    "shrm",
-    "tz",
-    "hyp",
-    "multiimgoem",
-    "multiimgqti",
-    "qupfw",
-    "uefisecapp",
-    "imagefv",
-    "cpucp",
-    "boot",
-    "init_boot",
-    "vendor_boot",
-    "modem",
-];
+// Partition lists moved to lib/src/config.rs (loadable at runtime)
 
 const SLOTS: &[&str] = &["a", "b"];
 const REBOOT_SETTLE_SECS: u64 = 2;
@@ -79,15 +38,27 @@ const REBOOT_TIMEOUT_SECS: u64 = 90;
 const POLL_INTERVAL_SECS: u64 = 3;
 
 fn is_bootloader_partition(name: &str) -> bool {
-    BOOTLOADER_MODE_PARTITIONS.contains(&name)
+    let lower = name.to_lowercase();
+    PARTITIONS
+        .bootloader_partitions
+        .iter()
+        .any(|p| p.eq_ignore_ascii_case(&lower))
 }
 
 fn is_super_partition(name: &str) -> bool {
-    SUPER_PARTITIONS.contains(&name)
+    let lower = name.to_lowercase();
+    PARTITIONS
+        .super_partitions
+        .iter()
+        .any(|p| p.eq_ignore_ascii_case(&lower))
 }
 
 fn is_critical_partition(name: &str) -> bool {
-    CRITICAL_PARTITIONS.contains(&name)
+    let lower = name.to_lowercase();
+    PARTITIONS
+        .critical_partitions
+        .iter()
+        .any(|p| p.eq_ignore_ascii_case(&lower))
 }
 
 pub fn is_xbl_abl(name: &str) -> bool {
