@@ -9,6 +9,7 @@ pub mod arb;
 pub mod deps;
 pub mod device;
 pub mod downloader;
+pub mod errors;
 pub mod extractor;
 pub mod flasher;
 pub mod utils;
