@@ -448,7 +448,124 @@ fn print_progress(done: usize, total: usize, partition: &str, slot: &str, elapse
     io::stdout().flush().ok();
 }
 
-/// Flash partition in background thread while animating progress bar.
+/// Flash a single partition with retry logic and progress bar.
+fn flash_partition_with_retry(
+    image_path: &PathBuf,
+    partition: &str,
+    slot: &str,
+    serial: Option<&str>,
+    done: usize,
+    total: usize,
+    flash_start: Instant,
+    mode: DeviceMode,
+) -> FlashResult {
+    let result = flash_with_progress(
+        image_path,
+        partition,
+        slot,
+        serial,
+        done,
+        total,
+        flash_start,
+    );
+    
+    if result.success {
+        return result;
+    }
+    
+    // First attempt failed — ask user what to do
+    println!();
+    match on_flash_error(&result, serial, mode) {
+        ErrorAction::Skip => return result,
+        ErrorAction::Abort => {
+            return FlashResult {
+                partition: partition.into(),
+                slot: slot.into(),
+                success: false,
+                error: "Aborted by user".into(),
+                duration_s: result.duration_s,
+            };
+        }
+        ErrorAction::Retry => {}
+    }
+    
+    // Retry the flash
+    let retry = flash_with_progress(
+        image_path,
+        partition,
+        slot,
+        serial,
+        done,
+        total,
+        flash_start,
+    );
+    
+    if !retry.success {
+        println!("\n✗ Retry failed. Aborting.");
+    }
+    
+    retry
+}
+
+/// Flash a batch of partitions with retry logic and progress tracking.
+/// Returns (aborted, new_done_ops) — session may have aborted flag set.
+fn flash_partition_batch(
+    images: &[(&str, &PathBuf)],
+    serial: Option<&str>,
+    slot: &str,
+    total_ops: usize,
+    done_ops: usize,
+    flash_start: Instant,
+    mode: DeviceMode,
+    session: &mut FlashSession,
+) -> (bool, usize) {
+    // (aborted, new_done_ops)
+    let mut current_done = done_ops;
+    
+    for (partition, image_path) in images {
+        let result = flash_with_progress(
+            image_path,
+            partition,
+            slot,
+            serial,
+            current_done,
+            total_ops,
+            flash_start,
+        );
+        session.results.push(result.clone());
+        current_done += 1;
+        
+        if !result.success {
+            println!();
+            match on_flash_error(&result, serial, mode) {
+                ErrorAction::Skip => continue,
+                ErrorAction::Abort => {
+                    session.aborted = true;
+                    return (true, current_done);
+                }
+                ErrorAction::Retry => {}
+            }
+            
+            let retry = flash_with_progress(
+                image_path,
+                partition,
+                slot,
+                serial,
+                current_done - 1,
+                total_ops,
+                flash_start,
+            );
+            *session.results.last_mut().unwrap() = retry.clone();
+            if !retry.success {
+                println!("\n✗ Retry failed. Aborting.");
+                session.aborted = true;
+                return (true, current_done);
+            }
+        }
+    }
+    
+    (false, current_done)
+}
 fn flash_with_progress(
     image_path: &Path,
     partition: &str,
@@ -1002,44 +1119,26 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
         println!();
 
         // Non-super → both slots
-        let mut sorted_non_super: Vec<_> = non_super_imgs.iter().collect();
+        let mut sorted_non_super: Vec<(&str, &PathBuf)> = non_super_imgs
+            .iter()
+            .map(|(k, v)| (**k, **v))
+            .collect();
         sorted_non_super.sort_by_key(|(k, _)| *k);
 
         for slot in SLOTS {
-            for (partition, image_path) in &sorted_non_super {
-                let result = flash_with_progress(
-                    image_path,
-                    partition,
-                    slot,
-                    serial_ref,
-                    done_ops,
-                    total_ops,
-                    flash_start,
-                );
-                session.results.push(result.clone());
-                done_ops += 1;
-                if !result.success {
-                    println!();
-                    match on_flash_error(&result, serial_ref, DeviceMode::Fastbootd) {
-                        ErrorAction::Skip => { continue; }
-                        ErrorAction::Abort => { session.aborted = true; return session; }
-                        ErrorAction::Retry => {}
-                    }
-                    let retry = flash_with_progress(
-                        image_path,
-                        partition,
-                        slot,
-                        serial_ref,
-                        done_ops - 1,
-                        total_ops,
-                        flash_start,
-                    );
-                    *session.results.last_mut().unwrap() = retry.clone();
-                    if !retry.success {
-                        println!("\n✗ Retry failed. Aborting.");
-                        return session;
-                    }
-                }
+            let (aborted, new_done) = flash_partition_batch(
+                &sorted_non_super,
+                serial_ref,
+                slot,
+                total_ops,
+                done_ops,
+                flash_start,
+                DeviceMode::Fastbootd,
+                &mut session,
+            );
+            done_ops = new_done;
+            if aborted {
+                return session;
             }
         }
 
@@ -1050,43 +1149,25 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             wipe_super(serial_ref, &super_names);
             println!();
 
-            let mut sorted_super: Vec<_> = super_imgs.iter().collect();
+            let mut sorted_super: Vec<(&str, &PathBuf)> = super_imgs
+                .iter()
+                .map(|(k, v)| (**k, **v))
+                .collect();
             sorted_super.sort_by_key(|(k, _)| *k);
 
-            for (partition, image_path) in &sorted_super {
-                let result = flash_with_progress(
-                    image_path,
-                    partition,
-                    &active_slot,
-                    serial_ref,
-                    done_ops,
-                    total_ops,
-                    flash_start,
-                );
-                session.results.push(result.clone());
-                done_ops += 1;
-                if !result.success {
-                    println!();
-                    match on_flash_error(&result, serial_ref, DeviceMode::Fastbootd) {
-                        ErrorAction::Skip => { continue; }
-                        ErrorAction::Abort => { session.aborted = true; return session; }
-                        ErrorAction::Retry => {}
-                    }
-                    let retry = flash_with_progress(
-                        image_path,
-                        partition,
-                        &active_slot,
-                        serial_ref,
-                        done_ops - 1,
-                        total_ops,
-                        flash_start,
-                    );
-                    *session.results.last_mut().unwrap() = retry.clone();
-                    if !retry.success {
-                        println!("\n✗ Retry failed. Aborting.");
-                        return session;
-                    }
-                }
+            let (aborted, new_done) = flash_partition_batch(
+                &sorted_super,
+                serial_ref,
+                &active_slot,
+                total_ops,
+                done_ops,
+                flash_start,
+                DeviceMode::Fastbootd,
+                &mut session,
+            );
+            done_ops = new_done;
+            if aborted {
+                return session;
             }
         }
 
@@ -1126,44 +1207,26 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
         );
         println!();
 
-        let mut sorted_bl: Vec<_> = bootloader_images.iter().collect();
+        let mut sorted_bl: Vec<(&str, &PathBuf)> = bootloader_images
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .collect();
         sorted_bl.sort_by_key(|(k, _)| *k);
 
         for &slot in SLOTS {
-            for (partition, image_path) in &sorted_bl {
-                let result = flash_with_progress(
-                    image_path,
-                    partition,
-                    slot,
-                    serial_ref,
-                    done_ops2,
-                    total_ops2,
-                    flash_start2,
-                );
-                session.results.push(result.clone());
-                done_ops2 += 1;
-                if !result.success {
-                    println!();
-                    match on_flash_error(&result, serial_ref, DeviceMode::Bootloader) {
-                        ErrorAction::Skip => { continue; }
-                        ErrorAction::Abort => { session.aborted = true; return session; }
-                        ErrorAction::Retry => {}
-                    }
-                    let retry = flash_with_progress(
-                        image_path,
-                        partition,
-                        slot,
-                        serial_ref,
-                        done_ops2 - 1,
-                        total_ops2,
-                        flash_start2,
-                    );
-                    *session.results.last_mut().unwrap() = retry.clone();
-                    if !retry.success {
-                        println!("\n✗ Retry failed. Aborting.");
-                        return session;
-                    }
-                }
+            let (aborted, new_done) = flash_partition_batch(
+                &sorted_bl,
+                serial_ref,
+                slot,
+                total_ops2,
+                done_ops2,
+                flash_start2,
+                DeviceMode::Bootloader,
+                &mut session,
+            );
+            done_ops2 = new_done;
+            if aborted {
+                return session;
             }
         }
 
