@@ -46,8 +46,37 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
         };
     }
     
-    // Start the command
-    let mut child = match Command::new(cmd[0]).args(&cmd[1..]).spawn() {
+    // No timeout: use output() directly (captures stdout/stderr)
+    if timeout_secs == 0 {
+        match Command::new(cmd[0]).args(&cmd[1..]).output() {
+            Ok(output) => {
+                return CmdResult {
+                    code: output.status.code().unwrap_or(-1),
+                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                };
+            }
+            Err(e) => {
+                return CmdResult {
+                    code: -1,
+                    stdout: String::new(),
+                    stderr: if e.kind() == std::io::ErrorKind::NotFound {
+                        format!("Binary not found: {}", cmd[0])
+                    } else {
+                        format!("Failed to execute {}: {}", cmd[0], e)
+                    },
+                };
+            }
+        }
+    }
+    
+    // With timeout: spawn with piped stdout/stderr
+    let mut child = match Command::new(cmd[0])
+        .args(&cmd[1..])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
         Ok(c) => c,
         Err(e) => {
             return CmdResult {
@@ -62,54 +91,41 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
         }
     };
 
-    // Apply timeout if specified (> 0 means use timeout)
-    if timeout_secs > 0 {
-        match wait_timeout::ChildExt::wait_timeout(&mut child, Duration::from_secs(timeout_secs)) {
-            Ok(Some(status)) => {
-                // Process exited within timeout
-                return CmdResult {
-                    code: status.code().unwrap_or(-1),
-                    stdout: String::new(),
-                    stderr: String::new(),
-                };
+    match wait_timeout::ChildExt::wait_timeout(&mut child, Duration::from_secs(timeout_secs)) {
+        Ok(Some(status)) => {
+            // Process exited within timeout — collect output
+            let mut stdout = String::new();
+            let mut stderr = String::new();
+            if let Some(mut out) = child.stdout.take() {
+                let _ = out.read_to_string(&mut stdout);
             }
-            Ok(None) => {
-                // Timeout occurred, kill the process
-                warn!("Command '{}' exceeded timeout of {}s, killing process", cmd[0], timeout_secs);
-                let _ = child.kill();
-                let _ = child.wait(); // Reap the zombie process
-                return CmdResult {
-                    code: -124, // Standard timeout exit code
-                    stdout: String::new(),
-                    stderr: format!("Command '{}' exceeded timeout of {}s", cmd[0], timeout_secs),
-                };
+            if let Some(mut err) = child.stderr.take() {
+                let _ = err.read_to_string(&mut stderr);
             }
-            Err(e) => {
-                warn!("Error waiting for command {}: {}", cmd[0], e);
-                let _ = child.kill();
-                return CmdResult {
-                    code: -1,
-                    stdout: String::new(),
-                    stderr: format!("Error waiting for command: {}", e),
-                };
+            CmdResult {
+                code: status.code().unwrap_or(-1),
+                stdout: stdout.trim().to_string(),
+                stderr: stderr.trim().to_string(),
             }
         }
-    } else {
-        // No timeout, use output() to capture stdout/stderr
-        match Command::new(cmd[0]).args(&cmd[1..]).output() {
-            Ok(output) => {
-                return CmdResult {
-                    code: output.status.code().unwrap_or(-1),
-                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-                };
+        Ok(None) => {
+            // Timeout occurred, kill the process
+            warn!("Command '{}' exceeded timeout of {}s, killing process", cmd[0], timeout_secs);
+            let _ = child.kill();
+            let _ = child.wait();
+            CmdResult {
+                code: -124,
+                stdout: String::new(),
+                stderr: format!("Command '{}' exceeded timeout of {}s", cmd[0], timeout_secs),
             }
-            Err(e) => {
-                return CmdResult {
-                    code: -1,
-                    stdout: String::new(),
-                    stderr: format!("Failed to execute {}: {}", cmd[0], e),
-                };
+        }
+        Err(e) => {
+            warn!("Error waiting for command {}: {}", cmd[0], e);
+            let _ = child.kill();
+            CmdResult {
+                code: -1,
+                stdout: String::new(),
+                stderr: format!("Error waiting for command: {}", e),
             }
         }
     }
