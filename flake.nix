@@ -46,6 +46,7 @@
             makeWrapper
             installShellFiles
             python3
+            curl
           ];
 
           buildInputs = systemDeps;
