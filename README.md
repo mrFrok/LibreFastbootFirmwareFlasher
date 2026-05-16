@@ -53,6 +53,22 @@ brew tap mrFrok/lfff
 brew install lfff
 ```
 
+**Nix / NixOS**
+```bash
+# Install GUI (default)
+nix profile install github:mrFrok/LibreFastbootFirmwareFlasher
+
+# Or install CLI only
+nix profile install github:mrFrok/LibreFastbootFirmwareFlasher#lfff-cli
+
+# Run directly without installing
+nix run github:mrFrok/LibreFastbootFirmwareFlasher        # GUI
+nix run github:mrFrok/LibreFastbootFirmwareFlasher#cli    # CLI
+
+# Development shell
+nix develop github:mrFrok/LibreFastbootFirmwareFlasher
+```
+
 Then install external tools:
 ```bash
 lfff deps

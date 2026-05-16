@@ -4,91 +4,59 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    crane = {
-      url = "github:ipetkov/crane";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, crane }:
+  outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        craneLib = crane.mkLib pkgs;
+        
+        # System dependencies required by Slint/Skia and the application
+        systemDeps = with pkgs; [
+          fontconfig
+          freetype
+          libGL
+          libxkbcommon
+          wayland
+          xorg.libX11
+          xorg.libXcursor
+          xorg.libXi
+          xorg.libXrandr
+          xorg.libxcb
+          xorg.xcbutil
+          xorg.xcbutilkeysyms
+          xorg.xcbutilwm
+          alsa-lib
+          dbus
+          openssl
+          pkg-config
+        ];
 
-        # Common arguments for crane
-        commonArgs = {
-          src = craneLib.cleanCargoSource ./.;
-          strictDeps = true;
-          
-          buildInputs = with pkgs; [
-            # Slint/Skia dependencies
-            fontconfig
-            freetype
-            libGL
-            libxkbcommon
-            wayland
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXi
-            xorg.libXrandr
-          ];
-
-          nativeBuildInputs = with pkgs; [
-            pkg-config
-            cmake
-          ];
-        };
-
-        # Build the workspace
-        workspace = craneLib.buildWorkspace (commonArgs // {
-          cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-        });
-
-        # GUI package with desktop integration
-        lfff-gui = pkgs.stdenv.mkDerivation {
-          pname = "lfff-gui";
+        # Common Rust package arguments
+        commonRustArgs = {
+          pname = "lfff";
           version = "2.0.5";
-          
           src = ./.;
           
+          cargoLock.lockFile = ./Cargo.lock;
+          
           nativeBuildInputs = with pkgs; [
-            installShellFiles
-            makeWrapper
             pkg-config
             cmake
-            rustPlatform.cargoSetupHook
-            cargo
-            rustc
+            makeWrapper
+            installShellFiles
           ];
 
-          buildInputs = with pkgs; [
-            fontconfig
-            freetype
-            libGL
-            libxkbcommon
-            wayland
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXi
-            xorg.libXrandr
-          ];
+          buildInputs = systemDeps;
+        };
 
-          cargoDeps = craneLib.fetchCargoTarball {
-            inherit (commonArgs) src;
-          };
-
-          buildPhase = ''
-            runHook preBuild
-            cargo build --release --package lfff-gui --package lfff-cli
-            runHook postBuild
-          '';
-
-          installPhase = ''
-            runHook preInstall
-            
-            # Install binaries
-            install -Dm755 target/release/lfff-gui $out/bin/lfff-gui
+        # Build GUI package
+        lfff-gui = pkgs.rustPlatform.buildRustPackage (commonRustArgs // {
+          pname = "lfff-gui";
+          cargoBuildFlags = [ "--package" "lfff-gui" ];
+          
+          postInstall = ''
+            # Install CLI binary as well
             install -Dm755 target/release/lfff $out/bin/lfff
             
             # Install desktop file
@@ -97,48 +65,56 @@
             # Install icon
             install -Dm644 lfff-gui.svg $out/share/icons/hicolor/scalable/apps/lfff-gui.svg
             
-            # Wrap GUI binary with required libraries
+            # Wrap GUI binary with required environment
             wrapProgram $out/bin/lfff-gui \
               --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
-              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [
-                pkgs.fontconfig
-                pkgs.freetype
-                pkgs.libGL
-                pkgs.libxkbcommon
-                pkgs.wayland
-                pkgs.xorg.libX11
-                pkgs.xorg.libXcursor
-                pkgs.xorg.libXi
-                pkgs.xorg.libXrandr
-              ]}
-            
-            runHook postInstall
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath systemDeps}
           '';
 
           meta = with pkgs.lib; {
-            description = "Android firmware flasher via fastboot";
+            description = "Android firmware flasher via fastboot (GUI)";
             homepage = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
             license = licenses.gpl3;
             platforms = platforms.linux;
             mainProgram = "lfff-gui";
           };
-        };
+        });
+
+        # Build CLI package
+        lfff-cli = pkgs.rustPlatform.buildRustPackage (commonRustArgs // {
+          pname = "lfff-cli";
+          cargoBuildFlags = [ "--package" "lfff-cli" ];
+          
+          postInstall = ''
+            install -Dm755 target/release/lfff $out/bin/lfff
+          '';
+
+          meta = with pkgs.lib; {
+            description = "Android firmware flasher via fastboot (CLI)";
+            homepage = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
+            license = licenses.gpl3;
+            platforms = platforms.linux;
+            mainProgram = "lfff";
+          };
+        });
       in
       {
         packages = {
           default = lfff-gui;
           lfff-gui = lfff-gui;
-          lfff-cli = workspace;
+          lfff-cli = lfff-cli;
         };
 
         devShells.default = pkgs.mkShell {
-          inputsFrom = [ workspace ];
+          inputsFrom = [ lfff-gui ];
           
           packages = with pkgs; [
             rust-analyzer
             cargo-watch
             fastboot
             adb
+            rustfmt
+            clippy
           ];
         };
 
@@ -146,6 +122,14 @@
           default = {
             type = "app";
             program = "${lfff-gui}/bin/lfff-gui";
+          };
+          gui = {
+            type = "app";
+            program = "${lfff-gui}/bin/lfff-gui";
+          };
+          cli = {
+            type = "app";
+            program = "${lfff-cli}/bin/lfff";
           };
         };
       }
