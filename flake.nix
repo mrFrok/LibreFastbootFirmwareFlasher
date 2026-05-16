@@ -17,7 +17,7 @@
           owner = "rust-skia";
           repo = "skia";
           rev = "m142-0.89.1";
-          hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+          hash = "sha256-J7mBQ124/dODxX6MsuMW1NHizCMATAqdSzwxpP2afgk=";
         };
 
         # System dependencies required by Slint/Skia and the application
