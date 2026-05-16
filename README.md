@@ -11,7 +11,7 @@
 **Free, open-source firmware flasher for Android A/B devices via fastboot.**  
 CLI + GUI — single static binary, no Python, no bloat. Built with [Slint](https://slint.dev).
 
-[Installation](#installation) · [Quick Start](#quick-start) · [CLI Commands](#cli-commands) · [Tested Devices](#tested-device) · [Development](#development)
+[Installation](#installation) · [Quick Start](#quick-start) · [CLI Commands](#cli-commands) · [Tested Devices](#tested-devices) · [Development](#development)
 
 </div>
 
