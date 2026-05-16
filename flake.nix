@@ -10,7 +10,16 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        
+
+        # Skia source — fetched by Nix to avoid network access during build.rs
+        # skia-bindings v0.90.0 uses skia m142-0.89.1
+        skiaSrc = pkgs.fetchFromGitHub {
+          owner = "rust-skia";
+          repo = "skia";
+          rev = "m142-0.89.1";
+          hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+        };
+
         # System dependencies required by Slint/Skia and the application
         systemDeps = with pkgs; [
           fontconfig
@@ -46,13 +55,14 @@
             makeWrapper
             installShellFiles
             python3
-            curl
           ];
 
           buildInputs = systemDeps;
 
           # Skia requires python3 during build.rs; Nix sandbox doesn't expose it via PATH automatically
           PYTHON = "${pkgs.python3}/bin/python3";
+          # Pre-fetch Skia source to avoid network access during build.rs
+          SKIA_SOURCE_DIR = "${skiaSrc}";
         };
 
         # Build GUI package
