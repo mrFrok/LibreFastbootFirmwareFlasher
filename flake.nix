@@ -49,6 +49,9 @@
           ];
 
           buildInputs = systemDeps;
+
+          # Skia requires python3 during build.rs; Nix sandbox doesn't expose it via PATH automatically
+          PYTHON = "${pkgs.python3}/bin/python3";
         };
 
         # Build GUI package
