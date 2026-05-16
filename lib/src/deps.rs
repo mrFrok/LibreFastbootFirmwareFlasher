@@ -7,7 +7,7 @@
 //!
 //! Supported package managers: pacman, apt, dnf, zypper, emerge, brew,
 //!                        xbps (Void), apk (Alpine), rpm-ostree (atomic Fedora),
-//!                        nix-env (NixOS)
+//!                        nix profile / nix-env (NixOS)
 
 use std::fs;
 use std::path::Path;
@@ -52,6 +52,10 @@ fn pkg_for_tool(pm: &str, tool: &str) -> Option<&'static str> {
         ("apk", "aria2c") => Some("aria2"),
         ("rpm-ostree", "fastboot") | ("rpm-ostree", "adb") => Some("android-tools"),
         ("rpm-ostree", "aria2c") => Some("aria2"),
+        ("nix-profile", "fastboot") | ("nix-profile", "adb") => Some("android-tools"),
+        ("nix-profile", "aria2c") => Some("aria2"),
+        ("nix-env", "fastboot") | ("nix-env", "adb") => Some("android-tools"),
+        ("nix-env", "aria2c") => Some("aria2"),
         _ => None,
     }
 }
@@ -68,6 +72,8 @@ fn install_cmd(pm: &str) -> Vec<&'static str> {
         "xbps" => vec!["xbps-install", "-y"],
         "apk" => vec!["apk", "add"],
         "rpm-ostree" => vec!["rpm-ostree", "install", "-y"],
+        "nix-profile" => vec!["nix", "profile", "install"],
+        "nix-env" => vec!["nix-env", "-iA"],
         _ => vec![],
     }
 }
@@ -166,9 +172,13 @@ fn is_atomic_distro() -> bool {
 /// Detect the best available package manager.
 fn detect_pkg_manager() -> Option<String> {
     if is_atomic_distro() {
-        // Atomic distros: try native layering, then per-user installers
-        for pm in &["rpm-ostree", "nix-env", "brew"] {
+        // Atomic distros: try native layering, then modern Nix, then legacy Nix, then per-user installers
+        for pm in &["rpm-ostree", "nix", "nix-env", "brew"] {
             if which::which(pm).is_ok() {
+                // "nix" binary means nix profile is available (modern Nix)
+                if *pm == "nix" {
+                    return Some("nix-profile".into());
+                }
                 return Some((*pm).into());
             }
         }
@@ -202,7 +212,7 @@ fn sudo_cmd() -> String {
 
 fn needs_sudo(pm: &str) -> bool {
     // Per-user package managers don't need sudo
-    if matches!(pm, "brew" | "nix-env") {
+    if matches!(pm, "brew" | "nix-profile" | "nix-env") {
         return false;
     }
     // Check if running as root via env
@@ -467,7 +477,17 @@ fn install_via_pkg_manager(tools: &[&str], pm: &str) -> Vec<DepResult> {
     }
 
     let mut cmd = install_cmd(pm);
-    cmd.extend(packages.iter());
+    
+    // nix profile requires full attribute path: nixpkgs#package-name
+    let final_packages: Vec<String>;
+    let pkg_refs: Vec<&str> = if pm == "nix-profile" {
+        final_packages = packages.iter().map(|p| format!("nixpkgs#{}", p)).collect();
+        final_packages.iter().map(|s| s.as_str()).collect()
+    } else {
+        packages
+    };
+    
+    cmd.extend(pkg_refs.iter());
 
     let sc = sudo_cmd();
     if needs_sudo(pm) {

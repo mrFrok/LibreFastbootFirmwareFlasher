@@ -35,7 +35,7 @@
         # Common Rust package arguments
         commonRustArgs = {
           pname = "lfff";
-          version = "2.0.5";
+          version = "2.1.0";
           src = ./.;
           
           cargoLock.lockFile = ./Cargo.lock;
@@ -45,6 +45,7 @@
             cmake
             makeWrapper
             installShellFiles
+            python3
           ];
 
           buildInputs = systemDeps;

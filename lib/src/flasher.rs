@@ -96,26 +96,36 @@ pub fn is_xbl_abl(name: &str) -> bool {
 }
 
 pub fn is_preloader(name: &str) -> bool {
-    name.eq_ignore_ascii_case("preloader")
+    let lower = name.to_lowercase();
+    lower.starts_with("preloader")
 }
 
 pub fn is_mediatek_build(images: &HashMap<String, PathBuf>) -> bool {
-    images.keys().any(|k| is_preloader(k))
+    let has_preloader = images.keys().any(|k| is_preloader(k));
+    if !has_preloader {
+        return false;
+    }
+    // Qualcomm always has xbl or xbl_config; MediaTek doesn't
+    let has_xbl = images.keys().any(|k| {
+        let lower = k.to_lowercase();
+        lower == "xbl" || lower == "xbl.img" || lower.contains("xbl_config")
+    });
+    !has_xbl
 }
 
 /// Detect MediaTek device by combining multiple methods:
 /// 1. Check for preloader.img in firmware (offline check)
 /// 2. Check fastboot getvar for occt/ocdt variables (online check)
 pub fn detect_device_type(serial: Option<&str>, images: &HashMap<String, PathBuf>) -> Option<bool> {
-    // First, check if firmware contains preloader.img (offline)
+    // First, try fastboot getvar check (online — actual device)
+    if let Some(is_mtk) = is_device_mediatek(serial) {
+        return Some(is_mtk);
+    }
+
+    // Fallback: check if firmware contains preloader.img (offline)
     if is_mediatek_build(images) {
         info!("Detected MediaTek device from firmware (preloader.img present)");
         return Some(true);
-    }
-
-    // Second, try fastboot getvar check (online)
-    if let Some(is_mtk) = is_device_mediatek(serial) {
-        return Some(is_mtk);
     }
 
     // If both checks fail, we can't determine
@@ -303,7 +313,7 @@ pub fn get_active_slot(serial: Option<&str>) -> String {
 // ---------------------------------------------------------------------------
 
 /// Poll until device reports 'fastbootd' mode.
-fn wait_for_fastbootd(serial: Option<&str>, timeout: u64) -> bool {
+pub fn wait_for_fastbootd(serial: Option<&str>, timeout: u64) -> bool {
     let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
     while Instant::now() < deadline {
         let (_, out, _) = fastboot_cmd(&["devices"], 10);
@@ -1411,6 +1421,15 @@ pub struct FlashProgress {
     pub total: usize,
 }
 
+/// Action to take when a partition flash fails.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FailureAction {
+    /// Skip this partition and continue flashing.
+    Skip,
+    /// Abort the entire flash session.
+    Abort,
+}
+
 /// Flash a single partition with retry and logging.
 fn flash_partition_with_log(
     image_path: &PathBuf,
@@ -1423,17 +1442,10 @@ fn flash_partition_with_log(
     let result = flash_partition(image_path, partition, slot, serial);
     if result.success {
         on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
-        return result;
-    }
-    on_log(format!("{}_{} FAILED: {}", partition, slot, result.error));
-    on_log(format!("Retrying {}_{} ...", partition, slot));
-    let retry = flash_partition(image_path, partition, slot, serial);
-    if retry.success {
-        on_log(format!("{}_{} OK on retry ({:.1}s)", partition, slot, retry.duration_s));
     } else {
-        on_log(format!("{}_{} FAILED on retry — skipping", partition, slot));
+        on_log(format!("{}_{} FAILED", partition, slot));
     }
-    retry
+    result
 }
 
 pub fn run_flash_session_with_log(
@@ -1442,10 +1454,12 @@ pub fn run_flash_session_with_log(
     dry_run: bool,
     skip_xbl_abl: bool,
     skip_preloader: bool,
-    as_mediatek: bool,
+    as_mediatek: Option<bool>,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    skip_partitions: String,
     on_log: &dyn Fn(String),
     on_progress: &dyn Fn(FlashProgress),
+    on_failure: &dyn Fn(&str, &str, &str) -> FailureAction,
 ) -> FlashSession {
     let firmware_dir = source.path();
     let mut session = FlashSession::new(source, serial, dry_run);
@@ -1467,10 +1481,20 @@ pub fn run_flash_session_with_log(
 
     on_log(format!("{} images found", images.len()));
 
+    let skip_list: Vec<String> = skip_partitions
+        .split(',')
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if !skip_list.is_empty() {
+        on_log(format!("User-specified partitions to skip: {}", skip_list.join(", ")));
+    }
+
     // Filter skipped partitions
     let filtered: HashMap<String, PathBuf> = images.into_iter().filter(|(name, _)| {
         if skip_xbl_abl && is_xbl_abl(name) { on_log(format!("Skipping {} (xbl/abl excluded)", name)); false }
         else if skip_preloader && is_preloader(name) { on_log(format!("Skipping {} (preloader excluded)", name)); false }
+        else if skip_list.contains(&name.to_lowercase()) { on_log(format!("Skipping {} (user excluded)", name)); false }
         else { true }
     }).collect();
 
@@ -1479,7 +1503,10 @@ pub fn run_flash_session_with_log(
         return session;
     }
 
-    let is_mediatek = as_mediatek || is_mediatek_build(&filtered);
+    let is_mediatek = match as_mediatek {
+        Some(v) => v,
+        None => is_mediatek_build(&filtered),
+    };
 
     if is_mediatek {
         on_log("Mediatek device — all partitions will be flashed in fastbootd mode".into());
@@ -1544,6 +1571,20 @@ pub fn run_flash_session_with_log(
                 });
                 done_ops += 1;
                 let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log);
+                if !result.success {
+                    let err = result.error.clone();
+                    session.results.push(result);
+                    match on_failure(partition, slot, &err) {
+                        FailureAction::Skip => {
+                            on_log(format!("Skipping {}_{} — continuing", partition, slot));
+                            continue;
+                        }
+                        FailureAction::Abort => {
+                            on_log(format!("Flash aborted due to {}_{} failure", partition, slot));
+                            return session;
+                        }
+                    }
+                }
                 session.results.push(result);
             }
         }
@@ -1575,6 +1616,20 @@ pub fn run_flash_session_with_log(
                 });
                 done_ops += 1;
                 let result = flash_partition_with_log(image_path, partition, &active_slot, serial, &on_log);
+                if !result.success {
+                    let err = result.error.clone();
+                    session.results.push(result);
+                    match on_failure(partition, &active_slot, &err) {
+                        FailureAction::Skip => {
+                            on_log(format!("Skipping {}_{} — continuing", partition, &active_slot));
+                            continue;
+                        }
+                        FailureAction::Abort => {
+                            on_log(format!("Flash aborted due to {}_{} failure", partition, &active_slot));
+                            return session;
+                        }
+                    }
+                }
                 session.results.push(result);
             }
         }
@@ -1625,6 +1680,20 @@ pub fn run_flash_session_with_log(
                 });
                 done_ops2 += 1;
                 let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log);
+                if !result.success {
+                    let err = result.error.clone();
+                    session.results.push(result);
+                    match on_failure(partition, slot, &err) {
+                        FailureAction::Skip => {
+                            on_log(format!("Skipping {}_{} — continuing", partition, slot));
+                            continue;
+                        }
+                        FailureAction::Abort => {
+                            on_log(format!("Flash aborted due to {}_{} failure", partition, slot));
+                            return session;
+                        }
+                    }
+                }
                 session.results.push(result);
             }
         }

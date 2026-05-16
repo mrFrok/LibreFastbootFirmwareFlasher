@@ -340,17 +340,19 @@ fn cmd_flash(
         }
     };
 
-    let session = run_flash_session_with_log(
-        source,
-        serial,
-        dry_run,
-        skip_xbl_abl,
-        skip_preloader,
-        false,
-        cancel,
-        &on_log,
-        &on_progress,
-    );
+     let session = run_flash_session_with_log(
+         source,
+         serial,
+         dry_run,
+         skip_xbl_abl,
+         skip_preloader,
+         None,
+         cancel,
+         String::new(),
+         &on_log,
+         &on_progress,
+         &|_, _, _| lfff_lib::flasher::FailureAction::Abort,
+     );
 
     print_summary(&session);
 

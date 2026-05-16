@@ -50,7 +50,7 @@ fn cli_devices_no_device() {
 #[test]
 fn cli_devices_check_no_device() {
     let mut cmd = Command::cargo_bin("lfff").unwrap();
-    cmd.args(["devices", "--check"]).assert();
+    let _ = cmd.args(["devices", "--check"]).assert();
     // Will likely fail with exit 1 if no device, but should not panic
 }
 
@@ -81,7 +81,7 @@ fn cli_flash_nonexistent_directory() {
 #[test]
 fn cli_deps_check() {
     let mut cmd = Command::cargo_bin("lfff").unwrap();
-    cmd.args(["deps", "--check"]).assert();
+    let _ = cmd.args(["deps", "--check"]).assert();
     // Should run without panicking
 }
 
@@ -108,7 +108,7 @@ fn cli_flash_partition_no_args() {
 #[test]
 fn cli_verbose_flag() {
     let mut cmd = Command::cargo_bin("lfff").unwrap();
-    cmd.args(["--verbose", "deps", "--check"]).assert();
+    let _ = cmd.args(["--verbose", "deps", "--check"]).assert();
     // Should run without issues
 }
 
@@ -116,6 +116,62 @@ fn cli_verbose_flag() {
 fn cli_download_nonexistent_output() {
     let mut cmd = Command::cargo_bin("lfff").unwrap();
     // Will fail because URL is invalid, but should not panic
-    cmd.args(["download", "https://invalid.example.com/firmware.zip", "-o", "/nonexistent/dir"])
+    let _ = cmd.args(["download", "https://invalid.example.com/firmware.zip", "-o", "/nonexistent/dir"])
         .assert();
+}
+
+// Additional tests for comprehensive coverage
+
+#[test]
+fn cli_deps_help() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd.args(["deps", "--help"]).assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Install and verify external dependencies"));
+}
+
+#[test]
+fn cli_extract_help() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd.args(["extract", "--help"]).assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Extract a firmware .zip archive"));
+}
+
+#[test]
+fn cli_download_help() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd.args(["download", "--help"]).assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Download firmware via OTA link"));
+}
+
+#[test]
+fn cli_arb_help() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd.args(["arb", "--help"]).assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Anti-Rollback"));
+}
+
+#[test]
+fn cli_flash_help() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd.args(["flash", "--help"]).assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Flash an extracted firmware directory"));
+}
+
+#[test]
+fn cli_devices_help() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd.args(["devices", "--help"]).assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("List connected devices"));
 }

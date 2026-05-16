@@ -111,6 +111,25 @@ pub fn list_fastboot_devices() -> Vec<String> {
         .collect()
 }
 
+/// Return serial numbers of devices in fastbootd mode only.
+pub fn list_fastbootd_devices() -> Vec<String> {
+    let r = run_cmd(&["fastboot", "devices"], 10);
+    if r.code != 0 || r.stdout.is_empty() {
+        return Vec::new();
+    }
+    r.stdout
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 && parts[1] == "fastbootd" {
+                Some(parts[0].to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 /// Return serial numbers of devices reachable via adb.
 pub fn list_adb_devices() -> Vec<String> {
     let r = run_cmd(&["adb", "devices"], 10);
@@ -244,10 +263,43 @@ pub fn get_device_info(serial: Option<&str>) -> Option<DeviceInfo> {
 /// These are partition slot variables that indicate SoC type.
 /// Returns true if occt is present (MediaTek), false if ocdt (Qualcomm).
 pub fn is_device_mediatek(serial: Option<&str>) -> Option<bool> {
-    let device_info = get_device_info(serial)?;
-    
+    let getvar = |var: &str| -> Option<String> {
+        let mut cmd: Vec<&str> = vec!["fastboot"];
+        let s;
+        if let Some(ser) = serial {
+            s = ser.to_string();
+            cmd.push("-s");
+            cmd.push(&s);
+        }
+        cmd.extend(&["getvar", var]);
+        let r = run_cmd(&cmd, 3);
+        let output = if r.stderr.is_empty() { &r.stdout } else { &r.stderr };
+        if output.is_empty() { return None; }
+        for line in output.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.contains("Finished") || trimmed.contains("total time") {
+                continue;
+            }
+            // (bootloader) has-slot:ocdt: yes  → value after last ": "
+            if let Some((_, val)) = trimmed.rsplit_once(": ") {
+                let v = val.trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+            // getvar:has-slot:ocdt yes  → value after last space
+            if let Some((_, val)) = trimmed.rsplit_once(' ') {
+                let v = val.trim();
+                if !v.is_empty() && !v.contains(':') {
+                    return Some(v.to_string());
+                }
+            }
+        }
+        None
+    };
+
     // Check has-slot:occt (MediaTek partition)
-    if let Some(val) = device_info.raw.get("has-slot:occt") {
+    if let Some(val) = getvar("has-slot:occt") {
         if val.to_lowercase() == "yes" || val == "true" || val == "1" {
             info!("Detected MediaTek device (has-slot:occt = {})", val);
             return Some(true);
@@ -255,7 +307,7 @@ pub fn is_device_mediatek(serial: Option<&str>) -> Option<bool> {
     }
     
     // Check has-slot:ocdt (Qualcomm partition)
-    if let Some(val) = device_info.raw.get("has-slot:ocdt") {
+    if let Some(val) = getvar("has-slot:ocdt") {
         if val.to_lowercase() == "yes" || val == "true" || val == "1" {
             info!("Detected Qualcomm device (has-slot:ocdt = {})", val);
             return Some(false);
@@ -263,21 +315,23 @@ pub fn is_device_mediatek(serial: Option<&str>) -> Option<bool> {
     }
     
     // Fallback: check partition-type:occt/ocdt
-    if device_info.raw.contains_key("partition-type:occt") {
+    if getvar("partition-type:occt").is_some() {
         info!("Detected MediaTek device (partition-type:occt present)");
         return Some(true);
     }
-    if device_info.raw.contains_key("partition-type:ocdt") {
+    if getvar("partition-type:ocdt").is_some() {
         info!("Detected Qualcomm device (partition-type:ocdt present)");
         return Some(false);
     }
     
-    // Fallback: search for mtk/mediatek in any getvar value
-    for (key, value) in &device_info.raw {
-        let combined = format!("{}:{}", key, value).to_lowercase();
-        if combined.contains("mtk") || combined.contains("mediatek") {
-            info!("Detected MediaTek device (variable '{}' contains 'mtk')", key);
-            return Some(true);
+    // Last resort: full getvar all with longer timeout
+    if let Some(device_info) = get_device_info(serial) {
+        for (key, value) in &device_info.raw {
+            let combined = format!("{}:{}", key, value).to_lowercase();
+            if combined.contains("mtk") || combined.contains("mediatek") {
+                info!("Detected MediaTek device (variable '{}' contains 'mtk')", key);
+                return Some(true);
+            }
         }
     }
     
