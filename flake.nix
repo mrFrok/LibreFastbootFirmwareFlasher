@@ -11,8 +11,28 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        # Skia source — fetched by Nix to avoid network access during build.rs
-        # skia-bindings v0.90.0 uses skia m142-0.89.1
+        # Runtime libraries needed by the prebuilt binary
+        runtimeDeps = with pkgs; [
+          fontconfig
+          freetype
+          libGL
+          libxkbcommon
+          wayland
+          libx11
+          libxcursor
+          libxi
+          libxrandr
+          libxcb
+          libxcb-util
+          libxcb-keysyms
+          libxcb-wm
+          alsa-lib
+          dbus
+          openssl
+          stdenv.cc.cc.lib
+        ];
+
+        # Build-time dependencies (only used when building from source)
         skiaSrc = pkgs.fetchFromGitHub {
           owner = "rust-skia";
           repo = "skia";
@@ -20,50 +40,14 @@
           hash = "sha256-J7mBQ124/dODxX6MsuMW1NHizCMATAqdSzwxpP2afgk=";
         };
 
-        # System dependencies required by Slint/Skia and the application
-        systemDeps = with pkgs; [
-          fontconfig
-          freetype
-          libGL
-          libxkbcommon
-          wayland
-          xorg.libX11
-          xorg.libXcursor
-          xorg.libXi
-          xorg.libXrandr
-          xorg.libxcb
-          xorg.xcbutil
-          xorg.xcbutilkeysyms
-          xorg.xcbutilwm
-          alsa-lib
-          dbus
-          openssl
-          pkg-config
-        ];
-
-        # Common Rust package arguments
         commonRustArgs = {
           pname = "lfff";
           version = "2.1.0";
           src = ./.;
-          
           cargoLock.lockFile = ./Cargo.lock;
-          
-          nativeBuildInputs = with pkgs; [
-            pkg-config
-            cmake
-            makeWrapper
-            installShellFiles
-            python3
-            gn
-            ninja
-          ];
-
-          buildInputs = systemDeps;
-
-          # Skia requires python3 during build.rs; Nix sandbox doesn't expose it via PATH automatically
+          nativeBuildInputs = with pkgs; [ pkg-config cmake makeWrapper installShellFiles python3 gn ninja ];
+          buildInputs = runtimeDeps;
           PYTHON = "${pkgs.python3}/bin/python3";
-          # Pre-fetch Skia source to avoid network access during build.rs
           SKIA_SOURCE_DIR = "${skiaSrc}";
         };
 
@@ -96,7 +80,7 @@
 
             wrapProgram $out/bin/lfff-gui \
               --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
-              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath (systemDeps ++ [ pkgs.stdenv.cc.cc.lib ])}
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeDeps}
           '';
 
           meta = with pkgs.lib; {
@@ -126,7 +110,7 @@
             # Wrap GUI binary with required environment
             wrapProgram $out/bin/lfff-gui \
               --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
-              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath systemDeps}
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeDeps}
           '';
 
           meta = with pkgs.lib; {
