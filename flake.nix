@@ -93,9 +93,8 @@
           installPhase = ''
             mkdir -p $out/bin $out/share/applications $out/share/icons/hicolor/scalable/apps
             install -Dm755 lfff-gui $out/bin/lfff-gui
-            install -Dm755 lfff $out/bin/lfff
-            install -Dm644 lfff-gui.desktop $out/share/applications/lfff-gui.desktop
-            install -Dm644 lfff-gui.svg $out/share/icons/hicolor/scalable/apps/lfff-gui.svg
+            install -Dm644 ${./lfff-gui.desktop} $out/share/applications/lfff-gui.desktop
+            install -Dm644 ${./lfff-gui.svg} $out/share/icons/hicolor/scalable/apps/lfff-gui.svg
 
             wrapProgram $out/bin/lfff-gui \
               --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
