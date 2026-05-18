@@ -84,8 +84,6 @@
 
           nativeBuildInputs = with pkgs; [ makeWrapper ];
 
-          buildInputs = systemDeps;
-
           unpackPhase = ''
             tar xzf $src
           '';
