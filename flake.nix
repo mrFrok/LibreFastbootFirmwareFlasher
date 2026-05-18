@@ -67,6 +67,45 @@
           SKIA_SOURCE_DIR = "${skiaSrc}";
         };
 
+        # Binary package — downloads prebuilt release from GitHub
+        lfff-bin = pkgs.stdenv.mkDerivation rec {
+          pname = "lfff-bin";
+          version = "2.1.0";
+
+          src = pkgs.fetchurl {
+            url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-x86_64.tar.gz";
+            hash = "sha256-88d5ff97bba7157cdfc7395429d3696cd81e34acc972410ce5a8fe5e2c874a85";
+          };
+
+          nativeBuildInputs = with pkgs; [ autoPatchelfHook makeWrapper ];
+
+          buildInputs = systemDeps;
+
+          unpackPhase = ''
+            tar xzf $src
+          '';
+
+          installPhase = ''
+            mkdir -p $out/bin $out/share/applications $out/share/icons/hicolor/scalable/apps
+            install -Dm755 lfff-gui $out/bin/lfff-gui
+            install -Dm755 lfff $out/bin/lfff
+            install -Dm644 lfff-gui.desktop $out/share/applications/lfff-gui.desktop
+            install -Dm644 lfff-gui.svg $out/share/icons/hicolor/scalable/apps/lfff-gui.svg
+
+            wrapProgram $out/bin/lfff-gui \
+              --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath systemDeps}
+          '';
+
+          meta = with pkgs.lib; {
+            description = "Android firmware flasher via fastboot (GUI, prebuilt binary)";
+            homepage = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
+            license = licenses.gpl3;
+            platforms = platforms.linux;
+            mainProgram = "lfff-gui";
+          };
+        };
+
         # Build GUI package
         lfff-gui = pkgs.rustPlatform.buildRustPackage (commonRustArgs // {
           pname = "lfff-gui";
@@ -117,7 +156,8 @@
       in
       {
         packages = {
-          default = lfff-gui;
+          default = lfff-bin;
+          lfff-bin = lfff-bin;
           lfff-gui = lfff-gui;
           lfff-cli = lfff-cli;
         };
@@ -138,11 +178,11 @@
         apps = {
           default = {
             type = "app";
-            program = "${lfff-gui}/bin/lfff-gui";
+            program = "${lfff-bin}/bin/lfff-gui";
           };
           gui = {
             type = "app";
-            program = "${lfff-gui}/bin/lfff-gui";
+            program = "${lfff-bin}/bin/lfff-gui";
           };
           cli = {
             type = "app";
