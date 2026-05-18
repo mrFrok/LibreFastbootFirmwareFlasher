@@ -72,7 +72,7 @@
           pname = "lfff-bin";
           version = "2.1.0";
 
-          arch = if pkgs.system == "aarch64-linux" then "aarch64" else "x86_64";
+          arch = if system == "aarch64-linux" then "aarch64" else "x86_64";
 
           src = pkgs.fetchurl {
             url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
@@ -166,7 +166,7 @@
               lfff-gui = lfff-gui;
               lfff-cli = lfff-cli;
             };
-            linux-only = if pkgs.system == "x86_64-linux" || pkgs.system == "aarch64-linux" then
+            linux-only = if system == "x86_64-linux" || system == "aarch64-linux" then
               { lfff-bin = lfff-bin; default = lfff-bin; }
             else
               { default = lfff-gui; };
@@ -188,7 +188,7 @@
 
         apps =
           let
-            gui-pkg = if pkgs.system == "x86_64-linux" || pkgs.system == "aarch64-linux" then lfff-bin else lfff-gui;
+            gui-pkg = if system == "x86_64-linux" || system == "aarch64-linux" then lfff-bin else lfff-gui;
           in
           {
             default = {
