@@ -55,6 +55,8 @@
             makeWrapper
             installShellFiles
             python3
+            gn
+            ninja
           ];
 
           buildInputs = systemDeps;
