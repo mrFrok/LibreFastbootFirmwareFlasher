@@ -72,9 +72,14 @@
           pname = "lfff-bin";
           version = "2.1.0";
 
+          arch = if pkgs.system == "aarch64-linux" then "aarch64" else "x86_64";
+
           src = pkgs.fetchurl {
-            url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-x86_64.tar.gz";
-            hash = "sha256-88d5ff97bba7157cdfc7395429d3696cd81e34acc972410ce5a8fe5e2c874a85";
+            url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
+            sha256 = if arch == "aarch64" then
+              "a1c8f415e938d0559e97f50d6b439ac7b23ffc2595ebf76edfd78b518f3d80d3"
+            else
+              "88d5ff97bba7157cdfc7395429d3696cd81e34acc972410ce5a8fe5e2c874a85";
           };
 
           nativeBuildInputs = with pkgs; [ autoPatchelfHook makeWrapper ];
@@ -155,12 +160,18 @@
         });
       in
       {
-        packages = {
-          default = lfff-bin;
-          lfff-bin = lfff-bin;
-          lfff-gui = lfff-gui;
-          lfff-cli = lfff-cli;
-        };
+        packages =
+          let
+            common = {
+              lfff-gui = lfff-gui;
+              lfff-cli = lfff-cli;
+            };
+            linux-only = if pkgs.system == "x86_64-linux" || pkgs.system == "aarch64-linux" then
+              { lfff-bin = lfff-bin; default = lfff-bin; }
+            else
+              { default = lfff-gui; };
+          in
+          common // linux-only;
 
         devShells.default = pkgs.mkShell {
           inputsFrom = [ lfff-gui ];
@@ -175,20 +186,24 @@
           ];
         };
 
-        apps = {
-          default = {
-            type = "app";
-            program = "${lfff-bin}/bin/lfff-gui";
+        apps =
+          let
+            gui-pkg = if pkgs.system == "x86_64-linux" || pkgs.system == "aarch64-linux" then lfff-bin else lfff-gui;
+          in
+          {
+            default = {
+              type = "app";
+              program = "${gui-pkg}/bin/lfff-gui";
+            };
+            gui = {
+              type = "app";
+              program = "${gui-pkg}/bin/lfff-gui";
+            };
+            cli = {
+              type = "app";
+              program = "${lfff-cli}/bin/lfff";
+            };
           };
-          gui = {
-            type = "app";
-            program = "${lfff-bin}/bin/lfff-gui";
-          };
-          cli = {
-            type = "app";
-            program = "${lfff-cli}/bin/lfff";
-          };
-        };
       }
     );
 }
