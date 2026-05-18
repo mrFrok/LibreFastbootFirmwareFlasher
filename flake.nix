@@ -82,7 +82,7 @@
               "88d5ff97bba7157cdfc7395429d3696cd81e34acc972410ce5a8fe5e2c874a85";
           };
 
-          nativeBuildInputs = with pkgs; [ autoPatchelfHook makeWrapper ];
+          nativeBuildInputs = with pkgs; [ makeWrapper ];
 
           buildInputs = systemDeps;
 
@@ -98,7 +98,7 @@
 
             wrapProgram $out/bin/lfff-gui \
               --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
-              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath systemDeps}
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath (systemDeps ++ [ pkgs.stdenv.cc.cc.lib ])}
           '';
 
           meta = with pkgs.lib; {
