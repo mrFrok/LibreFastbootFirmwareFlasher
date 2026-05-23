@@ -1394,11 +1394,21 @@ export component MainWindow inherits Window {
                                     ? MaterialPalette.surface-container-highest
                                     : MaterialPalette.surface-container-high;
                                 HorizontalLayout { spacing: 8px; padding-left: 16px; padding-right: 16px;
-                                    Text { text: lang == "ru" ? "Дата" : "Date"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; width: 145px; overflow: elide; }
-                                    Text { text: lang == "ru" ? "Прошивка" : "Firmware"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-stretch: 2; overflow: elide; }
-                                    Text { text: lang == "ru" ? "Устройство" : "Device"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; width: 130px; overflow: elide; }
-                                    Text { text: lang == "ru" ? "Результат" : "Result"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; width: 80px; horizontal-alignment: center; overflow: elide; }
-                                    Text { text: lang == "ru" ? "Время" : "Duration"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; width: 70px; horizontal-alignment: right; overflow: elide; }
+                                    Rectangle { width: 145px;
+                                        Text { text: lang == "ru" ? "Дата" : "Date"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
+                                    }
+                                    Rectangle { horizontal-stretch: 2;
+                                        Text { text: lang == "ru" ? "Прошивка" : "Firmware"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
+                                    }
+                                    Rectangle { width: 130px;
+                                        Text { text: lang == "ru" ? "Устройство" : "Device"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
+                                    }
+                                    Rectangle { width: 80px;
+                                        Text { text: lang == "ru" ? "Результат" : "Result"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: center; overflow: elide; width: 100%; }
+                                    }
+                                    Rectangle { width: 70px;
+                                        Text { text: lang == "ru" ? "Время" : "Duration"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: right; overflow: elide; width: 100%; }
+                                    }
                                 }
                             }
 
@@ -1448,11 +1458,19 @@ export component MainWindow inherits Window {
                                             }
 
                                             HorizontalLayout { spacing: 8px; padding-left: 16px; padding-right: 16px;
-                                                Text { text: item.timestamp; font-size: 12px; font-family: "monospace"; color: MaterialPalette.on-surface-variant; vertical-alignment: center; width: 145px; overflow: elide; }
-                                                Text { text: item.firmware; font-size: 12px; color: MaterialPalette.on-surface; vertical-alignment: center; horizontal-stretch: 2; overflow: elide; }
-                                                Text { text: item.device; font-size: 12px; color: MaterialPalette.on-surface-variant; vertical-alignment: center; width: 130px; overflow: elide; }
-                                                HorizontalLayout { width: 80px; alignment: center;
+                                                Rectangle { width: 145px;
+                                                    Text { text: item.timestamp; font-size: 12px; font-family: "monospace"; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
+                                                }
+                                                Rectangle { horizontal-stretch: 2;
+                                                    Text { text: item.firmware; font-size: 12px; color: MaterialPalette.on-surface; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
+                                                }
+                                                Rectangle { width: 130px;
+                                                    Text { text: item.device; font-size: 12px; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
+                                                }
+                                                Rectangle { width: 80px;
                                                     Rectangle {
+                                                        x: (parent.width - 64px) / 2;
+                                                        y: (parent.height - 22px) / 2;
                                                         width: 64px; height: 22px; border-radius: 6px;
                                                         background: item.result == "OK" ? MaterialPalette.success-container
                                                                   : item.result == "Aborted" ? MaterialPalette.warning-container
@@ -1471,7 +1489,9 @@ export component MainWindow inherits Window {
                                                         }
                                                     }
                                                 }
-                                                Text { text: item.duration; font-size: 12px; font-family: "monospace"; color: MaterialPalette.on-surface-variant; vertical-alignment: center; width: 70px; horizontal-alignment: right; }
+                                                Rectangle { width: 70px;
+                                                    Text { text: item.duration; font-size: 12px; font-family: "monospace"; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: right; overflow: elide; width: 100%; }
+                                                }
                                             }
 
                                             // Bottom divider
