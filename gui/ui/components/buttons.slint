@@ -169,6 +169,27 @@ export component PathField inherits Rectangle {
     }
 }
 
+export component BackButton {
+    callback clicked;
+    width: 40px; height: 40px;
+    TouchArea {
+        clicked => { root.clicked(); }
+        Rectangle {
+            border-radius: 20px; border-width: 1px;
+            border-color: MaterialPalette.outline;
+            background: parent.has-hover ? MaterialPalette.surface-container-highest : transparent;
+            animate background { duration: 80ms; }
+            Image {
+                source: @image-url("../icons/arrow_back.svg");
+                width: 20px; height: 20px;
+                x: (parent.width - 20px) / 2;
+                y: (parent.height - 20px) / 2;
+                colorize: MaterialPalette.on-surface-variant;
+            }
+        }
+    }
+}
+
 export component DeviceBanner inherits Rectangle {
     in property <DeviceInfo> device;
     callback set-slot(string);

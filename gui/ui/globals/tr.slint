@@ -42,6 +42,9 @@ export global Tr {
     out property <string> confirm-flash:lang == "ru" ? "Начать прошивку?\nВсе разделы будут перезаписаны." : "Start flashing?\nAll partitions will be overwritten.";
     out property <string> flash-btn:    lang == "ru" ? "Прошить"        : "Flash";
     out property <string> slot-lbl:     lang == "ru" ? "Слот "          : "Slot ";
+    out property <string> slot-switch-title: lang == "ru" ? "Переключить слот" : "Switch Slot";
+    out property <string> slot-switch-warn:  lang == "ru" ? "⚠️ Переключение слота может привести к невозможности загрузки устройства. Убедитесь, что целевой слот содержит рабочую прошивку.\n\nРаботает только в режиме fastboot (bootloader)." : "️ Switching slots may brick your device. Ensure the target slot has a working firmware.\n\nWorks only in fastboot (bootloader) mode.";
+    out property <string> slot-switch-btn:   lang == "ru" ? "Переключить на слот " : "Switch to slot ";
     out property <string> author-lbl:   lang == "ru" ? "Автор: mrFrok"  : "Author: mrFrok";
     out property <string> license-lbl:  lang == "ru" ? "Лицензия: GPL-3.0" : "License: GPL-3.0";
 
