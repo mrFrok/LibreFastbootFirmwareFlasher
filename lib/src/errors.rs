@@ -1,410 +1,151 @@
 //! Structured error types for better error handling and diagnostics.
 //!
-//! Provides detailed error context for different failure scenarios,
-//! making it easier for users and developers to understand what went wrong.
+//! Uses `thiserror` for concise derive-based Display impls.
 
-use std::fmt;
 use std::path::PathBuf;
 
-/// High-level error categories for firmware flashing
-#[derive(Debug, Clone)]
+// ---------------------------------------------------------------------------
+// Top-level error
+// ---------------------------------------------------------------------------
+
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum FlashError {
-    /// Device-related errors
-    Device(DeviceError),
-    /// Firmware/image related errors
-    Firmware(FirmwareError),
-    /// Flash operation errors
-    Flash(FlashOperationError),
-    /// Partition-related errors
-    Partition(PartitionError),
-    /// Command execution errors
-    Command(CommandError),
-    /// Generic error with context
-    Generic {
-        context: String,
-        details: String,
-    },
+    #[error(transparent)]
+    Device(#[from] DeviceError),
+    #[error(transparent)]
+    Firmware(#[from] FirmwareError),
+    #[error(transparent)]
+    Flash(#[from] FlashOperationError),
+    #[error(transparent)]
+    Partition(#[from] PartitionError),
+    #[error(transparent)]
+    Command(#[from] CommandError),
+    #[error("{context}: {details}")]
+    Generic { context: String, details: String },
 }
 
-/// Device-related errors
-#[derive(Debug, Clone)]
+// ---------------------------------------------------------------------------
+// Device errors
+// ---------------------------------------------------------------------------
+
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum DeviceError {
-    /// Device not found in fastboot/adb
-    NotFound {
-        searched_for: String,
-        context: String,
-    },
-    /// Communication with device failed
-    CommunicationFailed {
-        reason: String,
-        last_error: String,
-    },
-    /// Device is locked (bootloader not unlocked)
-    Locked {
-        device: String,
-        suggestion: String,
-    },
-    /// Insufficient battery level
-    BatteryLow {
-        current: i32,
-        minimum: i32,
-    },
-    /// Cable/connection speed too slow
-    SlowConnection {
-        speed_mbs: f64,
-        minimum_mbs: f64,
-    },
-    /// Device type detection failed
-    TypeDetectionFailed {
-        reason: String,
-    },
+    #[error("Device not found ({searched_for}): {context}")]
+    NotFound { searched_for: String, context: String },
+    #[error("Communication with device failed: {reason} ({last_error})")]
+    CommunicationFailed { reason: String, last_error: String },
+    #[error("Device {device} is locked: {suggestion}")]
+    Locked { device: String, suggestion: String },
+    #[error("Battery level too low: {current}% (minimum: {minimum}%)")]
+    BatteryLow { current: i32, minimum: i32 },
+    #[error("USB connection too slow: {speed_mbs:.2} MB/s (minimum: {minimum_mbs:.2} MB/s)")]
+    SlowConnection { speed_mbs: f64, minimum_mbs: f64 },
+    #[error("Could not detect device type: {reason}")]
+    TypeDetectionFailed { reason: String },
 }
 
-/// Firmware/image related errors
-#[derive(Debug, Clone)]
+// ---------------------------------------------------------------------------
+// Firmware errors
+// ---------------------------------------------------------------------------
+
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum FirmwareError {
-    /// File not found
-    FileNotFound {
-        path: PathBuf,
-        description: String,
+    #[error("File not found: {path} ({description})")]
+    FileNotFound { path: PathBuf, description: String },
+    #[error("Invalid firmware format in {file}: expected {expected}")]
+    InvalidFormatNoFound {
+        file: String,
+        expected: String,
     },
-    /// Invalid firmware format
+    #[error("Invalid firmware format in {file}: expected {expected}, got {found}")]
     InvalidFormat {
         file: String,
         expected: String,
-        found: Option<String>,
+        found: String,
     },
-    /// Checksum mismatch
+    #[error("Checksum mismatch for {file}: expected {expected}, got {actual}")]
     ChecksumMismatch {
         file: String,
         expected: String,
         actual: String,
     },
-    /// ARB version check failed - would result in device brick
+    #[error("ARB violation: cannot flash firmware v{firmware_version} to device with ARB v{device_version} ({detail})")]
     ArbViolation {
         firmware_version: u32,
         device_version: u32,
         detail: String,
     },
-    /// Extraction failed
-    ExtractionFailed {
-        reason: String,
-        file: String,
-    },
+    #[error("Failed to extract {file}: {reason}")]
+    ExtractionFailed { reason: String, file: String },
 }
 
-/// Partition-related errors
-#[derive(Debug, Clone)]
+// ---------------------------------------------------------------------------
+// Partition errors
+// ---------------------------------------------------------------------------
+
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum PartitionError {
-    /// Partition not found in image
+    #[error("Partition '{partition}' not found. Available: {available}")]
     NotFound {
         partition: String,
-        available: Vec<String>,
+        available: String,
     },
-    /// Partition flash failed
+    #[error("Failed to flash partition '{partition}'{slot}{crit}: {reason}")]
     FlashFailed {
         partition: String,
-        slot: Option<String>,
-        reason: String,
-        critical: bool,
-    },
-    /// Invalid partition slot
-    InvalidSlot {
         slot: String,
-        valid: Vec<String>,
+        crit: String,
+        reason: String,
     },
+    #[error("Invalid slot '{slot}'. Valid slots: {valid}")]
+    InvalidSlot { slot: String, valid: String },
 }
 
-/// Flash operation errors
-#[derive(Debug, Clone)]
+// ---------------------------------------------------------------------------
+// Flash operation errors
+// ---------------------------------------------------------------------------
+
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum FlashOperationError {
-    /// Device reboot timeout
+    #[error("Device reboot timeout: did not reach {target_mode} mode within {timeout_secs}s")]
     RebootTimeout {
         target_mode: String,
         timeout_secs: u64,
     },
-    /// Flash operation aborted by user
-    Aborted {
-        reason: String,
-    },
-    /// Operation incomplete
+    #[error("Flash operation aborted: {reason}")]
+    Aborted { reason: String },
+    #[error("Flash operation incomplete: {completed}/{total} partitions completed (last error: {last_error})")]
     Incomplete {
         completed: usize,
         total: usize,
         last_error: String,
     },
-    /// Device in unexpected mode
-    UnexpectedMode {
-        expected: String,
-        actual: String,
-    },
+    #[error("Device in unexpected mode: expected {expected}, got {actual}")]
+    UnexpectedMode { expected: String, actual: String },
 }
 
-/// Command execution errors
-#[derive(Debug, Clone)]
+// ---------------------------------------------------------------------------
+// Command errors
+// ---------------------------------------------------------------------------
+
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum CommandError {
-    /// Command not found in PATH
+    #[error("Command not found: '{command}' ({install_hint})")]
     NotFound {
         command: String,
         install_hint: String,
     },
-    /// Command execution failed
+    #[error("Command failed: '{command}' exited with code {exit_code} ({stderr})")]
     ExecutionFailed {
         command: String,
         exit_code: i32,
-        stdout: String,
         stderr: String,
     },
-    /// Command timed out
+    #[error("Command timeout: '{command}' exceeded {timeout_secs}s")]
     Timeout {
         command: String,
         timeout_secs: u64,
     },
-    /// Invalid command arguments
-    InvalidArgs {
-        command: String,
-        reason: String,
-    },
+    #[error("Invalid arguments for '{command}': {reason}")]
+    InvalidArgs { command: String, reason: String },
 }
-
-impl fmt::Display for FlashError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FlashError::Device(e) => write!(f, "{}", e),
-            FlashError::Firmware(e) => write!(f, "{}", e),
-            FlashError::Flash(e) => write!(f, "{}", e),
-            FlashError::Partition(e) => write!(f, "{}", e),
-            FlashError::Command(e) => write!(f, "{}", e),
-            FlashError::Generic { context, details } => {
-                write!(f, "{}: {}", context, details)
-            }
-        }
-    }
-}
-
-impl fmt::Display for DeviceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DeviceError::NotFound {
-                searched_for,
-                context,
-            } => {
-                write!(f, "Device not found ({}): {}", searched_for, context)
-            }
-            DeviceError::CommunicationFailed {
-                reason,
-                last_error,
-            } => {
-                write!(
-                    f,
-                    "Communication with device failed: {} ({})",
-                    reason, last_error
-                )
-            }
-            DeviceError::Locked {
-                device,
-                suggestion,
-            } => {
-                write!(f, "Device {} is locked: {}", device, suggestion)
-            }
-            DeviceError::BatteryLow { current, minimum } => {
-                write!(
-                    f,
-                    "Battery level too low: {}% (minimum: {}%)",
-                    current, minimum
-                )
-            }
-            DeviceError::SlowConnection {
-                speed_mbs,
-                minimum_mbs,
-            } => {
-                write!(
-                    f,
-                    "USB connection too slow: {:.2} MB/s (minimum: {:.2} MB/s)",
-                    speed_mbs, minimum_mbs
-                )
-            }
-            DeviceError::TypeDetectionFailed { reason } => {
-                write!(f, "Could not detect device type: {}", reason)
-            }
-        }
-    }
-}
-
-impl fmt::Display for FirmwareError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FirmwareError::FileNotFound { path, description } => {
-                write!(f, "File not found: {} ({})", path.display(), description)
-            }
-            FirmwareError::InvalidFormat {
-                file,
-                expected,
-                found,
-            } => {
-                match found {
-                    Some(f_type) => {
-                        write!(f, "Invalid firmware format in {}: expected {}, got {}", file, expected, f_type)
-                    }
-                    None => {
-                        write!(f, "Invalid firmware format in {}: expected {}", file, expected)
-                    }
-                }
-            }
-            FirmwareError::ChecksumMismatch {
-                file,
-                expected,
-                actual,
-            } => {
-                write!(
-                    f,
-                    "Checksum mismatch for {}: expected {}, got {}",
-                    file, expected, actual
-                )
-            }
-            FirmwareError::ArbViolation {
-                firmware_version,
-                device_version,
-                detail,
-            } => {
-                write!(
-                    f,
-                    "ARB violation: cannot flash firmware v{} to device with ARB v{} ({})",
-                    firmware_version, device_version, detail
-                )
-            }
-            FirmwareError::ExtractionFailed { reason, file } => {
-                write!(f, "Failed to extract {}: {}", file, reason)
-            }
-        }
-    }
-}
-
-impl fmt::Display for PartitionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PartitionError::NotFound {
-                partition,
-                available,
-            } => {
-                write!(
-                    f,
-                    "Partition '{}' not found. Available: {}",
-                    partition,
-                    available.join(", ")
-                )
-            }
-            PartitionError::FlashFailed {
-                partition,
-                slot,
-                reason,
-                critical,
-            } => {
-                let slot_str = slot.as_ref().map_or(String::new(), |s| format!(" (slot {})", s));
-                let crit = if *critical { "[CRITICAL]" } else { "" };
-                write!(
-                    f,
-                    "Failed to flash partition '{}'{}{}: {}",
-                    partition, slot_str, crit, reason
-                )
-            }
-            PartitionError::InvalidSlot { slot, valid } => {
-                write!(
-                    f,
-                    "Invalid slot '{}'. Valid slots: {}",
-                    slot,
-                    valid.join(", ")
-                )
-            }
-        }
-    }
-}
-
-impl fmt::Display for FlashOperationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FlashOperationError::RebootTimeout {
-                target_mode,
-                timeout_secs,
-            } => {
-                write!(
-                    f,
-                    "Device reboot timeout: did not reach {} mode within {}s",
-                    target_mode, timeout_secs
-                )
-            }
-            FlashOperationError::Aborted { reason } => {
-                write!(f, "Flash operation aborted: {}", reason)
-            }
-            FlashOperationError::Incomplete {
-                completed,
-                total,
-                last_error,
-            } => {
-                write!(
-                    f,
-                    "Flash operation incomplete: {}/{} partitions completed (last error: {})",
-                    completed, total, last_error
-                )
-            }
-            FlashOperationError::UnexpectedMode {
-                expected,
-                actual,
-            } => {
-                write!(
-                    f,
-                    "Device in unexpected mode: expected {}, got {}",
-                    expected, actual
-                )
-            }
-        }
-    }
-}
-
-impl fmt::Display for CommandError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CommandError::NotFound {
-                command,
-                install_hint,
-            } => {
-                write!(f, "Command not found: '{}' ({})", command, install_hint)
-            }
-            CommandError::ExecutionFailed {
-                command,
-                exit_code,
-                stdout: _,
-                stderr,
-            } => {
-                write!(
-                    f,
-                    "Command failed: '{}' exited with code {} ({})",
-                    command, exit_code, stderr
-                )
-            }
-            CommandError::Timeout {
-                command,
-                timeout_secs,
-            } => {
-                write!(
-                    f,
-                    "Command timeout: '{}' exceeded {}s",
-                    command, timeout_secs
-                )
-            }
-            CommandError::InvalidArgs {
-                command,
-                reason,
-            } => {
-                write!(f, "Invalid arguments for '{}': {}", command, reason)
-            }
-        }
-    }
-}
-
-impl std::error::Error for FlashError {}
-impl std::error::Error for DeviceError {}
-impl std::error::Error for FirmwareError {}
-impl std::error::Error for PartitionError {}
-impl std::error::Error for FlashOperationError {}
-impl std::error::Error for CommandError {}

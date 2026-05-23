@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use colored::Colorize;
 use lfff_lib::flasher::{
     collect_images, collect_images_from_source, is_mediatek_build,
     print_summary, run_flash_session_with_log, FirmwareSource, FlashProgress,
@@ -15,15 +16,15 @@ pub fn run(
 ) -> i32 {
     let dir = source.path();
     if !dir.is_dir() {
-        println!("✗ Not a directory: {}", dir.display());
+        eprintln!("{} {}", "✗".red().bold(), format!("Not a directory: {}", dir.display()).red());
         return 1;
     }
 
-    println!("\n── Dependency check ─────────────────────────────────────");
+    println!("\n{}", "── Dependency check ─────────────────────────────────────".dimmed());
     let ok = lfff_lib::utils::require_tools(&["fastboot"]);
-    println!("────────────────────────────────────────────────────────\n");
+    println!("{}\n", "────────────────────────────────────────────────────────".dimmed());
     if !ok {
-        println!("✗ fastboot is required for flashing. Aborting.");
+        eprintln!("{} {}", "✗".red().bold(), "fastboot is required for flashing. Aborting.".red());
         return 1;
     }
 
@@ -37,31 +38,31 @@ pub fn run(
 
     if !images.is_empty() && is_mediatek_build(&images) {
         if dry_run {
-            println!("⚠  Mediatek firmware detected (preloader found).");
-            println!("   Use --skip-preloader to exclude it during actual flashing.");
+            println!("{} {}", "⚠".yellow().bold(), "Mediatek firmware detected (preloader found).".yellow());
+            println!("   {}", "Use --skip-preloader to exclude it during actual flashing.".dimmed());
         } else if !skip_preloader {
-            println!("\n⚠  Mediatek firmware detected (preloader found).");
-            println!("   Flashing preloader on Mediatek devices is risky and may brick your device.");
-            println!("   It is recommended to skip the preloader unless you know what you are doing.\n");
-            print!("Skip preloader? [Y/n/a] (Y=skip, n=flash preloader, a=abort): ");
+            println!("\n{} {}", "⚠".yellow().bold(), "Mediatek firmware detected (preloader found).".yellow());
+            println!("   {}", "Flashing preloader on Mediatek devices is risky and may brick your device.".red());
+            println!("   {}\n", "It is recommended to skip the preloader unless you know what you are doing.".dimmed());
+            print!("{} ", "Skip preloader? [Y/n/a] (Y=skip, n=flash preloader, a=abort):".cyan());
             use std::io::Write;
             std::io::stdout().flush().ok();
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).ok();
             match input.trim().to_lowercase().as_str() {
                 "" | "y" | "yes" => {
-                    println!("→ Skipping preloader.");
+                    println!("{} {}", "→".green(), "Skipping preloader.".green());
                     skip_preloader = true;
                 }
                 "n" | "no" => {
-                    println!("→ Will flash preloader.");
+                    println!("{} {}", "→".yellow(), "Will flash preloader.".yellow());
                 }
                 "a" | "abort" => {
-                    println!("Aborted by user.");
+                    println!("{}", "Aborted by user.".yellow());
                     return 1;
                 }
                 _ => {
-                    println!("→ Skipping preloader (default).");
+                    println!("{} {}", "→".green(), "Skipping preloader (default).".green());
                     skip_preloader = true;
                 }
             }
@@ -72,7 +73,14 @@ pub fn run(
     let on_log = |msg: String| println!("{}", msg);
     let on_progress = |p: FlashProgress| {
         if p.done == p.total {
-            println!("  ✓ {} (slot {}): {}/{} done", p.partition, p.slot, p.done, p.total);
+            println!(
+                "  {} {} {} {}/{}",
+                "✓".green(),
+                p.partition.cyan(),
+                format!("(slot {})", p.slot).dimmed(),
+                p.done,
+                p.total
+            );
         }
     };
 
@@ -93,8 +101,10 @@ pub fn run(
     print_summary(&session);
 
     if session.critical_failed().is_empty() {
+        println!("\n{}", "✓ Flash completed successfully".green().bold());
         0
     } else {
+        eprintln!("\n{}", "✗ Flash failed — see critical errors above".red().bold());
         1
     }
 }

@@ -14,8 +14,9 @@ lfff-lib = { path = "../lib" }
 clap = { version = "4", features = ["derive"] }
 log = "0.4"
 env_logger = "0.11"
-colored = "3"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+ colored = "3"
+ indicatif = "0.17"
+ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 assert_cmd = "2"
