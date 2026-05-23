@@ -411,6 +411,16 @@ export component MainWindow inherits Window {
                 }
             }
 
+            // ── Sticky device banner ──────────────────────────────────────────
+            Rectangle {
+                height: 56px;
+                background: MaterialPalette.surface-container;
+                HorizontalLayout {
+                    padding-left: 16px; padding-right: 16px; padding-top: 8px; padding-bottom: 8px;
+                    DeviceBanner { device: root.device; horizontal-stretch: 1; }
+                }
+            }
+
             // ── Pages ─────────────────────────────────────────────────────────
             // Outer clip container fills remaining space
             Rectangle {
@@ -542,7 +552,6 @@ export component MainWindow inherits Window {
 
                     SectionTitle { text: Tr.nav-device; }
                     Rectangle { height: 12px; }
-                    DeviceBanner { device: root.device; }
 
                     if root.device.connected: Rectangle {
                         background: MaterialPalette.error-container;
