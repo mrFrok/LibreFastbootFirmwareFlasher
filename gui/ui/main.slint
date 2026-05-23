@@ -461,13 +461,12 @@ export component MainWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: "LibreFastboot\nFirmwareFlasher";
-                                font-size: Typography.display-small-size;
-                                font-weight: Typography.display-small-weight-em;
+                                text: "LibreFastbootFirmwareFlasher";
+                                font-size: Typography.headline-small-size;
+                                font-weight: Typography.headline-small-weight-em;
                                 color: MaterialPalette.primary;
                                 horizontal-alignment: center;
                                 letter-spacing: 0.5px;
-                                wrap: word-wrap;
                             }
                             Text {
                                 text: root.app-version + "  •  " + (lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
