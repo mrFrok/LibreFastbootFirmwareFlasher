@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
 
-use log::{info, warn};
+use tracing::{info, warn};
 
 use crate::arb::{
     ArbInfo, arb_confirmation_gate, compare_arb_versions, extract_arb_from_xbl, find_xbl_config,
@@ -375,7 +375,7 @@ pub fn enter_bootloader(serial: Option<&str>) -> bool {
 
     let (rc, _, err) = fastboot_cmd(&args, 30);
     if rc != 0 {
-        log::error!("fastboot reboot bootloader failed: {}", err);
+        tracing::error!("fastboot reboot bootloader failed: {}", err);
         return false;
     }
     thread::sleep(std::time::Duration::from_secs(REBOOT_SETTLE_SECS));

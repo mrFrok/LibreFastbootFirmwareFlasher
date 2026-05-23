@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result};
-use log::{debug, info};
+use tracing::{debug, info};
 
 use crate::arb::{ArbInfo, extract_arb_from_xbl, find_xbl_config};
 use crate::utils::verify_sha256;
@@ -152,7 +152,7 @@ fn run_payload_dumper(
     } else if which::which("payload-dumper-go").is_ok() {
         ("payload-dumper-go", "-p")
     } else {
-        log::error!("No payload dumper found in $PATH. Install: cargo install payload_dumper");
+        tracing::error!("No payload dumper found in $PATH. Install: cargo install payload_dumper");
         if let Some(cb) = on_log { cb("ERROR: No payload dumper found. Install payload_dumper.".into()); }
         return false;
     };
@@ -450,33 +450,33 @@ pub fn extract_firmware_with_log(
                 let f = match fs::File::open(&zip_path) {
                     Ok(f) => f,
                     Err(e) => {
-                        log::error!("Failed to open zip for payload extraction: {}", e);
+                        tracing::error!("Failed to open zip for payload extraction: {}", e);
                         return false;
                     }
                 };
                 let mut z = match zip::ZipArchive::new(f) {
                     Ok(z) => z,
                     Err(e) => {
-                        log::error!("Failed to open zip archive: {}", e);
+                        tracing::error!("Failed to open zip archive: {}", e);
                         return false;
                     }
                 };
                 let mut e = match z.by_name("payload.bin") {
                     Ok(e) => e,
                     Err(e) => {
-                        log::error!("payload.bin not found in archive: {}", e);
+                        tracing::error!("payload.bin not found in archive: {}", e);
                         return false;
                     }
                 };
                 let mut o = match fs::File::create(&payload_tmp) {
                     Ok(o) => o,
                     Err(e) => {
-                        log::error!("Failed to create temp payload.bin: {}", e);
+                        tracing::error!("Failed to create temp payload.bin: {}", e);
                         return false;
                     }
                 };
                 if let Err(e) = io::copy(&mut e, &mut o) {
-                    log::error!("Failed to extract payload.bin: {}", e);
+                    tracing::error!("Failed to extract payload.bin: {}", e);
                     return false;
                 }
                 true

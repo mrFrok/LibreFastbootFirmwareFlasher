@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::utils::{require_tools, run_cmd};
-use log::info;
+use tracing::info;
 
 const OTA_HEADERS: &[&str] = &[
     "userId: oplus-ota|16002018",

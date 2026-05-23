@@ -8,7 +8,7 @@ use std::fs;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use log::{error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::utils::run_cmd;
 

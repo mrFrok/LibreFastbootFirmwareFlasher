@@ -16,8 +16,13 @@ fn main() {
     let cli = Cli::parse();
 
     let log_level = if cli.verbose { "debug" } else { "warn" };
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(log_level))
-        .format_timestamp(None)
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(log_level.parse().unwrap())
+                .from_env_lossy(),
+        )
+        .without_time()
         .init();
 
     let exit_code = match cli.command {

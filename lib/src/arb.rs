@@ -17,7 +17,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use log::{debug, info, warn};
+use tracing::{debug, info, warn};
 use regex::Regex;
 
 // ELF constants
@@ -108,7 +108,7 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
     let data = match fs::read(path) {
         Ok(d) => d,
         Err(e) => {
-            log::error!("Cannot read {}: {}", path.display(), e);
+            tracing::error!("Cannot read {}: {}", path.display(), e);
             return ArbInfo::unknown(&format!("read error: {}", e));
         }
     };

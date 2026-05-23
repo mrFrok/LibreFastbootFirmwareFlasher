@@ -10,7 +10,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use log::{error, info, warn};
+use tracing::{error, info, warn};
 use sha2::{Digest, Sha256};
 
 // ---------------------------------------------------------------------------

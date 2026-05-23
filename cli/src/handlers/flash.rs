@@ -2,6 +2,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
 use lfff_lib::flasher::{
     collect_images, collect_images_from_source, is_mediatek_build,
     print_summary, run_flash_session_with_log, FirmwareSource, FlashProgress,
@@ -71,16 +72,27 @@ pub fn run(
 
     let cancel = Arc::new(AtomicBool::new(false));
     let on_log = |msg: String| println!("{}", msg);
-    let on_progress = |p: FlashProgress| {
+
+    // Progress bar for flash operations
+    let pb = Arc::new(ProgressBar::new(0));
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+            .unwrap()
+            .progress_chars("#>-")
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ "),
+    );
+    let pb2 = pb.clone();
+    let on_progress = move |p: FlashProgress| {
+        if p.total > 0 {
+            if pb2.length() == Some(0) || pb2.length().is_none() {
+                pb2.set_length(p.total as u64);
+            }
+            pb2.set_position(p.done as u64);
+            pb2.set_message(format!("{}_{}", p.partition, p.slot));
+        }
         if p.done == p.total {
-            println!(
-                "  {} {} {} {}/{}",
-                "✓".green(),
-                p.partition.cyan(),
-                format!("(slot {})", p.slot).dimmed(),
-                p.done,
-                p.total
-            );
+            pb2.finish_with_message("Done");
         }
     };
 
