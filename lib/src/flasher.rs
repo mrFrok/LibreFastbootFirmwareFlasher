@@ -193,6 +193,7 @@ pub struct FlashSession {
     pub serial: Option<String>,
     pub aborted: bool,
     pub dry_run: bool,
+    pub end_reason: Option<String>,
 }
 
 impl FlashSession {
@@ -204,6 +205,7 @@ impl FlashSession {
             serial: serial.map(|s| s.to_string()),
             aborted: false,
             dry_run,
+            end_reason: None,
         }
     }
 
@@ -254,11 +256,10 @@ pub fn detect_mode(serial: Option<&str>) -> DeviceMode {
             if parts.len() < 2 {
                 continue;
             }
-            if let Some(s) = serial {
-                if parts[0] != s {
+            if let Some(s) = serial
+                && parts[0] != s {
                     continue;
                 }
-            }
             if parts[1] == "fastbootd" {
                 return DeviceMode::Fastbootd;
             }
@@ -272,11 +273,10 @@ pub fn detect_mode(serial: Option<&str>) -> DeviceMode {
     if rc == 0 {
         for line in out.lines().skip(1) {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 && parts[1] == "device" {
-                if serial.is_none() || Some(parts[0]) == serial {
+            if parts.len() >= 2 && parts[1] == "device"
+                && (serial.is_none() || Some(parts[0]) == serial) {
                     return DeviceMode::System;
                 }
-            }
         }
     }
 
@@ -322,11 +322,10 @@ pub fn wait_for_fastbootd(serial: Option<&str>, timeout: u64) -> bool {
             if parts.len() < 2 {
                 continue;
             }
-            if let Some(s) = serial {
-                if parts[0] != s {
+            if let Some(s) = serial
+                && parts[0] != s {
                     continue;
                 }
-            }
             if parts[1] == "fastbootd" {
                 return true;
             }
@@ -435,9 +434,9 @@ pub fn flash_partition(
 // ---------------------------------------------------------------------------
 
 fn print_progress(done: usize, total: usize, partition: &str, slot: &str, elapsed: f64) {
-    let pct = if total > 0 { done * 100 / total } else { 0 };
-    let bar_w = 24;
-    let filled = if total > 0 { bar_w * done / total } else { 0 };
+    let pct = done.checked_mul(100).and_then(|x| x.checked_div(total)).unwrap_or(0);
+    let bar_w: usize = 24;
+    let filled = bar_w.checked_mul(done).and_then(|x| x.checked_div(total)).unwrap_or(0);
     let bar: String = "█".repeat(filled) + &"░".repeat(bar_w - filled);
     let mins = elapsed as u64 / 60;
     let secs = elapsed as u64 % 60;
@@ -506,7 +505,11 @@ fn flash_partition_batch(
                 total_ops,
                 flash_start,
             );
-            *session.results.last_mut().unwrap() = retry.clone();
+            if let Some(last) = session.results.last_mut() {
+                *last = retry.clone();
+            } else {
+                session.results.push(retry.clone());
+            }
             if !retry.success {
                 println!("\n✗ Retry failed. Aborting.");
                 session.aborted = true;
@@ -536,7 +539,9 @@ fn flash_with_progress(
 
     let handle = thread::spawn(move || {
         let r = flash_partition(&img, &part, &sl, ser.as_deref());
-        *result_clone.lock().unwrap() = Some(r);
+        if let Ok(mut guard) = result_clone.lock() {
+            *guard = Some(r);
+        }
     });
 
     while !handle.is_finished() {
@@ -549,7 +554,16 @@ fn flash_with_progress(
         );
         thread::sleep(std::time::Duration::from_millis(150));
     }
-    handle.join().ok();
+    if let Err(e) = handle.join() {
+        eprintln!("Flash thread panicked: {:?}", e);
+        return FlashResult {
+            partition: partition.to_string(),
+            slot: slot.to_string(),
+            success: false,
+            error: "Flash thread panicked".into(),
+            duration_s: flash_start.elapsed().as_secs_f64(),
+        };
+    }
 
     print_progress(
         done + 1,
@@ -559,7 +573,13 @@ fn flash_with_progress(
         flash_start.elapsed().as_secs_f64(),
     );
 
-    result.lock().unwrap().take().unwrap()
+    result.lock().ok().and_then(|mut g| g.take()).unwrap_or_else(|| FlashResult {
+        partition: partition.to_string(),
+        slot: slot.to_string(),
+        success: false,
+        error: "Flash thread did not set result".into(),
+        duration_s: flash_start.elapsed().as_secs_f64(),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -830,6 +850,23 @@ fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: Devic
 // Full flash session
 // ---------------------------------------------------------------------------
 
+/// Reason why a flash session ended, for the caller to decide what to do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionEnd {
+    /// Flash completed (may have failures).
+    Completed,
+    /// Pre-flash checks failed.
+    PreFlashFailed,
+    /// No images found.
+    NoImagesFound,
+    /// User aborted at ARB check.
+    ArbAborted,
+    /// User aborted at reboot choice.
+    RebootAborted,
+    /// Reboot to fastbootd failed.
+    RebootFailed,
+}
+
 /// Full firmware flash orchestrator.
 ///
 /// Stages:
@@ -840,7 +877,9 @@ fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: Devic
 ///   5. Stage 1: fastbootd — non-super (both slots) + super (active slot)
 ///   6. Stage 2: bootloader — modem (both slots)
 ///   7. Summary, wipe offer, reboot
-pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run: bool) -> FlashSession {
+///
+/// Returns `(FlashSession, SessionEnd)` so the caller decides whether to exit.
+pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run: bool) -> (FlashSession, SessionEnd) {
     let firmware_dir = source.path();
     let mut session = FlashSession::new(source, serial, dry_run);
 
@@ -852,7 +891,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
         for err in &check.errors {
             println!("  ✗ {}", err);
         }
-        std::process::exit(1);
+        return (session, SessionEnd::PreFlashFailed);
     }
 
     let serial = serial.map(|s| s.to_string()).or_else(|| {
@@ -876,7 +915,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
         } else {
             println!("✗ No .img files found in {}", firmware_dir.display());
         }
-        std::process::exit(1);
+        return (session, SessionEnd::NoImagesFound);
     }
 
     // ALL partitions go to fastbootd except modem (Qualcomm) or all partitions (MediaTek)
@@ -928,7 +967,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             let arb_result = compare_arb_versions(&firmware_arb, &device_arb);
             if !arb_confirmation_gate(&arb_result, "none") {
                 println!("Aborted by user (ARB check).");
-                std::process::exit(0);
+                return (session, SessionEnd::ArbAborted);
             }
         } else {
             warn!("xbl_config.img not found in firmware — ARB check skipped");
@@ -937,7 +976,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
 
     if dry_run {
         println!("\n[dry-run] No partitions were flashed.");
-        return session;
+        return (session, SessionEnd::Completed);
     }
 
     // -- Ask user how to reach fastbootd --
@@ -956,7 +995,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             let c = crate::utils::prompt("\n  Choice", "");
             if c == "q" {
                 println!("Aborted.");
-                std::process::exit(0);
+                return (session, SessionEnd::RebootAborted);
             }
             if ["1", "2", "3"].contains(&c.as_str()) {
                 break c;
@@ -978,12 +1017,12 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 let r = run_cmd(&args, 15);
                 if r.code != 0 {
                     println!("✗ adb reboot fastboot failed: {}", r.stderr);
-                    std::process::exit(1);
+                    return (session, SessionEnd::RebootFailed);
                 }
                 println!("  Waiting for fastbootd ...");
                 if !wait_for_fastbootd(serial_ref, REBOOT_TIMEOUT_SECS) {
                     println!("✗ Device did not enter fastbootd. Aborting.");
-                    std::process::exit(1);
+                    return (session, SessionEnd::RebootFailed);
                 }
                 println!("  ✓ Device is in fastbootd");
             }
@@ -1000,12 +1039,12 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 let (rc, _, err) = fastboot_cmd(&args, 30);
                 if rc != 0 {
                     println!("✗ fastboot reboot fastboot failed: {}", err);
-                    std::process::exit(1);
+                    return (session, SessionEnd::RebootFailed);
                 }
                 println!("  Waiting for fastbootd ...");
                 if !wait_for_fastbootd(serial_ref, REBOOT_TIMEOUT_SECS) {
                     println!("✗ Device did not enter fastbootd. Aborting.");
-                    std::process::exit(1);
+                    return (session, SessionEnd::RebootFailed);
                 }
                 println!("  ✓ Device is in fastbootd");
             }
@@ -1070,7 +1109,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             );
             done_ops = new_done;
             if aborted {
-                return session;
+                return (session, SessionEnd::Completed);
             }
         }
 
@@ -1098,7 +1137,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                 &mut session,
             );
             if aborted {
-                return session;
+                return (session, SessionEnd::Completed);
             }
         }
 
@@ -1115,7 +1154,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
         info!("==> Rebooting to bootloader for modem flash ...");
         if !enter_bootloader(serial_ref) {
             println!("✗ Could not reach bootloader. Modem was not flashed.");
-            for (&partition, _) in &bootloader_images {
+            for &partition in bootloader_images.keys() {
                 for &slot in SLOTS {
                     session.results.push(FlashResult {
                         partition: partition.to_string(),
@@ -1126,7 +1165,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
                     });
                 }
             }
-            return session;
+            return (session, SessionEnd::Completed);
         }
 
         let total_ops2 = bootloader_images.len() * 2;
@@ -1157,7 +1196,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             );
             done_ops2 = new_done;
             if aborted {
-                return session;
+                return (session, SessionEnd::Completed);
             }
         }
 
@@ -1169,7 +1208,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
         );
     }
 
-    session
+    (session, SessionEnd::Completed)
 }
 
 // ---------------------------------------------------------------------------
@@ -1432,7 +1471,7 @@ pub enum FailureAction {
 
 /// Flash a single partition with retry and logging.
 fn flash_partition_with_log(
-    image_path: &PathBuf,
+    image_path: &Path,
     partition: &str,
     slot: &str,
     serial: Option<&str>,
@@ -1476,6 +1515,7 @@ pub fn run_flash_session_with_log(
         } else {
             on_log(format!("No .img files found in {}", firmware_dir.display()));
         }
+        session.end_reason = Some("NoImagesFound".into());
         return session;
     }
 
@@ -1500,6 +1540,7 @@ pub fn run_flash_session_with_log(
 
     if filtered.is_empty() {
         on_log("No images to flash after filtering — aborting".into());
+        session.end_reason = Some("NoImagesFound".into());
         return session;
     }
 
@@ -1561,6 +1602,7 @@ pub fn run_flash_session_with_log(
                 if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                     on_log("Flash cancelled by user".into());
                     session.aborted = true;
+                    session.end_reason = Some("Cancelled".into());
                     return session;
                 }
                 on_progress(FlashProgress {
@@ -1581,11 +1623,13 @@ pub fn run_flash_session_with_log(
                         }
                         FailureAction::Abort => {
                             on_log(format!("Flash aborted due to {}_{} failure", partition, slot));
+                            session.end_reason = Some("UserAborted".into());
                             return session;
                         }
                     }
+                } else {
+                    session.results.push(result);
                 }
-                session.results.push(result);
             }
         }
 
@@ -1606,6 +1650,7 @@ pub fn run_flash_session_with_log(
                 if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                     on_log("Flash cancelled by user".into());
                     session.aborted = true;
+                    session.end_reason = Some("Cancelled".into());
                     return session;
                 }
                 on_progress(FlashProgress {
@@ -1626,11 +1671,13 @@ pub fn run_flash_session_with_log(
                         }
                         FailureAction::Abort => {
                             on_log(format!("Flash aborted due to {}_{} failure", partition, &active_slot));
+                            session.end_reason = Some("UserAborted".into());
                             return session;
                         }
                     }
+                } else {
+                    session.results.push(result);
                 }
-                session.results.push(result);
             }
         }
 
@@ -1643,7 +1690,8 @@ pub fn run_flash_session_with_log(
         on_log("Rebooting to bootloader for modem/bootloader flash...".into());
         if !enter_bootloader(serial) {
             on_log("Could not reach bootloader — modem was not flashed".into());
-            for (&partition, _) in &bootloader_images {
+            session.end_reason = Some("BootloaderModeFailed".into());
+            for &partition in bootloader_images.keys() {
                 for &slot in SLOTS {
                     session.results.push(FlashResult {
                         partition: partition.to_string(),
@@ -1670,6 +1718,7 @@ pub fn run_flash_session_with_log(
                 if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                     on_log("Flash cancelled by user".into());
                     session.aborted = true;
+                    session.end_reason = Some("Cancelled".into());
                     return session;
                 }
                 on_progress(FlashProgress {
@@ -1690,11 +1739,13 @@ pub fn run_flash_session_with_log(
                         }
                         FailureAction::Abort => {
                             on_log(format!("Flash aborted due to {}_{} failure", partition, slot));
+                            session.end_reason = Some("UserAborted".into());
                             return session;
                         }
                     }
+                } else {
+                    session.results.push(result);
                 }
-                session.results.push(result);
             }
         }
 
@@ -1702,5 +1753,6 @@ pub fn run_flash_session_with_log(
         on_log(format!("Stage 2 complete in {}m{:02}s", elapsed2 / 60, elapsed2 % 60));
     }
 
+    session.end_reason = Some("Completed".into());
     session
 }

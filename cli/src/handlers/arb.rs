@@ -1,0 +1,44 @@
+use std::path::PathBuf;
+
+use lfff_lib::arb::{
+    arb_confirmation_gate, compare_arb_versions, extract_arb_from_xbl, find_xbl_config,
+    get_device_arb_version,
+};
+
+pub fn run(
+    xbl: Option<&PathBuf>,
+    firmware_dir: Option<&PathBuf>,
+    device: bool,
+    serial: Option<&str>,
+) -> i32 {
+    let xbl_path = match (xbl, firmware_dir) {
+        (Some(path), _) => path.clone(),
+        (None, Some(dir)) => match find_xbl_config(dir) {
+            Some(p) => p,
+            None => {
+                println!("✗ xbl_config.img not found in the given firmware directory.");
+                return 1;
+            }
+        },
+        _ => {
+            println!("✗ Provide either --xbl <path> or --firmware-dir <dir>.");
+            return 1;
+        }
+    };
+
+    let firmware_arb = extract_arb_from_xbl(&xbl_path);
+    println!("\n  Firmware  : {}", firmware_arb);
+
+    if device {
+        let (device_arb, method) = get_device_arb_version(serial);
+        println!("  Device    : {}", device_arb);
+        let result = compare_arb_versions(&firmware_arb, &device_arb);
+        arb_confirmation_gate(&result, &method.to_string());
+    } else if firmware_arb.enforced() {
+        println!("  ⚠  Hard ARB is ACTIVE on this firmware.");
+    } else {
+        println!("  ✓  Hard ARB is not enforced (version = 0).");
+    }
+
+    0
+}

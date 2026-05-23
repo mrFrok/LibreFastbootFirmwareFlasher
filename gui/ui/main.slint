@@ -1,6 +1,13 @@
 // LibreFastbootFirmwareFlasher — Material Design 3 GUI (Slint built-in material)
 
 import { Palette, ScrollView, CheckBox } from "std-widgets.slint";
+import { MaterialPalette } from "globals/material-palette.slint";
+import { Tr } from "globals/tr.slint";
+import { DeviceInfo, LogEntry, FlashHistoryItem, RebootOption, ConfirmAction, RebootChoice } from "structs.slint";
+import { FilledButton, OutlinedButton, TextButton, FilledTonalButton, HorizontalDivider, LinearProgressIndicator, SectionTitle, PathField, DeviceBanner } from "components/buttons.slint";
+import { LogView } from "components/log-view.slint";
+import { NavItem, AboutLink } from "components/nav.slint";
+import { ConfirmDialog, WarningDialog, RebootChoiceDialog } from "dialogs/all.slint";
 
 // MD3 color roles — Blue palette, clean dark/light
 global MaterialPalette {
@@ -14,6 +21,7 @@ global MaterialPalette {
     in-out property <color> surface-container:      Palette.color-scheme == ColorScheme.dark ? #1c1c1e : #fef7ff;
     in-out property <color> surface-container-high: Palette.color-scheme == ColorScheme.dark ? #28282a : #ece6f0;
     in-out property <color> surface-container-highest: Palette.color-scheme == ColorScheme.dark ? #323234 : #e6e0e9;
+    in-out property <color> surface:                  Palette.color-scheme == ColorScheme.dark ? #141416 : #fef7ff;
     in-out property <color> on-surface:             Palette.color-scheme == ColorScheme.dark ? #e4e1e6 : #1c1b1f;
     in-out property <color> on-surface-variant:     Palette.color-scheme == ColorScheme.dark ? #c6c4c8 : #49454f;
     in-out property <color> outline:                Palette.color-scheme == ColorScheme.dark ? #8e8e93 : #79747e;
@@ -22,6 +30,12 @@ global MaterialPalette {
     in-out property <color> on-error:               Palette.color-scheme == ColorScheme.dark ? #601410 : #ffffff;
     in-out property <color> error-container:        Palette.color-scheme == ColorScheme.dark ? #8c1d18 : #f1d8d9;
     in-out property <color> on-error-container:     Palette.color-scheme == ColorScheme.dark ? #ffdad6 : #541217;
+    in-out property <color> success:                Palette.color-scheme == ColorScheme.dark ? #4ade80 : #16a34a;
+    in-out property <color> success-container:      Palette.color-scheme == ColorScheme.dark ? #1e3a2a : #d8f3e4;
+    in-out property <color> on-success-container:   Palette.color-scheme == ColorScheme.dark ? #b8e6c8 : #0a3622;
+    in-out property <color> warning:                Palette.color-scheme == ColorScheme.dark ? #fbbf24 : #d97706;
+    in-out property <color> warning-container:      Palette.color-scheme == ColorScheme.dark ? #3a2e1a : #fef3c7;
+    in-out property <color> on-warning-container:   Palette.color-scheme == ColorScheme.dark ? #fde68a : #78350f;
 }
 
 // ── Custom MD3-styled components ────────────────────────────────────────────
@@ -185,9 +199,8 @@ component BackButton {
     }
 }
 
-// ── Structs ───────────────────────────────────────────────────────────────────
+// ── Structs ──────────────────────────────────────────────────────────────────
 
-export struct DeviceInfo { connected: bool, name: string, serial: string, slot: string }
 export struct LogEntry   { timestamp: string, level: string, message: string }
 
 // ── Translations ──────────────────────────────────────────────────────────────
@@ -234,6 +247,9 @@ global Tr {
     out property <string> confirm-flash:lang == "ru" ? "Начать прошивку?\nВсе разделы будут перезаписаны." : "Start flashing?\nAll partitions will be overwritten.";
     out property <string> flash-btn:    lang == "ru" ? "Прошить"        : "Flash";
     out property <string> slot-lbl:     lang == "ru" ? "Слот "          : "Slot ";
+    out property <string> slot-switch-title: lang == "ru" ? "Переключить слот" : "Switch Slot";
+    out property <string> slot-switch-warn:  lang == "ru" ? "⚠️ Переключение слота может привести к невозможности загрузки устройства. Убедитесь, что целевой слот содержит рабочую прошивку.\n\nРаботает только в режиме fastboot (bootloader)." : "️ Switching slots may brick your device. Ensure the target slot has a working firmware.\n\nWorks only in fastboot (bootloader) mode.";
+    out property <string> slot-switch-btn:   lang == "ru" ? "Переключить на слот " : "Switch to slot ";
     out property <string> author-lbl:   lang == "ru" ? "Автор: mrFrok"  : "Author: mrFrok";
     out property <string> license-lbl:  lang == "ru" ? "Лицензия: GPL-3.0" : "License: GPL-3.0";
 
@@ -323,27 +339,69 @@ global Tr {
     out property <string> browse: lang == "ru"
         ? "Обзор"
         : "Browse";
+    out property <string> export-log: lang == "ru"
+        ? "Экспорт"
+        : "Export";
+    out property <string> log-title: lang == "ru"
+        ? "Лог"
+        : "Log";
 }
 
 // ── Log view ──────────────────────────────────────────────────────────────────
 
 component LogView inherits Rectangle {
     in property <[LogEntry]> entries;
+    in property <string> export-status: "";
+    callback export-log();
     private property <int> entry-count: entries.length;
     background: Palette.color-scheme == ColorScheme.dark
         ? MaterialPalette.surface-container-high : MaterialPalette.surface-container;
     border-radius: 12px;
     clip: true;
 
-    if entries.length == 0: Text {
-        text: "—";
-        color: MaterialPalette.on-surface-variant;
-        font-size: 14px;
-        x: 12px; y: 8px;
-    }
-
-    sv := ScrollView {
-        VerticalLayout { spacing: 0px; padding: 6px;
+    VerticalLayout { spacing: 0px; padding: 0px;
+        // Header bar — visually separated
+        Rectangle {
+            background: Palette.color-scheme == ColorScheme.dark
+                ? MaterialPalette.surface-container-highest : MaterialPalette.surface-container-high;
+            border-radius: 12px;
+            HorizontalLayout { spacing: 8px; padding-left: 12px; padding-right: 12px; padding-top: 6px; padding-bottom: 6px; horizontal-stretch: 1;
+                Text {
+                    text: Tr.log-title;
+                    font-size: 14px; font-weight: 600;
+                    color: MaterialPalette.on-surface;
+                    horizontal-stretch: 1;
+                }
+                OutlinedButton {
+                    text: Tr.export-log;
+                    clicked => { export-log(); }
+                }
+            }
+        }
+        if export-status != "": Rectangle {
+            background: transparent;
+            height: 20px;
+            HorizontalLayout { padding-left: 12px; padding-right: 12px;
+                Text {
+                    text: export-status;
+                    font-size: 12px;
+                    color: MaterialPalette.success;
+                }
+            }
+        }
+        if entries.length == 0: Rectangle {
+            background: transparent;
+            height: 24px;
+            HorizontalLayout { padding-left: 12px; padding-right: 12px;
+                Text {
+                    text: "—";
+                    color: MaterialPalette.on-surface-variant;
+                    font-size: 14px;
+                }
+            }
+        }
+        sv := ScrollView {
+            VerticalLayout { spacing: 0px; padding: 6px;
             for e in entries: Rectangle {
                 height: 20px;
                 background: transparent;
@@ -378,6 +436,7 @@ component LogView inherits Rectangle {
                         vertical-alignment: center;
                         overflow: elide;
                         horizontal-stretch: 1;
+                        }
                     }
                 }
             }
@@ -406,6 +465,7 @@ component LogView inherits Rectangle {
 
 component DeviceBanner inherits Rectangle {
     in property <DeviceInfo> device;
+    callback set-slot(string);
     height: 40px; border-radius: 12px;
     background: device.connected
         ? MaterialPalette.primary-container
@@ -428,6 +488,14 @@ component DeviceBanner inherits Rectangle {
             Text { text: device.name;   font-size: 15px; font-weight: 600; color: MaterialPalette.on-primary-container; vertical-alignment: center; }
             Text { text: device.serial; font-size: 13px; font-family: "monospace"; color: MaterialPalette.on-primary-container; vertical-alignment: center; }
             Text { text: Tr.slot-lbl + device.slot; font-size: 13px; color: MaterialPalette.on-primary-container; vertical-alignment: center; }
+            TextButton {
+                text: "A";
+                clicked => { root.set-slot("a"); }
+            }
+            TextButton {
+                text: "B";
+                clicked => { root.set-slot("b"); }
+            }
         }
         if !device.connected: Text {
             text: Tr.no-device;
@@ -574,12 +642,13 @@ component AboutLink inherits TouchArea {
 
 export component MainWindow inherits Window {
     title: "LibreFastbootFirmwareFlasher";
+    icon: @image-url("icons/logo_icon.svg");
     preferred-width: 1000px;
     preferred-height: 660px;
     min-width: 760px;
     min-height: 520px;
 
-    // Pages: 0=Home 1=Device 2=Download 3=Flash 4=Partition 5=About
+    // Pages: 0=Home 1=Device 2=Download 3=Flash 4=Partition 5=History 6=About
     in-out property <int>  page: 0;
     in-out property <string>  lang: "en";
     in-out property <bool>  is-dark: true;
@@ -648,6 +717,11 @@ export component MainWindow inherits Window {
     in-out property <[LogEntry]> download-log: [];
     in-out property <[LogEntry]> flash-log: [];
     in-out property <[LogEntry]> partition-log: [];
+    in-out property <[FlashHistoryItem]> history-items: [];
+    in-out property <string> flash-export-status: "";
+    in-out property <string> partition-export-status: "";
+    in-out property <string> device-export-status: "";
+    in-out property <string> download-export-status: "";
     in-out property <bool>    skip-arb-check: false;
     in-out property <string>  output-dir;
     in-out property <string>  download-url;
@@ -690,6 +764,11 @@ export component MainWindow inherits Window {
     in-out property <string>  flash-error-message: "";
     in-out property <bool>    flash-error-is-source: false;
     in-out property <string>  app-version: "dev";
+    // Update dialog
+    in-out property <bool>    show-update-dialog: false;
+    in-out property <string>  update-version: "";
+    in-out property <string>  update-url: "";
+    in-out property <string>  update-body: "";
     // Cable test
     in-out property <float>   cable-test-progress: 0;
     in-out property <string>  cable-test-status: "";
@@ -734,10 +813,19 @@ export component MainWindow inherits Window {
     callback post-flash-wipe();   // fastboot -w then reboot after successful flash
     callback flash-fail-skip();   // skip failed partition and continue
     callback flash-fail-abort();  // abort flash session
+    callback export-flash-log();
+    callback export-partition-log();
+    callback export-device-log();
+    callback export-download-log();
+    callback set-active-slot(string);
+    callback check-for-updates();
+    callback open-update-url();
 
     // ── Root layout ───────────────────────────────────────────────────────────
 
     HorizontalLayout {
+        width: 100%;
+        height: 100%;
 
         // ── Sidebar — MD3 Navigation Drawer ──────────────────────────────────
         Rectangle {
@@ -815,15 +903,21 @@ export component MainWindow inherits Window {
                 Rectangle { height: 8px; }
 
                 NavItem {
-                    label: Tr.nav-about; icon: @image-url("icons/info.svg");
+                    label: lang == "ru" ? "История" : "History"; icon: @image-url("icons/history.svg");
                     selected: root.page == 5;
                     clicked => { root.page = 5; }
+                }
+
+                NavItem {
+                    label: Tr.nav-about; icon: @image-url("icons/info.svg");
+                    selected: root.page == 6;
+                    clicked => { root.page = 6; }
                 }
             }
         }
 
         // ── Content area ──────────────────────────────────────────────────────
-        VerticalLayout {
+        VerticalLayout { horizontal-stretch: 1;
 
             // ── Top bar ───────────────────────────────────────────────────────
             Rectangle {
@@ -1214,6 +1308,33 @@ export component MainWindow inherits Window {
                     Rectangle { height: 12px; }
                     DeviceBanner { device: root.device; }
 
+                    if root.device.connected: Rectangle {
+                        background: MaterialPalette.error-container;
+                        border-radius: 12px;
+                        border-width: 1px;
+                        border-color: MaterialPalette.error;
+                        VerticalLayout { spacing: 8px; padding: 12px;
+                            Text {
+                                text: Tr.slot-switch-warn;
+                                font-size: 13px;
+                                color: MaterialPalette.on-error-container;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout { spacing: 8px;
+                                FilledButton {
+                                    text: Tr.slot-switch-btn + "A";
+                                    enabled: root.device.is_fastboot_mode && root.device.slot != "a";
+                                    clicked => { root.set-active-slot("a"); }
+                                }
+                                FilledButton {
+                                    text: Tr.slot-switch-btn + "B";
+                                    enabled: root.device.is_fastboot_mode && root.device.slot != "b";
+                                    clicked => { root.set-active-slot("b"); }
+                                }
+                            }
+                        }
+                    }
+
                     Rectangle { height: 8px; }
                     HorizontalLayout { spacing: 8px;
                         OutlinedButton { text: Tr.find-device;  horizontal-stretch: 1; clicked => { root.check-device(); } }
@@ -1351,7 +1472,7 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    LogView { entries: root.device-log; vertical-stretch: 1; }
+                    LogView { entries: root.device-log; vertical-stretch: 1; export-status: root.device-export-status; export-log => { root.export-device-log(); } }
                 }
 
                 // ── P2: Download ──────────────────────────────────────────────
@@ -1553,7 +1674,7 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    LogView { entries: root.download-log; vertical-stretch: 1; }
+                    LogView { entries: root.download-log; vertical-stretch: 1; export-status: root.download-export-status; export-log => { root.export-download-log(); } }
                 }
 
                 // ── P3: Flash All ─────────────────────────────────────────────
@@ -1593,8 +1714,6 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
-
-                    DeviceBanner { device: root.device; }
 
                     if flash-source-mode == 0: HorizontalLayout { spacing: 8px;
                         PathField { path: firmware-path; horizontal-stretch: 1; }
@@ -1773,14 +1892,13 @@ export component MainWindow inherits Window {
                         if is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
                     }
 
-                    LogView { entries: root.flash-log; vertical-stretch: 1; }
+                    LogView { entries: root.flash-log; vertical-stretch: 1; export-status: root.flash-export-status; export-log => { root.export-flash-log(); } }
                 }
 
                 // ── P4: Flash Partition ───────────────────────────────────────
                 if root.page == 4: VerticalLayout { spacing: 12px;
 
                     SectionTitle { text: Tr.nav-part; }
-                    DeviceBanner { device: root.device; }
 
                     HorizontalLayout { spacing: 8px;
                         PathField { path: single-image-path; horizontal-stretch: 1; }
@@ -1878,11 +1996,63 @@ export component MainWindow inherits Window {
                         if is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
                     }
 
-                    LogView { entries: root.partition-log; vertical-stretch: 1; }
+                    LogView { entries: root.partition-log; vertical-stretch: 1; export-status: root.partition-export-status; export-log => { root.export-partition-log(); } }
                 }
 
-                // ── P5: About ─────────────────────────────────────────────────
-                if root.page == 5: VerticalLayout { spacing: 0px;
+                // ── P5: History ───────────────────────────────────────────────
+                if root.page == 5: VerticalLayout { spacing: 12px; vertical-stretch: 1;
+                    SectionTitle { text: (lang == "ru" ? "История прошивок" : "Flash History"); }
+
+                    // Table header
+                    HorizontalLayout { spacing: 8px; padding-left: 8px; padding-right: 8px;
+                        Text { text: lang == "ru" ? "Дата" : "Date"; font-size: 12px; font-weight: 600; color: MaterialPalette.on-surface-variant; horizontal-stretch: 2; }
+                        Text { text: lang == "ru" ? "Прошивка" : "Firmware"; font-size: 12px; font-weight: 600; color: MaterialPalette.on-surface-variant; horizontal-stretch: 3; }
+                        Text { text: lang == "ru" ? "Устройство" : "Device"; font-size: 12px; font-weight: 600; color: MaterialPalette.on-surface-variant; horizontal-stretch: 2; }
+                        Text { text: lang == "ru" ? "Результат" : "Result"; font-size: 12px; font-weight: 600; color: MaterialPalette.on-surface-variant; horizontal-stretch: 1; }
+                        Text { text: lang == "ru" ? "Время" : "Duration"; font-size: 12px; font-weight: 600; color: MaterialPalette.on-surface-variant; horizontal-stretch: 1; }
+                    }
+                    HorizontalDivider { }
+
+                    if history-items.length == 0: Text {
+                        text: lang == "ru" ? "История пуста" : "No flash history yet";
+                        color: MaterialPalette.on-surface-variant;
+                        font-size: 14px;
+                        horizontal-alignment: center;
+                    }
+
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout { spacing: 0px; padding: 4px;
+                            for item in history-items: Rectangle {
+                                    height: 28px;
+                                    background: transparent;
+                                    HorizontalLayout { spacing: 8px; padding-left: 8px; padding-right: 8px;
+                                        Text { text: item.timestamp; font-size: 12px; font-family: "monospace"; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-stretch: 2; }
+                                        Text { text: item.firmware; font-size: 12px; color: MaterialPalette.on-surface; vertical-alignment: center; horizontal-stretch: 3; overflow: elide; }
+                                        Text { text: item.device; font-size: 12px; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-stretch: 2; }
+                                        Rectangle {
+                                            width: 52px; height: 18px; border-radius: 4px;
+                                            background: item.result == "OK" ? MaterialPalette.success-container
+                                                      : item.result == "Aborted" ? MaterialPalette.warning-container
+                                                      : MaterialPalette.error-container;
+                                            Text {
+                                                text: item.result;
+                                                font-size: 10px; font-weight: 700; font-family: "monospace";
+                                                horizontal-alignment: center; vertical-alignment: center;
+                                                color: item.result == "OK" ? MaterialPalette.on-success-container
+                                                     : item.result == "Aborted" ? MaterialPalette.on-warning-container
+                                                     : MaterialPalette.on-error-container;
+                                            }
+                                        }
+                                        Text { text: item.duration; font-size: 12px; font-family: "monospace"; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-stretch: 1; }
+                                    }
+                                }
+                            }
+                    }
+                }
+
+                // ── P6: About ─────────────────────────────────────────────────
+                if root.page == 6: VerticalLayout { spacing: 0px;
                     Rectangle { vertical-stretch: 1; }
 
                     VerticalLayout { spacing: 6px;
@@ -1961,9 +2131,9 @@ export component MainWindow inherits Window {
                     opacity: root.page-opacity;
                     animate opacity { duration: 300ms; easing: ease-in-out; }
                 }
-            } // outer clip Rectangle
+            } // outer clip container
         } // content
-    } // root
+    } // HorizontalLayout
 
     // ── Confirm dialog ────────────────────────────────────────────────────────
     Rectangle {
@@ -2700,8 +2870,68 @@ export component MainWindow inherits Window {
                 }
             }
         }
-    } // HorizontalLayout
-    } // VerticalLayout
+        } // HorizontalLayout
+        } // VerticalLayout
+    }
+
+    // ── Update available dialog ──────────────────────────────────────────────
+    Rectangle {
+        z: 100;
+        visible: show-update-dialog;
+        opacity: show-update-dialog ? 1.0 : 0.0;
+        animate opacity { duration: 200ms; easing: ease-in-out; }
+        background: MaterialPalette.surface.with-alpha(0.6);
+        TouchArea { clicked => { } }
+
+        VerticalLayout { alignment: center;
+            Rectangle {
+                background: MaterialPalette.surface-container-high;
+                border-radius: 16px;
+
+                VerticalLayout { spacing: 12px; padding: 20px;
+                    Text {
+                        text: lang == "ru" ? "Доступно обновление" : "Update Available";
+                        font-size: 20px; font-weight: 700;
+                        color: MaterialPalette.on-surface;
+                        horizontal-alignment: center;
+                    }
+
+                    Text {
+                        text: lang == "ru" ? "Версия " + update-version + " доступна для загрузки." : "Version " + update-version + " is available for download.";
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface-variant;
+                        horizontal-alignment: center;
+                    }
+
+                    Rectangle {
+                        background: MaterialPalette.surface-container;
+                        border-radius: 8px;
+                        max-height: 180px;
+                        ScrollView {
+                            VerticalLayout { padding: 10px;
+                                Text {
+                                    text: update-body;
+                                    font-size: 13px;
+                                    color: MaterialPalette.on-surface-variant;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout { spacing: 8px;
+                        TextButton {
+                            text: Tr.cancel;
+                            clicked => { show-update-dialog = false; }
+                        }
+                        FilledButton {
+                            text: lang == "ru" ? "Скачать" : "Download";
+                            clicked => { root.open-update-url(); }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // ── Scale transition overlay — covers everything during scale change ─────

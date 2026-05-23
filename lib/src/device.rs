@@ -68,6 +68,12 @@ pub struct PreFlashCheck {
     pub errors: Vec<String>,
 }
 
+impl Default for PreFlashCheck {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PreFlashCheck {
     pub fn new() -> Self {
         Self {
@@ -299,20 +305,18 @@ pub fn is_device_mediatek(serial: Option<&str>) -> Option<bool> {
     };
 
     // Check has-slot:occt (MediaTek partition)
-    if let Some(val) = getvar("has-slot:occt") {
-        if val.to_lowercase() == "yes" || val == "true" || val == "1" {
+    if let Some(val) = getvar("has-slot:occt")
+        && (val.to_lowercase() == "yes" || val == "true" || val == "1") {
             info!("Detected MediaTek device (has-slot:occt = {})", val);
             return Some(true);
         }
-    }
     
     // Check has-slot:ocdt (Qualcomm partition)
-    if let Some(val) = getvar("has-slot:ocdt") {
-        if val.to_lowercase() == "yes" || val == "true" || val == "1" {
+    if let Some(val) = getvar("has-slot:ocdt")
+        && (val.to_lowercase() == "yes" || val == "true" || val == "1") {
             info!("Detected Qualcomm device (has-slot:ocdt = {})", val);
             return Some(false);
         }
-    }
     
     // Fallback: check partition-type:occt/ocdt
     if getvar("partition-type:occt").is_some() {

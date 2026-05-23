@@ -125,7 +125,8 @@ fn move_into_groups(images: &[PathBuf], base: &Path) -> Result<HashMap<String, V
         let group = resolve_group(&stem);
         let dest_dir = base.join(group);
         fs::create_dir_all(&dest_dir)?;
-        let dest = dest_dir.join(img.file_name().unwrap());
+        let file_name = img.file_name().ok_or_else(|| anyhow::anyhow!("Image path has no filename: {}", img.display()))?;
+        let dest = dest_dir.join(file_name);
         if img.canonicalize().ok() != dest.canonicalize().ok() {
             // Use safe_move which prevents symlink attacks
             safe_move(img, &dest)
@@ -165,11 +166,10 @@ fn run_payload_dumper(
     // 2s while the process runs so the GUI shows progress instead of freezing.
     let mut cmd = Command::new(tool);
     cmd.arg("-o").arg(output);
-    if let Some(parts) = partitions {
-        if !parts.is_empty() {
+    if let Some(parts) = partitions
+        && !parts.is_empty() {
             cmd.arg(images_flag).arg(parts.join(","));
         }
-    }
     cmd.arg(input);
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     debug!("Running: {:?}", cmd);
@@ -211,7 +211,7 @@ fn run_payload_dumper(
                 }
             }
             // Also tick every 5s so GUI doesn't look frozen
-            if secs % 5 == 0 && known.is_empty() {
+            if secs.is_multiple_of(5) && known.is_empty() {
                 tick_tx.send(format!("Extracting... ({}s)", secs)).ok();
             }
         }
@@ -262,9 +262,9 @@ fn run_payload_dumper(
         if s.contains("[00:") { return true; }
         if s.contains("\x1b") { return true; }
         if s == "[" || s == "]" { return true; }
-        let is_spinner = (s.starts_with('*') || s.starts_with('-') || s.starts_with('\\') || s.starts_with('/'))
-            && s.contains("Extracting partitions");
-        is_spinner
+        
+        (s.starts_with('*') || s.starts_with('-') || s.starts_with('\\') || s.starts_with('/'))
+            && s.contains("Extracting partitions")
     }
 
     match output_result {
@@ -277,9 +277,8 @@ fn run_payload_dumper(
                 let text = String::from_utf8_lossy(bytes);
                 for line in text.lines() {
                     let t = strip_ansi(line.trim());
-                    if !t.is_empty() && !is_noise(&t) {
-                        if let Some(cb) = on_log { cb(t); shown += 1; }
-                    }
+                    if !t.is_empty() && !is_noise(&t)
+                        && let Some(cb) = on_log { cb(t); shown += 1; }
                 }
             }
             if shown == 0 {
@@ -331,17 +330,15 @@ fn check_free_space(path: &Path) -> (bool, f64) {
         }
     }
     let r = crate::utils::run_cmd(&["df", "-B1", &check.to_string_lossy()], 5);
-    if r.success() {
-        if let Some(line) = r.stdout.lines().nth(1) {
+    if r.success()
+        && let Some(line) = r.stdout.lines().nth(1) {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 4 {
-                if let Ok(avail) = parts[3].parse::<u64>() {
+            if parts.len() >= 4
+                && let Ok(avail) = parts[3].parse::<u64>() {
                     let gb = avail as f64 / (1024.0 * 1024.0 * 1024.0);
                     return (gb >= 20.0, gb);
                 }
-            }
         }
-    }
     (true, 0.0)
 }
 
@@ -448,17 +445,53 @@ pub fn extract_firmware_with_log(
             let tmp = std::env::temp_dir().join("lfff_extract");
             fs::create_dir_all(&tmp).ok();
             let payload_tmp = tmp.join("payload.bin");
-            let f = fs::File::open(&zip_path).unwrap();
-            let mut z = zip::ZipArchive::new(f).unwrap();
-            {
-                let mut e = z.by_name("payload.bin").unwrap();
-                let mut o = fs::File::create(&payload_tmp).unwrap();
-                io::copy(&mut e, &mut o).unwrap();
+
+            let extract_result = (|| -> bool {
+                let f = match fs::File::open(&zip_path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        log::error!("Failed to open zip for payload extraction: {}", e);
+                        return false;
+                    }
+                };
+                let mut z = match zip::ZipArchive::new(f) {
+                    Ok(z) => z,
+                    Err(e) => {
+                        log::error!("Failed to open zip archive: {}", e);
+                        return false;
+                    }
+                };
+                let mut e = match z.by_name("payload.bin") {
+                    Ok(e) => e,
+                    Err(e) => {
+                        log::error!("payload.bin not found in archive: {}", e);
+                        return false;
+                    }
+                };
+                let mut o = match fs::File::create(&payload_tmp) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        log::error!("Failed to create temp payload.bin: {}", e);
+                        return false;
+                    }
+                };
+                if let Err(e) = io::copy(&mut e, &mut o) {
+                    log::error!("Failed to extract payload.bin: {}", e);
+                    return false;
+                }
+                true
+            })();
+
+            if !extract_result {
+                let _ = fs::remove_file(&payload_tmp);
+                let _ = fs::remove_dir(&tmp);
+                false
+            } else {
+                let result = run_payload_dumper(&payload_tmp, &staging, partitions, on_log);
+                let _ = fs::remove_file(&payload_tmp);
+                let _ = fs::remove_dir(&tmp);
+                result
             }
-            let result = run_payload_dumper(&payload_tmp, &staging, partitions, on_log);
-            let _ = fs::remove_file(&payload_tmp);
-            let _ = fs::remove_dir(&tmp);
-            result
         };
 
         if !ok {
@@ -488,11 +521,23 @@ pub fn extract_firmware_with_log(
         info!("Format: raw .img files");
         let staging = output_dir.join("_staging");
         fs::create_dir_all(&staging).ok();
-        let f = fs::File::open(&zip_path).unwrap();
-        let mut z = zip::ZipArchive::new(f).unwrap();
+        let f = match fs::File::open(&zip_path) {
+            Ok(f) => f,
+            Err(e) => return ExtractionResult::fail(output_dir, &format!("Cannot open zip: {}", e)),
+        };
+        let mut z = match zip::ZipArchive::new(f) {
+            Ok(z) => z,
+            Err(e) => return ExtractionResult::fail(output_dir, &format!("Invalid zip: {}", e)),
+        };
         let mut extracted = Vec::new();
         for i in 0..z.len() {
-            let mut e = z.by_index(i).unwrap();
+            let mut e = match z.by_index(i) {
+                Ok(e) => e,
+                Err(e) => {
+                    info!("Skipping entry {} (error: {})", i, e);
+                    continue;
+                }
+            };
             let name = e.name().to_string();
             if !name.ends_with(".img") {
                 continue;
@@ -503,8 +548,18 @@ pub fn extract_firmware_with_log(
                 .to_string_lossy()
                 .to_string();
             let dest = staging.join(&fname);
-            let mut o = fs::File::create(&dest).unwrap();
-            io::copy(&mut e, &mut o).unwrap();
+            let mut o = match fs::File::create(&dest) {
+                Ok(o) => o,
+                Err(e) => {
+                    info!("Skipping {} (cannot create: {})", fname, e);
+                    continue;
+                }
+            };
+            if let Err(e) = io::copy(&mut e, &mut o) {
+                info!("Skipping {} (copy error: {})", fname, e);
+                let _ = fs::remove_file(&dest);
+                continue;
+            }
             info!("  Extracted: {}", fname);
             extracted.push(dest);
         }
@@ -607,7 +662,7 @@ pub fn get_firmware_name(zip_path: &Path) -> String {
         if let Some(v) = payload_props.get(*key) {
             let v = v.trim();
             if !v.is_empty() {
-                return v.replace('/', "_").replace(' ', "_");
+                return v.replace(['/', ' '], "_");
             }
         }
     }

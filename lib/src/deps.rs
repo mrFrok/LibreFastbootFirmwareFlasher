@@ -146,15 +146,14 @@ fn is_atomic_distro() -> bool {
 
     if let Ok(content) = fs::read_to_string("/etc/os-release") {
         for line in content.lines() {
-            if line.starts_with("ID=") {
-                let id = line[3..].trim().trim_matches('"').to_lowercase();
+            if let Some(id) = line.strip_prefix("ID=") {
+                let id = id.trim().trim_matches('"').to_lowercase();
                 if atomic_ids.contains(&id.as_str()) {
                     return true;
                 }
             }
-            // Also match ID_LIKE (e.g. ID_LIKE="fedora" on Silverblue)
-            if line.starts_with("ID_LIKE=") {
-                let id_like = line[8..].trim().trim_matches('"').to_lowercase();
+            if let Some(id_like) = line.strip_prefix("ID_LIKE=") {
+                let id_like = id_like.trim().trim_matches('"').to_lowercase();
                 for part in id_like.split_whitespace() {
                     if atomic_ids.contains(&part) {
                         return true;
@@ -670,7 +669,7 @@ pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsRepo
         if r.already_installed {
             println!("  ✓  {:<25} already installed", r.tool);
         } else if r.installed && !r.error.is_empty() {
-            println!("  ✓  {:<25} {} {}", r.tool, "layered", "(reboot required)");
+            println!("  ✓  {:<25} layered (reboot required)", r.tool);
         } else if r.installed {
             println!("  ✓  {:<25} installed", r.tool);
         } else if r.skipped {

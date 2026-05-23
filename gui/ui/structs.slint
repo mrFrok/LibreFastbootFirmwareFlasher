@@ -1,0 +1,33 @@
+// Shared structs and constants
+
+export struct DeviceInfo { connected: bool, name: string, serial: string, slot: string, is-fastboot-mode: bool }
+export struct LogEntry   { timestamp: string, level: string, message: string }
+export struct RebootOption { label: string, val: int }
+export struct FlashHistoryItem {
+    timestamp: string,
+    firmware: string,
+    device: string,
+    result: string,
+    duration: string,
+}
+
+// Confirm-action constants
+export global ConfirmAction {
+    out property <int> none:                0;
+    out property <int> flash-all-reboot:    3;  // step 1: choose reboot source
+    out property <int> flash-all-final:     4;  // step 2: final confirm
+    out property <int> flash-part-reboot:   5;  // partition step 1: reboot to bootloader
+    out property <int> flash-part-final:    6;  // partition step 2: final confirm
+    out property <int> post-flash-success:  7;  // post-flash success dialog
+    out property <int> source-flash-final:  8;  // source flash final confirm
+    out property <int> cable-test:          9;  // cable test dialog
+    out property <int> flash-failure:       10; // flash failure dialog
+}
+
+// Reboot-choice constants
+export global RebootChoice {
+    out property <int> not-chosen:  0;
+    out property <int> from-system: 1;  // adb
+    out property <int> from-bootloader: 2;  // fastboot
+    out property <int> skip:        3;  // already in mode
+}

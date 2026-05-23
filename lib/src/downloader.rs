@@ -87,8 +87,8 @@ impl Default for DownloadProgress {
 
 /// Unwrap 4PDA redirect to get real OTA endpoint.
 fn extract_real_url(url: &str) -> String {
-    if let Ok(parsed) = url::Url::parse(url) {
-        if parsed
+    if let Ok(parsed) = url::Url::parse(url)
+        && parsed
             .host_str()
             .map(|h| h.contains("4pda.to"))
             .unwrap_or(false)
@@ -100,7 +100,6 @@ fn extract_real_url(url: &str) -> String {
                 }
             }
         }
-    }
     url.to_string()
 }
 
@@ -147,8 +146,8 @@ fn parse_link_expiry(cdn_url: &str) -> (u64, String) {
 
     if let Ok(parsed) = url::Url::parse(cdn_url) {
         let params: std::collections::HashMap<_, _> = parsed.query_pairs().collect();
-        if let Some(ts_str) = params.get("e") {
-            if let Ok(ts) = ts_str.parse::<u64>() {
+        if let Some(ts_str) = params.get("e")
+            && let Ok(ts) = ts_str.parse::<u64>() {
                 if ts > now {
                     let diff = ts - now;
                     let h = diff / 3600;
@@ -163,7 +162,6 @@ fn parse_link_expiry(cdn_url: &str) -> (u64, String) {
                     return (ts, "EXPIRED".into());
                 }
             }
-        }
     }
     (0, String::new())
 }
@@ -307,11 +305,12 @@ pub fn download_firmware(url: &str, output_dir: Option<&Path>, connections: u32)
 
 /// Token passed to [`download_firmware_with_progress`] to cancel an in-flight download.
 ///
-/// ```rust
+/// ```rust,no_run
+/// use lfff_lib::downloader::{CancelToken, download_firmware_with_progress};
 /// let token = CancelToken::new();
 /// let t = token.clone();
 /// std::thread::spawn(move || {
-///     download_firmware_with_progress(url, dir, 16, token, |p| { /* ... */ });
+///     let _ = download_firmware_with_progress("https://example.com/fw.zip", None, 16, token, |_| {});
 /// });
 /// // Later, from the GUI:
 /// t.cancel();
@@ -338,11 +337,17 @@ impl CancelToken {
 /// error messages still appear in the terminal.
 ///
 /// Pass a [`CancelToken`] to support cancellation from the GUI:
-/// ```rust
+/// ```rust,no_run
+/// use lfff_lib::downloader::{CancelToken, download_firmware_with_progress};
 /// let token = CancelToken::new();
 /// let t = token.clone();
-/// ui.on_cancel_download(move || t.cancel());
-/// download_firmware_with_progress(url, dir, 16, token, |p| { ... });
+/// std::thread::spawn(move || {
+///     let _ = download_firmware_with_progress("https://example.com/fw.zip", None, 16, token, |p| {
+///         println!("Progress: {:.1}% speed={} eta={}", p.percent, p.speed, p.eta);
+///     });
+/// });
+/// // Later, from the GUI:
+/// t.cancel();
 /// ```
 pub fn download_firmware_with_progress<F>(
     url: &str,
@@ -548,7 +553,7 @@ fn build_aria2c_cmd(cdn_url: &str, output_dir: Option<&Path>, connections: u32) 
 fn resolve_output_path(cdn_url: &str, output_dir: Option<&Path>) -> PathBuf {
     let filename = cdn_url
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or("firmware.zip")
         .split('?')
         .next()

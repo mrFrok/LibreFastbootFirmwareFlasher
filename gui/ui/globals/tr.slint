@@ -1,0 +1,140 @@
+// Translations global — all user-facing strings
+
+export global Tr {
+    in-out property <string> lang: "en"; // "en" or "ru"
+
+    out property <string> home:         lang == "ru" ? "Главная"      : "Home";
+    out property <string> nav-device:   lang == "ru" ? "Устройство" : "Device & Drivers";
+    out property <string> nav-download: lang == "ru" ? "Загрузка"     : "Download";
+    out property <string> nav-flash:    lang == "ru" ? "Прошить всё"  : "Flash All";
+    out property <string> nav-part:     lang == "ru" ? "Прошить раздел" : "Flash Partition";
+    out property <string> nav-about:    lang == "ru" ? "О программе"  : "About";
+
+    out property <string> no-device:    lang == "ru" ? "Устройство не найдено" : "No device connected";
+    out property <string> find-device:  lang == "ru" ? "Найти устройство"      : "Find device";
+    out property <string> check-deps:   lang == "ru" ? "Проверить"             : "Check deps";
+    out property <string> install-deps: lang == "ru" ? "Установить"            : "Install deps";
+    out property <string> driver-test:  lang == "ru" ? "Тест драйвера"         : "Driver Test";
+    out property <string> run-test:     lang == "ru" ? "Запустить"             : "Run test";
+
+    out property <string> ota-url:      lang == "ru" ? "URL прошивки"   : "OTA URL";
+    out property <string> paste:        lang == "ru" ? "Вставить"       : "Paste";
+    out property <string> dl-btn:       lang == "ru" ? "Скачать"        : "Download";
+    out property <string> local-lbl:    lang == "ru" ? "Распаковать прошивку:" : "Extract firmware:";
+    out property <string> select-zip:   lang == "ru" ? "Выбрать ZIP"    : "Select ZIP";
+    out property <string> extract:      lang == "ru" ? "Распаковать"    : "Extract";
+
+    out property <string> select-folder:lang == "ru" ? "Выбрать папку"  : "Select folder";
+    out property <string> flash-from-folder:lang == "ru" ? "Из папки" : "From folder";
+    out property <string> flash-from-src:lang == "ru" ? "Из исходников"     : "From build output";
+    out property <string> src-select:    lang == "ru" ? "Выбрать папку"     : "Select folder";
+    out property <string> src-images:    lang == "ru" ? "образов"           : "images";
+    out property <string> find-phone:   lang == "ru" ? "Найти телефон"  : "Find phone";
+    out property <string> skip-arb:     lang == "ru" ? "Пропустить проверку ARB" : "Skip ARB check";
+    out property <string> flash-all-btn:lang == "ru" ? "Прошить всё"   : "Flash all";
+    out property <string> flashing:     lang == "ru" ? "Прошивается…"   : "Flashing…";
+    out property <string> cancel:       lang == "ru" ? "Отмена"         : "Cancel";
+
+    out property <string> part-lbl:     lang == "ru" ? "Раздел: "       : "Partition: ";
+    out property <string> flash-part-btn:lang == "ru" ? "Прошить раздел": "Flash partition";
+
+    out property <string> confirm-title:lang == "ru" ? "Подтверждение"  : "Confirm";
+    out property <string> confirm-flash:lang == "ru" ? "Начать прошивку?\nВсе разделы будут перезаписаны." : "Start flashing?\nAll partitions will be overwritten.";
+    out property <string> flash-btn:    lang == "ru" ? "Прошить"        : "Flash";
+    out property <string> slot-lbl:     lang == "ru" ? "Слот "          : "Slot ";
+    out property <string> author-lbl:   lang == "ru" ? "Автор: mrFrok"  : "Author: mrFrok";
+    out property <string> license-lbl:  lang == "ru" ? "Лицензия: GPL-3.0" : "License: GPL-3.0";
+
+    // Reboot menu
+    out property <string> reboot-title:    lang == "ru" ? "Перезагрузка" : "Reboot";
+    out property <string> reboot-recovery: lang == "ru" ? "Recovery"     : "Recovery";
+    out property <string> reboot-bootloader: lang == "ru" ? "Bootloader" : "Bootloader";
+    out property <string> reboot-fastbootd: lang == "ru" ? "Fastbootd"   : "Fastbootd";
+    out property <string> reboot-system:   lang == "ru" ? "Перезагрузить" : "Reboot";
+
+    // Flash All step 1 — reboot source dialog
+    out property <string> flash-reboot-title: lang == "ru" ? "Откуда перезагрузиться в Fastbootd?" : "How to reboot into Fastbootd?";
+    out property <string> flash-reboot-from-system:     lang == "ru" ? "Из системы\n(adb reboot fastboot)" : "From system\n(adb reboot fastboot)";
+    out property <string> flash-reboot-from-bootloader: lang == "ru" ? "Из Bootloader\n(fastboot reboot fastboot)" : "From bootloader\n(fastboot reboot fastboot)";
+    out property <string> flash-reboot-skip:            lang == "ru" ? "Уже в Fastbootd\n(не перезагружаться)" : "Already in Fastbootd\n(don't reboot)";
+
+    // Flash All step 2 — final confirm
+    out property <string> flash-final-title: lang == "ru" ? "Последнее предупреждение" : "Final warning";
+    out property <string> flash-final-body:  lang == "ru" ? "Устройство находится в Fastbootd. Все разделы будут перезаписаны. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd. All partitions will be overwritten. This action is irreversible.\n\nProceed with flashing?";
+    out property <string> src-final-title:  lang == "ru" ? "Прошивка из исходников" : "Flash from source";
+    out property <string> src-final-body:   lang == "ru" ? "Устройство находится в Fastbootd. Образы из папки исходников будут прошиты. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd. Images from the source build folder will be flashed. This action is irreversible.\n\nProceed with flashing?";
+
+    // Flash Partition step 1 — reboot to bootloader
+    out property <string> part-reboot-title:        lang == "ru" ? "Откуда перезагрузиться в Bootloader?" : "How to reboot into Bootloader?";
+    out property <string> part-reboot-from-system:  lang == "ru" ? "Из системы\n(adb reboot bootloader)"       : "From system\n(adb reboot bootloader)";
+    out property <string> part-reboot-from-fastboot:lang == "ru" ? "Из Fastboot\n(fastboot reboot-bootloader)" : "From Fastboot\n(fastboot reboot-bootloader)";
+    out property <string> part-reboot-skip:         lang == "ru" ? "Уже в Bootloader\n(не перезагружаться)"    : "Already in Bootloader\n(don't reboot)";
+    out property <string> part-final-title: lang == "ru" ? "Прошить раздел" : "Flash partition";
+    out property <string> part-final-body:  lang == "ru" ? "Раздел будет перезаписан. Продолжить?" : "The partition will be overwritten. Continue?";
+
+    // Home page
+    out property <string> home-title:   lang == "ru" ? "Добро пожаловать" : "Welcome";
+    out property <string> home-sub:     lang == "ru" ? "Прошивальщик Android-устройств через fastboot" : "Android firmware flasher via fastboot";
+
+    out property <string> home-features-title: lang == "ru" ? "Возможности:" : "Features:";
+    out property <string> home-feat1: lang == "ru" ? "Автоматическая установка драйверов" : "Automatic installation of drivers";
+    out property <string> home-feat2: lang == "ru" ? "Прошивка разделов boot, init_boot и recovery" : "Flashing of boot, init_boot and recovery images";
+    out property <string> home-feat3: lang == "ru" ? "Распаковка OTA.zip и payload.bin для прошивки" : "Unpacking OTA.zip or payload.bin for subsequent flashing";
+    out property <string> home-feat4: lang == "ru" ? "Прошивка пересоздаёт разделы — чистая система без остатков" : "Flashing recreates partitions, resulting in a clean system";
+    out property <string> home-feat5: lang == "ru" ? "Меню перезагрузки: ADB / BOOTLOADER / FASTBOOTD" : "Reboot menu for quick switching: ADB / BOOTLOADER / FASTBOOTD";
+
+    out property <string> home-warning: lang == "ru"
+        ? "Внимание! Я не несу ответственности за ваши действия. Всё делается на ваш страх и риск."
+        : "Attention! I do not take responsibility for your actions. Everything you do at your own risk.";
+
+    out property <string> supported-devices: lang == "ru"
+        ? "Данная программа предназначена для устройств Realme, OnePlus и OPPO на базе Qualcomm. Имеется частичная поддержка Mediatek."
+        : "This tool is intended for Realme, OnePlus and OPPO devices based on Qualcomm. Partial Mediatek support is available.";
+
+    out property <string> home-quicklinks: lang == "ru" ? "Быстрые ссылки:" : "Quick links:";
+    out property <string> home-goto-device:   lang == "ru" ? "Устройство и драйверы" : "Device & Drivers";
+    out property <string> home-goto-download: lang == "ru" ? "Скачать прошивку"      : "Download Firmware";
+    out property <string> home-goto-flash:    lang == "ru" ? "Прошить всё"           : "Flash All";
+    out property <string> home-goto-part:     lang == "ru" ? "Прошить раздел"        : "Flash Partition";
+
+    out property <string> arb-device-title: lang == "ru"
+        ? "Предупреждение ARB устройства"
+        : "Device ARB Warning";
+    out property <string> arb-device-body-fw: lang == "ru"
+        ? "Прошивка имеет ARB=0, но ваше устройство имеет ARB="
+        : "Firmware has ARB=0, but your device has ARB=";
+    out property <string> arb-device-body-src: lang == "ru"
+        ? "Версия ARB исходной сборки неизвестна, а ваше устройство имеет ARB="
+        : "Source build ARB is unknown, but your device has ARB=";
+    out property <string> arb-device-body-suffix: lang == "ru"
+        ? ".\n\nПрошивка с ARB ниже, чем у устройства, может привести к неработоспособности устройства (кирпич)!\n\nПродолжайте только если уверены, что не хотите делать даунгрейд."
+        : ".\n\nFlashing firmware with ARB lower than the device's ARB can brick your device!\n\nOnly continue if you are sure you will never need to downgrade.";
+    out property <string> arb-device-continue: lang == "ru"
+        ? "Я понимаю риск, продолжить"
+        : "I understand the risk, continue";
+    out property <string> flash-error-title: lang == "ru"
+        ? "Ошибка прошивки"
+        : "Flash Error";
+    out property <string> retry: lang == "ru"
+        ? "Повторить"
+        : "Retry";
+    out property <string> reboot: lang == "ru"
+        ? "Перезагрузить устройство"
+        : "Reboot device";
+    out property <string> flash-error-hint: lang == "ru"
+        ? "Проверьте подключение и попробуйте снова."
+        : "Check the connection and try again.";
+
+    out property <string> output-dir: lang == "ru"
+        ? "Папка для сохранения:"
+        : "Save to folder:";
+    out property <string> browse: lang == "ru"
+        ? "Обзор"
+        : "Browse";
+    out property <string> export-log: lang == "ru"
+        ? "Экспорт"
+        : "Export";
+    out property <string> log-exported: lang == "ru"
+        ? "Лог экспортирован: "
+        : "Log exported: ";
+}

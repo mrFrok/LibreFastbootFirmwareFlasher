@@ -295,11 +295,10 @@ pub fn extract_arb_from_xbl(xbl_path: &Path) -> ArbInfo {
     {
         return extract_arb_from_xbl_config(xbl_path);
     }
-    if let Some(parent) = xbl_path.parent() {
-        if let Some(config) = find_xbl_config(parent) {
+    if let Some(parent) = xbl_path.parent()
+        && let Some(config) = find_xbl_config(parent) {
             return extract_arb_from_xbl_config(&config);
         }
-    }
     ArbInfo::unknown("xbl_config.img not found next to xbl.img")
 }
 
@@ -383,10 +382,10 @@ pub fn get_device_arb_version(serial: Option<&str>) -> (ArbInfo, DeviceArbMethod
         let output = format!("{}\n{}", r.stdout, r.stderr);
         for var in &["anti-rollback-version", "version-anti-rollback"] {
             let pat = format!(r"(?i){}:\s*(\d+)", regex::escape(var));
-            if let Ok(re) = Regex::new(&pat) {
-                if let Some(caps) = re.captures(&output) {
-                    if let Some(m) = caps.get(1) {
-                        if let Ok(v) = m.as_str().parse::<u32>() {
+            if let Ok(re) = Regex::new(&pat)
+                && let Some(caps) = re.captures(&output)
+                    && let Some(m) = caps.get(1)
+                        && let Ok(v) = m.as_str().parse::<u32>() {
                             info!("Device ARB version (fastboot getvar): {}", v);
                             return (
                                 ArbInfo {
@@ -398,9 +397,6 @@ pub fn get_device_arb_version(serial: Option<&str>) -> (ArbInfo, DeviceArbMethod
                                 DeviceArbMethod::Getvar,
                             );
                         }
-                    }
-                }
-            }
         }
     }
     (
@@ -438,38 +434,37 @@ pub fn compare_arb_versions(firmware_arb: &ArbInfo, device_arb: &ArbInfo) -> Arb
             detail: "Proceed only if you are sure the firmware is not a downgrade.".into(),
         };
     }
-    let (fw, dev) = (fw.unwrap(), dev.unwrap());
-    if fw == dev {
-        return ArbCheckResult {
-            firmware_arb: firmware_arb.clone(),
-            device_arb: device_arb.clone(),
-            safe: true,
-            warning: String::new(),
-            detail: format!("ARB versions match ({}). Safe to flash.", fw),
-        };
-    }
-    if fw > dev {
-        return ArbCheckResult {
+    if let (Some(fw), Some(dev)) = (fw, dev) {
+        if fw == dev {
+            return ArbCheckResult {
+                firmware_arb: firmware_arb.clone(),
+                device_arb: device_arb.clone(),
+                safe: true,
+                warning: String::new(),
+                detail: format!("ARB versions match ({}). Safe to flash.", fw),
+            };
+        }
+        if fw > dev {
+            return ArbCheckResult {
+                firmware_arb: firmware_arb.clone(),
+                device_arb: device_arb.clone(),
+                safe: false,
+                warning: format!("Firmware ARB ({}) > device ARB ({}).", fw, dev),
+                detail: "Flashing will raise the anti-rollback counter. You will not be able to downgrade.".into(),
+            };
+        }
+        ArbCheckResult {
             firmware_arb: firmware_arb.clone(),
             device_arb: device_arb.clone(),
             safe: false,
             warning: format!(
-                "Firmware ARB ({}) is HIGHER than device ARB ({}).\nRolling back to ARB < {} will be IMPOSSIBLE after flashing.",
-                fw, dev, fw
+                "DANGER: Firmware ARB ({}) is LOWER than device ARB ({}).\nFlashing this firmware WILL BRICK the device.",
+                fw, dev
             ),
-            detail: "You can still flash, but downgrading afterwards will not be possible.".into(),
-        };
-    }
-    // fw < dev — DANGER
-    ArbCheckResult {
-        firmware_arb: firmware_arb.clone(),
-        device_arb: device_arb.clone(),
-        safe: false,
-        warning: format!(
-            "DANGER: Firmware ARB ({}) is LOWER than device ARB ({}).\nFlashing this firmware WILL BRICK the device.",
-            fw, dev
-        ),
-        detail: "Do NOT flash unless you fully understand the consequences.".into(),
+            detail: "Do NOT flash unless you fully understand the consequences.".into(),
+        }
+    } else {
+        unreachable!("Both fw and dev are Some due to early return above")
     }
 }
 
