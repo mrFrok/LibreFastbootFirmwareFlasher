@@ -452,7 +452,7 @@ export component MainWindow inherits Window {
                     // ── Hero section ──────────────────────────────────────────
                     Rectangle { vertical-stretch: 1; }
                     HorizontalLayout { alignment: center;
-                        VerticalLayout { spacing: 10px; alignment: center; width: 520px;
+                        VerticalLayout { spacing: 10px; alignment: center;
                             // App icon
                             HorizontalLayout { alignment: center;
                                 Image {
@@ -461,12 +461,13 @@ export component MainWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: "LibreFastbootFirmwareFlasher";
+                                text: "LibreFastboot\nFirmwareFlasher";
                                 font-size: Typography.display-small-size;
                                 font-weight: Typography.display-small-weight-em;
                                 color: MaterialPalette.primary;
                                 horizontal-alignment: center;
                                 letter-spacing: 0.5px;
+                                wrap: word-wrap;
                             }
                             Text {
                                 text: root.app-version + "  •  " + (lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
@@ -1290,25 +1291,25 @@ export component MainWindow inherits Window {
                     HorizontalLayout { alignment: center;
                         VerticalLayout { spacing: 10px; width: 520px;
                             AboutLink {
-                                icon: @image-url("icons/github.png");
+                                icon: @image-url("icons/github.svg");
                                 label: "GitHub — LibreFastbootFirmwareFlasher";
                                 url: "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
                                 open(u) => { root.open-url(u); }
                             }
                             AboutLink {
-                                icon: @image-url("icons/telegram.png");
+                                icon: @image-url("icons/telegram.svg");
                                 label: "Author on Telegram";
                                 url: "https://t.me/mrFrok228";
                                 open(u) => { root.open-url(u); }
                             }
                             AboutLink {
-                                icon: @image-url("icons/telegram.png");
+                                icon: @image-url("icons/telegram.svg");
                                 label: "Telegram group";
                                 url: "https://t.me/gt3neo5hub";
                                 open(u) => { root.open-url(u); }
                             }
                             AboutLink {
-                                icon: @image-url("icons/globe.png");
+                                icon: @image-url("icons/boosty.svg");
                                 label: "Donate — Boosty";
                                 url: "https://boosty.to/mrfrok/donate";
                                 open(u) => { root.open-url(u); }

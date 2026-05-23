@@ -30,26 +30,14 @@ export component NavItem inherits TouchArea {
         HorizontalLayout {
             padding-left: 16px; padding-right: 24px; spacing: 12px;
 
-            // Icon with active indicator dot
-            Rectangle {
+            Image {
+                source: icon;
                 width: 22px; height: 22px;
                 y: (parent.height - 22px) / 2;
-                Image {
-                    source: icon;
-                    width: 22px; height: 22px;
-                    colorize: selected
-                        ? MaterialPalette.on-secondary-container
-                        : MaterialPalette.on-surface-variant;
-                    animate colorize { duration: 150ms; }
-                }
-                // Active dot indicator
-                if selected: Rectangle {
-                    x: parent.width - 4px;
-                    y: parent.height - 4px;
-                    width: 6px; height: 6px; border-radius: 3px;
-                    background: MaterialPalette.tertiary;
-                    animate opacity { duration: 150ms; }
-                }
+                colorize: selected
+                    ? MaterialPalette.on-secondary-container
+                    : MaterialPalette.on-surface-variant;
+                animate colorize { duration: 150ms; }
             }
 
             Text {
