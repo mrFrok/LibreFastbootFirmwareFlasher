@@ -15,7 +15,7 @@ export component LogView inherits Rectangle {
     VerticalLayout { spacing: 8px; padding: 8px;
         HorizontalLayout { horizontal-stretch: 1;
             Text {
-                text: "Log";
+                text: Tr.log-title;
                 font-size: 14px; font-weight: 600;
                 color: MaterialPalette.on-surface;
                 horizontal-stretch: 1;
@@ -31,7 +31,7 @@ export component LogView inherits Rectangle {
             color: MaterialPalette.success;
         }
         if entries.length == 0: Text {
-            text: "—";
+            text: Tr.log-empty;
             color: MaterialPalette.on-surface-variant;
             font-size: 14px;
         }
