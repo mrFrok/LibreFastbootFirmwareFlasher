@@ -2,9 +2,11 @@
 
 import { Palette, ScrollView, CheckBox } from "std-widgets.slint";
 import { MaterialPalette } from "globals/material-palette.slint";
+import { Typography } from "globals/typography.slint";
 import { Tr } from "globals/tr.slint";
 import { DeviceInfo, LogEntry, FlashHistoryItem, RebootOption, ConfirmAction, RebootChoice } from "structs.slint";
-import { FilledButton, OutlinedButton, TextButton, FilledTonalButton, HorizontalDivider, LinearProgressIndicator, SectionTitle, PathField, DeviceBanner, BackButton } from "components/buttons.slint";
+import { FilledButton, OutlinedButton, TextButton, FilledTonalButton, ElevatedButton, HorizontalDivider, LinearProgressIndicator, SectionTitle, PathField, DeviceBanner, BackButton } from "components/buttons.slint";
+import { NavCard, OutlinedCard, Chip } from "components/cards.slint";
 import { LogView } from "components/log-view.slint";
 import { NavItem, AboutLink } from "components/nav.slint";
 import { ConfirmDialog, WarningDialog, RebootChoiceDialog } from "dialogs/all.slint";
@@ -449,24 +451,25 @@ export component MainWindow inherits Window {
                     // ── Hero section ──────────────────────────────────────────
                     Rectangle { vertical-stretch: 1; }
                     HorizontalLayout { alignment: center;
-                        VerticalLayout { spacing: 10px; alignment: center; width: 500px;
+                        VerticalLayout { spacing: 10px; alignment: center; width: 520px;
                             // App icon
                             HorizontalLayout { alignment: center;
                                 Image {
                                     source: @image-url("icons/logo_icon.svg");
-                                    width: 80px; height: 80px;
+                                    width: 96px; height: 96px;
                                 }
                             }
                             Text {
                                 text: "LibreFastbootFirmwareFlasher";
-                                font-size: 24px; font-weight: 700;
+                                font-size: Typography.display-small-size;
+                                font-weight: Typography.display-small-weight-em;
                                 color: MaterialPalette.primary;
                                 horizontal-alignment: center;
                                 letter-spacing: 0.5px;
                             }
                             Text {
                                 text: root.app-version + "  •  " + (lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
-                                font-size: 14px;
+                                font-size: Typography.body-large-size;
                                 color: MaterialPalette.on-surface-variant;
                                 horizontal-alignment: center;
                             }
@@ -476,179 +479,39 @@ export component MainWindow inherits Window {
 
                     // ── Navigation cards ──────────────────────────────────────
                     HorizontalLayout { spacing: 10px; height: 90px;
-                        Rectangle {
+                        NavCard {
                             width: (parent.width - 30px) / 4;
-                            border-radius: 16px;
-                            border-width: 1px;
-                            border-color: ta0.has-hover
-                                ? MaterialPalette.primary
-                                : MaterialPalette.outline-variant;
-                            background: ta0.has-hover
-                                ? MaterialPalette.primary-container
-                                : MaterialPalette.surface-container;
-                            animate background { duration: 150ms; }
-                            animate border-color { duration: 150ms; }
-
-                            ta0 := TouchArea {
-                                width: 100%; height: 100%;
-                                clicked => { root.page = 1; }
-
-                                VerticalLayout { alignment: center; spacing: 6px;
-                                    HorizontalLayout { alignment: center;
-                                        Image {
-                                            source: @image-url("icons/smartphone.svg");
-                                            width: 24px; height: 24px;
-                                            colorize: ta0.has-hover
-                                                ? MaterialPalette.on-primary-container
-                                                : MaterialPalette.on-surface-variant;
-                                            animate colorize { duration: 150ms; }
-                                        }
-                                    }
-                                    Text {
-                                        text: Tr.home-goto-device;
-                                        font-size: 12px; font-weight: 600;
-                                        color: ta0.has-hover
-                                            ? MaterialPalette.on-primary-container
-                                            : MaterialPalette.on-surface;
-                                        horizontal-alignment: center;
-                                        animate color { duration: 150ms; }
-                                    }
-                                }
-                            }
+                            label: Tr.home-goto-device;
+                            icon: @image-url("icons/smartphone.svg");
+                            card-clicked => { root.page = 1; }
                         }
-                        Rectangle {
+                        NavCard {
                             width: (parent.width - 30px) / 4;
-                            border-radius: 16px;
-                            border-width: 1px;
-                            border-color: ta1.has-hover
-                                ? MaterialPalette.primary
-                                : MaterialPalette.outline-variant;
-                            background: ta1.has-hover
-                                ? MaterialPalette.primary-container
-                                : MaterialPalette.surface-container;
-                            animate background { duration: 150ms; }
-                            animate border-color { duration: 150ms; }
-
-                            ta1 := TouchArea {
-                                width: 100%; height: 100%;
-                                clicked => { root.page = 2; }
-
-                                VerticalLayout { alignment: center; spacing: 6px;
-                                    HorizontalLayout { alignment: center;
-                                        Image {
-                                            source: @image-url("icons/download.svg");
-                                            width: 24px; height: 24px;
-                                            colorize: ta1.has-hover
-                                                ? MaterialPalette.on-primary-container
-                                                : MaterialPalette.on-surface-variant;
-                                            animate colorize { duration: 150ms; }
-                                        }
-                                    }
-                                    Text {
-                                        text: Tr.home-goto-download;
-                                        font-size: 12px; font-weight: 600;
-                                        color: ta1.has-hover
-                                            ? MaterialPalette.on-primary-container
-                                            : MaterialPalette.on-surface;
-                                        horizontal-alignment: center;
-                                        animate color { duration: 150ms; }
-                                    }
-                                }
-                            }
+                            label: Tr.home-goto-download;
+                            icon: @image-url("icons/download.svg");
+                            card-clicked => { root.page = 2; }
                         }
-                        Rectangle {
+                        NavCard {
                             width: (parent.width - 30px) / 4;
-                            border-radius: 16px;
-                            border-width: 1px;
-                            border-color: ta2.has-hover
-                                ? MaterialPalette.primary
-                                : MaterialPalette.outline-variant;
-                            background: ta2.has-hover
-                                ? MaterialPalette.primary-container
-                                : MaterialPalette.surface-container;
-                            animate background { duration: 150ms; }
-                            animate border-color { duration: 150ms; }
-
-                            ta2 := TouchArea {
-                                width: 100%; height: 100%;
-                                clicked => { root.page = 3; }
-
-                                VerticalLayout { alignment: center; spacing: 6px;
-                                    HorizontalLayout { alignment: center;
-                                        Image {
-                                            source: @image-url("icons/flash.svg");
-                                            width: 24px; height: 24px;
-                                            colorize: ta2.has-hover
-                                                ? MaterialPalette.on-primary-container
-                                                : MaterialPalette.on-surface-variant;
-                                            animate colorize { duration: 150ms; }
-                                        }
-                                    }
-                                    Text {
-                                        text: Tr.home-goto-flash;
-                                        font-size: 12px; font-weight: 600;
-                                        color: ta2.has-hover
-                                            ? MaterialPalette.on-primary-container
-                                            : MaterialPalette.on-surface;
-                                        horizontal-alignment: center;
-                                        animate color { duration: 150ms; }
-                                    }
-                                }
-                            }
+                            label: Tr.home-goto-flash;
+                            icon: @image-url("icons/flash.svg");
+                            card-clicked => { root.page = 3; }
                         }
-                        Rectangle {
+                        NavCard {
                             width: (parent.width - 30px) / 4;
-                            border-radius: 16px;
-                            border-width: 1px;
-                            border-color: ta3.has-hover
-                                ? MaterialPalette.primary
-                                : MaterialPalette.outline-variant;
-                            background: ta3.has-hover
-                                ? MaterialPalette.primary-container
-                                : MaterialPalette.surface-container;
-                            animate background { duration: 150ms; }
-                            animate border-color { duration: 150ms; }
-
-                            ta3 := TouchArea {
-                                width: 100%; height: 100%;
-                                clicked => { root.page = 4; }
-
-                                VerticalLayout { alignment: center; spacing: 6px;
-                                    HorizontalLayout { alignment: center;
-                                        Image {
-                                            source: @image-url("icons/storage.svg");
-                                            width: 24px; height: 24px;
-                                            colorize: ta3.has-hover
-                                                ? MaterialPalette.on-primary-container
-                                                : MaterialPalette.on-surface-variant;
-                                            animate colorize { duration: 150ms; }
-                                        }
-                                    }
-                                    Text {
-                                        text: Tr.home-goto-part;
-                                        font-size: 12px; font-weight: 600;
-                                        color: ta3.has-hover
-                                            ? MaterialPalette.on-primary-container
-                                            : MaterialPalette.on-surface;
-                                        horizontal-alignment: center;
-                                        animate color { duration: 150ms; }
-                                    }
-                                }
-                            }
+                            label: Tr.home-goto-part;
+                            icon: @image-url("icons/storage.svg");
+                            card-clicked => { root.page = 4; }
                         }
                     }
 
                     // ── Features list ─────────────────────────────────────────
-                    Rectangle {
-                        border-radius: 16px;
-                        border-width: 1px;
-                        border-color: MaterialPalette.outline-variant;
-                        background: MaterialPalette.surface-container-low;
-
+                    OutlinedCard {
                         VerticalLayout { padding: 16px; spacing: 8px;
                             Text {
                                 text: Tr.home-features-title;
-                                font-size: 13px; font-weight: 600;
+                                font-size: Typography.label-medium-size;
+                                font-weight: Typography.label-medium-weight;
                                 letter-spacing: 0.8px;
                                 color: MaterialPalette.primary;
                             }
@@ -656,14 +519,14 @@ export component MainWindow inherits Window {
                                 Tr.home-feat1, Tr.home-feat2,
                                 Tr.home-feat3, Tr.home-feat4, Tr.home-feat5,
                             ]: HorizontalLayout { spacing: 10px;
-                                Text {
-                                    text: "●"; font-size: 8px;
-                                    color: MaterialPalette.primary;
-                                    vertical-alignment: center;
-                                    width: 12px;
+                                Rectangle {
+                                    width: 6px; height: 6px; border-radius: 3px;
+                                    background: MaterialPalette.tertiary;
+                                    y: (parent.height - 6px) / 2;
                                 }
                                 Text {
-                                    text: feat; font-size: 13px;
+                                    text: feat;
+                                    font-size: Typography.body-medium-size;
                                     color: MaterialPalette.on-surface-variant;
                                     vertical-alignment: center;
                                     horizontal-stretch: 1;
@@ -787,7 +650,7 @@ export component MainWindow inherits Window {
                     Rectangle { height: 8px; }
 
                     // ADB reboot row
-                    Text { text: "ADB"; font-size: 12px; color: MaterialPalette.on-surface-variant; min-height: 14px; }
+                    Text { text: "ADB"; font-size: Typography.label-medium-size; color: MaterialPalette.on-surface-variant; min-height: 14px; }
                     Rectangle { height: 4px; }
                     HorizontalLayout { spacing: 8px;
                         for item in [
@@ -795,29 +658,17 @@ export component MainWindow inherits Window {
                             { label: Tr.reboot-bootloader,  target: "adb-bootloader"  },
                             { label: Tr.reboot-fastbootd,   target: "adb-fastboot"    },
                             { label: Tr.reboot-system,      target: "adb-reboot"      },
-                        ]: TouchArea {
-                            horizontal-stretch: 1; height: 36px;
-                            clicked => { root.reboot-to(item.target); }
-                            Rectangle {
-                                border-radius: 12px; border-width: 1px;
-                                border-color: parent.has-hover
-                                    ? MaterialPalette.primary
-                                    : (Palette.color-scheme == ColorScheme.dark ? #383848 : MaterialPalette.outline-variant);
-                                background: parent.has-hover
-                                    ? MaterialPalette.surface-container-high
-                                    : (Palette.color-scheme == ColorScheme.dark ? #28283a : MaterialPalette.surface-container);
-                                animate background { duration: 80ms; } animate border-color { duration: 80ms; }
-                                Text { text: item.label; font-size: 13px; font-weight: 500;
-                                    color: MaterialPalette.on-surface;
-                                    horizontal-alignment: center; vertical-alignment: center; }
-                            }
+                        ]: Chip {
+                            horizontal-stretch: 1;
+                            text: item.label;
+                            chip-clicked => { root.reboot-to(item.target); }
                         }
                     }
 
                     Rectangle { height: 12px; }
 
                     // Fastboot reboot row
-                    Text { text: "Fastboot"; font-size: 12px; color: MaterialPalette.on-surface-variant; min-height: 14px; }
+                    Text { text: "Fastboot"; font-size: Typography.label-medium-size; color: MaterialPalette.on-surface-variant; min-height: 14px; }
                     Rectangle { height: 4px; }
                     HorizontalLayout { spacing: 8px;
                         for item in [
@@ -825,22 +676,10 @@ export component MainWindow inherits Window {
                             { label: Tr.reboot-bootloader,  target: "fb-bootloader"  },
                             { label: Tr.reboot-fastbootd,   target: "fb-fastboot"    },
                             { label: Tr.reboot-system,      target: "fb-reboot"      },
-                        ]: TouchArea {
-                            horizontal-stretch: 1; height: 36px;
-                            clicked => { root.reboot-to(item.target); }
-                            Rectangle {
-                                border-radius: 12px; border-width: 1px;
-                                border-color: parent.has-hover
-                                    ? MaterialPalette.primary
-                                    : MaterialPalette.outline-variant;
-                                background: parent.has-hover
-                                    ? MaterialPalette.surface-container-high
-                                    : MaterialPalette.surface-container;
-                                animate background { duration: 80ms; } animate border-color { duration: 80ms; }
-                                Text { text: item.label; font-size: 13px; font-weight: 500;
-                                    color: MaterialPalette.on-surface;
-                                    horizontal-alignment: center; vertical-alignment: center; }
-                            }
+                        ]: Chip {
+                            horizontal-stretch: 1;
+                            text: item.label;
+                            chip-clicked => { root.reboot-to(item.target); }
                         }
                     }
 
@@ -853,28 +692,13 @@ export component MainWindow inherits Window {
                     SectionTitle { text: Tr.nav-download; }
 
                     // Output directory selector — shown before download
-                    Text { text: Tr.output-dir; font-size: 15px; color: MaterialPalette.on-surface-variant; }
+                    Text { text: Tr.output-dir; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
                     HorizontalLayout { spacing: 8px; height: 44px;
                         PathField { path: root.output-dir; horizontal-stretch: 1; }
-                        TouchArea {
+                        OutlinedButton {
                             width: 90px;
+                            text: Tr.browse;
                             clicked => { root.browse-output-dir(); }
-                            Rectangle {
-                                border-radius: 12px;
-                                border-width: 1px;
-                                border-color: MaterialPalette.outline;
-                                background: parent.has-hover
-                                    ? MaterialPalette.surface-container-high
-                                    : MaterialPalette.surface-container;
-                                animate background { duration: 80ms; }
-                                Text {
-                                    text: Tr.browse;
-                                    font-size: 14px; font-weight: 600;
-                                    color: MaterialPalette.primary;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
                         }
                     }
 
@@ -916,69 +740,23 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        TouchArea {
+                        OutlinedButton {
                             width: 90px;
+                            text: Tr.paste;
                             clicked => { root.paste-clipboard(); }
-                            Rectangle {
-                                border-radius: 12px;
-                                border-width: 1px;
-                                border-color: MaterialPalette.outline;
-                                background: parent.has-hover
-                                    ? MaterialPalette.surface-container-high
-                                    : MaterialPalette.surface-container;
-                                animate background { duration: 80ms; }
-                                Text {
-                                    text: Tr.paste;
-                                    font-size: 14px; font-weight: 600;
-                                    color: MaterialPalette.primary;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
                         }
 
-                        if !is-downloading: TouchArea {
+                        if !is-downloading: FilledButton {
                             width: 110px;
                             enabled: download-url != "";
+                            text: Tr.dl-btn;
                             clicked => { root.download-firmware(download-url); }
-                            Rectangle {
-                                border-radius: 12px;
-                                background: download-url != ""
-                                    ? MaterialPalette.primary
-                                    : MaterialPalette.surface-container;
-                                animate background { duration: 80ms; }
-                                Text {
-                                    text: Tr.dl-btn;
-                                    font-size: 14px; font-weight: 600;
-                                    color: download-url != ""
-                                        ? MaterialPalette.on-primary
-                                        : MaterialPalette.on-surface-variant;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    animate color { duration: 80ms; }
-                                }
-                            }
                         }
 
-                        if is-downloading: TouchArea {
+                        if is-downloading: OutlinedButton {
                             width: 110px;
+                            text: "Cancel";
                             clicked => { root.cancel-download(); }
-                            Rectangle {
-                                border-radius: 12px;
-                                border-width: 1.5px;
-                                border-color: MaterialPalette.error;
-                                background: parent.has-hover
-                                    ? MaterialPalette.error-container
-                                    : transparent;
-                                animate background { duration: 80ms; }
-                                Text {
-                                    text: "Cancel";
-                                    font-size: 14px; font-weight: 600;
-                                    color: MaterialPalette.error;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
                         }
                     }
 
@@ -996,53 +774,22 @@ export component MainWindow inherits Window {
 
                     HorizontalDivider { }
 
-                    Text { text: Tr.local-lbl; font-size: 15px; color: MaterialPalette.on-surface-variant; }
+                    Text { text: Tr.local-lbl; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
 
                     HorizontalLayout { spacing: 8px; height: 44px;
                         PathField { path: firmware-path; horizontal-stretch: 1; }
 
-                        TouchArea {
+                        OutlinedButton {
                             width: 110px;
+                            text: Tr.select-zip;
                             clicked => { root.browse-firmware(); }
-                            Rectangle {
-                                border-radius: 12px;
-                                border-width: 1px;
-                                border-color: MaterialPalette.outline;
-                                background: parent.has-hover
-                                    ? MaterialPalette.surface-container-high
-                                    : MaterialPalette.surface-container;
-                                animate background { duration: 80ms; }
-                                Text {
-                                    text: Tr.select-zip;
-                                    font-size: 14px; font-weight: 600;
-                                    color: MaterialPalette.primary;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
                         }
 
-                        TouchArea {
+                        FilledButton {
                             width: 100px;
                             enabled: firmware-path != "";
+                            text: Tr.extract;
                             clicked => { root.extract-firmware(); }
-                            Rectangle {
-                                border-radius: 12px;
-                                background: firmware-path != ""
-                                    ? MaterialPalette.primary
-                                    : MaterialPalette.surface-container;
-                                animate background { duration: 80ms; }
-                                Text {
-                                    text: Tr.extract;
-                                    font-size: 14px; font-weight: 600;
-                                    color: firmware-path != ""
-                                        ? MaterialPalette.on-primary
-                                        : MaterialPalette.on-surface-variant;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    animate color { duration: 80ms; }
-                                }
-                            }
                         }
                     }
 
@@ -1512,32 +1259,35 @@ export component MainWindow inherits Window {
                 if root.page == 6: VerticalLayout { spacing: 0px;
                     Rectangle { vertical-stretch: 1; }
 
-                    VerticalLayout { spacing: 6px;
+                    VerticalLayout { spacing: 8px;
                         Text {
                             text: "LibreFastbootFirmwareFlasher";
-                            font-size: 34px; font-weight: 700;
+                            font-size: Typography.display-small-size;
+                            font-weight: Typography.display-small-weight-em;
                             color: MaterialPalette.primary;
                             horizontal-alignment: center;
-                            letter-spacing: 2px;
+                            letter-spacing: 1px;
                         }
                         Text {
                             text: root.app-version;
-                            font-size: 15px; color: MaterialPalette.on-surface-variant;
+                            font-size: Typography.body-large-size;
+                            color: MaterialPalette.on-surface-variant;
                             horizontal-alignment: center;
                         }
                         Text {
                             text: Tr.author-lbl;
-                            font-size: 15px; color: MaterialPalette.on-surface-variant;
+                            font-size: Typography.body-large-size;
+                            color: MaterialPalette.on-surface-variant;
                             horizontal-alignment: center;
                         }
                     }
 
-                    Rectangle { height: 20px; }
+                    Rectangle { height: 24px; }
                     HorizontalDivider { }
-                    Rectangle { height: 16px; }
+                    Rectangle { height: 20px; }
 
                     HorizontalLayout { alignment: center;
-                        VerticalLayout { spacing: 8px; width: 520px;
+                        VerticalLayout { spacing: 10px; width: 520px;
                             AboutLink {
                                 icon: @image-url("icons/github.png");
                                 label: "GitHub — LibreFastbootFirmwareFlasher";

@@ -1,38 +1,68 @@
 import { Palette } from "std-widgets.slint";
 
-// MD3 color roles — Blue palette, clean dark/light
+// Material 3 Expressive color roles — vibrant, deep, expressive palette
 export global MaterialPalette {
-    in-out property <color> primary:                Palette.color-scheme == ColorScheme.dark ? #9ec3ff : #0061a4;
-    in-out property <color> on-primary:             Palette.color-scheme == ColorScheme.dark ? #003258 : #ffffff;
-    in-out property <color> primary-container:      Palette.color-scheme == ColorScheme.dark ? #00497d : #d0e4ff;
-    in-out property <color> on-primary-container:   Palette.color-scheme == ColorScheme.dark ? #d0e4ff : #001d36;
-    in-out property <color> secondary-container:    Palette.color-scheme == ColorScheme.dark ? #3a5a72 : #d6e3ff;
-    in-out property <color> on-secondary-container: Palette.color-scheme == ColorScheme.dark ? #d6e3ff : #001d36;
-    in-out property <color> surface-container-low:  Palette.color-scheme == ColorScheme.dark ? #141416 : #fef7ff;
-    in-out property <color> surface-container:      Palette.color-scheme == ColorScheme.dark ? #1c1c1e : #fef7ff;
-    in-out property <color> surface-container-high: Palette.color-scheme == ColorScheme.dark ? #28282a : #ece6f0;
-    in-out property <color> surface-container-highest: Palette.color-scheme == ColorScheme.dark ? #323234 : #e6e0e9;
-    in-out property <color> surface:                  Palette.color-scheme == ColorScheme.dark ? #141416 : #fef7ff;
-    in-out property <color> on-surface:             Palette.color-scheme == ColorScheme.dark ? #e4e1e6 : #1c1b1f;
-    in-out property <color> on-surface-variant:     Palette.color-scheme == ColorScheme.dark ? #c6c4c8 : #49454f;
-    in-out property <color> outline:                Palette.color-scheme == ColorScheme.dark ? #8e8e93 : #79747e;
-    in-out property <color> outline-variant:        Palette.color-scheme == ColorScheme.dark ? #444649 : #cac4d0;
-    in-out property <color> error:                  Palette.color-scheme == ColorScheme.dark ? #f2b8b5 : #b0121a;
-    in-out property <color> on-error:               Palette.color-scheme == ColorScheme.dark ? #601410 : #ffffff;
-    in-out property <color> error-container:        Palette.color-scheme == ColorScheme.dark ? #8c1d18 : #f1d8d9;
-    in-out property <color> on-error-container:     Palette.color-scheme == ColorScheme.dark ? #ffdad6 : #541217;
-    in-out property <color> warning:                Palette.color-scheme == ColorScheme.dark ? #f0b800 : #c47f00;
-    in-out property <color> on-warning:             Palette.color-scheme == ColorScheme.dark ? #3d2e00 : #ffffff;
-    in-out property <color> warning-container:      Palette.color-scheme == ColorScheme.dark ? #5c4600 : #fde6a7;
-    in-out property <color> on-warning-container:   Palette.color-scheme == ColorScheme.dark ? #fde6a7 : #3d2e00;
-    in-out property <color> success:                Palette.color-scheme == ColorScheme.dark ? #6fcf6f : #1b5e20;
-    in-out property <color> success-container:      Palette.color-scheme == ColorScheme.dark ? #1a3a1a : #c8e6c9;
-    in-out property <color> on-success:             Palette.color-scheme == ColorScheme.dark ? #ffffff : #ffffff;
-    in-out property <color> on-success-container:   Palette.color-scheme == ColorScheme.dark ? #6fcf6f : #1b5e20;
+    // ── Primary (vibrant blue) ─────────────────────────────────────────────
+    in-out property <color> primary:                Palette.color-scheme == ColorScheme.dark ? #66B2FF : #0066CC;
+    in-out property <color> on-primary:             Palette.color-scheme == ColorScheme.dark ? #002D5C : #ffffff;
+    in-out property <color> primary-container:      Palette.color-scheme == ColorScheme.dark ? #004A8C : #D6E8FF;
+    in-out property <color> on-primary-container:   Palette.color-scheme == ColorScheme.dark ? #D6E8FF : #002D5C;
 
-    // Overlay backdrop colors
-    in-out property <color> overlay-backdrop:       Palette.color-scheme == ColorScheme.dark ? #00000099 : #00000066;
-    in-out property <color> overlay-backdrop-heavy: Palette.color-scheme == ColorScheme.dark ? #000000b3 : #00000070;
-    in-out property <color> drop-shadow:            Palette.color-scheme == ColorScheme.dark ? #00000040 : #00000020;
-    in-out property <color> drop-shadow-heavy:      Palette.color-scheme == ColorScheme.dark ? #00000050 : #00000030;
+    // ── Secondary (soft indigo) ───────────────────────────────────────────
+    in-out property <color> secondary:              Palette.color-scheme == ColorScheme.dark ? #9DBCF3 : #5B7DB1;
+    in-out property <color> on-secondary:           Palette.color-scheme == ColorScheme.dark ? #152F52 : #ffffff;
+    in-out property <color> secondary-container:    Palette.color-scheme == ColorScheme.dark ? #28436E : #DAE6FA;
+    in-out property <color> on-secondary-container: Palette.color-scheme == ColorScheme.dark ? #DAE6FA : #152F52;
+
+    // ── Tertiary (expressive amber-orange) ─────────────────────────────────
+    in-out property <color> tertiary:               Palette.color-scheme == ColorScheme.dark ? #FFB366 : #E67300;
+    in-out property <color> on-tertiary:            Palette.color-scheme == ColorScheme.dark ? #4D2600 : #ffffff;
+    in-out property <color> tertiary-container:       Palette.color-scheme == ColorScheme.dark ? #6B3600 : #FFE8CC;
+    in-out property <color> on-tertiary-container:  Palette.color-scheme == ColorScheme.dark ? #FFE8CC : #4D2600;
+
+    // ── Surface hierarchy ──────────────────────────────────────────────────
+    in-out property <color> surface:                  Palette.color-scheme == ColorScheme.dark ? #141416 : #FDFBFF;
+    in-out property <color> surface-dim:            Palette.color-scheme == ColorScheme.dark ? #101012 : #F5F2F8;
+    in-out property <color> surface-bright:         Palette.color-scheme == ColorScheme.dark ? #1C1C1E : #FFFFFF;
+    in-out property <color> surface-variant:        Palette.color-scheme == ColorScheme.dark ? #2A2A2C : #E8E0EB;
+    in-out property <color> surface-container-lowest: Palette.color-scheme == ColorScheme.dark ? #0E0E10 : #FFFFFF;
+    in-out property <color> surface-container-low:  Palette.color-scheme == ColorScheme.dark ? #141416 : #F7F2FA;
+    in-out property <color> surface-container:      Palette.color-scheme == ColorScheme.dark ? #1C1C1E : #F3EDF7;
+    in-out property <color> surface-container-high: Palette.color-scheme == ColorScheme.dark ? #28282A : #ECE6F0;
+    in-out property <color> surface-container-highest: Palette.color-scheme == ColorScheme.dark ? #323234 : #E6E0E9;
+    in-out property <color> on-surface:              Palette.color-scheme == ColorScheme.dark ? #E6E1E6 : #1C1B1F;
+    in-out property <color> on-surface-variant:     Palette.color-scheme == ColorScheme.dark ? #C6C4C8 : #49454F;
+
+    // ── Inverse ────────────────────────────────────────────────────────────
+    in-out property <color> inverse-surface:        Palette.color-scheme == ColorScheme.dark ? #E6E1E6 : #313033;
+    in-out property <color> inverse-on-surface:       Palette.color-scheme == ColorScheme.dark ? #1C1B1F : #F4EFF4;
+    in-out property <color> inverse-primary:        Palette.color-scheme == ColorScheme.dark ? #0066CC : #66B2FF;
+
+    // ── Outline ────────────────────────────────────────────────────────────
+    in-out property <color> outline:                Palette.color-scheme == ColorScheme.dark ? #8E8E93 : #79747E;
+    in-out property <color> outline-variant:        Palette.color-scheme == ColorScheme.dark ? #444649 : #CAC4D0;
+
+    // ── Error ──────────────────────────────────────────────────────────────
+    in-out property <color> error:                  Palette.color-scheme == ColorScheme.dark ? #FFB4AB : #BA1A1A;
+    in-out property <color> on-error:               Palette.color-scheme == ColorScheme.dark ? #690005 : #FFFFFF;
+    in-out property <color> error-container:        Palette.color-scheme == ColorScheme.dark ? #93000A : #FFDAD6;
+    in-out property <color> on-error-container:     Palette.color-scheme == ColorScheme.dark ? #FFDAD6 : #410002;
+
+    // ── Warning ────────────────────────────────────────────────────────────
+    in-out property <color> warning:                Palette.color-scheme == ColorScheme.dark ? #FFD07F : #C27A00;
+    in-out property <color> on-warning:             Palette.color-scheme == ColorScheme.dark ? #3D2600 : #FFFFFF;
+    in-out property <color> warning-container:      Palette.color-scheme == ColorScheme.dark ? #5C3A00 : #FFF0D6;
+    in-out property <color> on-warning-container:   Palette.color-scheme == ColorScheme.dark ? #FFF0D6 : #3D2600;
+
+    // ── Success ────────────────────────────────────────────────────────────
+    in-out property <color> success:                Palette.color-scheme == ColorScheme.dark ? #7FDF7F : #006E1C;
+    in-out property <color> on-success:             Palette.color-scheme == ColorScheme.dark ? #00390F : #FFFFFF;
+    in-out property <color> success-container:      Palette.color-scheme == ColorScheme.dark ? #005313 : #95F5A5;
+    in-out property <color> on-success-container:   Palette.color-scheme == ColorScheme.dark ? #95F5A5 : #00390F;
+
+    // ── Overlay & Shadow ───────────────────────────────────────────────────
+    in-out property <color> overlay-backdrop:       Palette.color-scheme == ColorScheme.dark ? #000000AA : #00000066;
+    in-out property <color> overlay-backdrop-heavy: Palette.color-scheme == ColorScheme.dark ? #000000CC : #00000080;
+    in-out property <color> drop-shadow:            Palette.color-scheme == ColorScheme.dark ? #00000060 : #00000030;
+    in-out property <color> drop-shadow-heavy:      Palette.color-scheme == ColorScheme.dark ? #00000080 : #00000050;
 }

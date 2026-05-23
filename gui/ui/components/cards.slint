@@ -1,0 +1,113 @@
+import { Palette } from "std-widgets.slint";
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Typography } from "../globals/typography.slint";
+
+// ── Nav Card (Home page quick links) ───────────────────────────────────────
+export component NavCard inherits TouchArea {
+    in property <string> label;
+    in property <image> icon;
+    callback card-clicked();
+    height: 90px;
+
+    Rectangle {
+        width: 100%; height: 100%;
+        border-radius: 20px;
+        border-width: 1px;
+        border-color: root.has-hover
+            ? MaterialPalette.primary
+            : MaterialPalette.outline-variant;
+        background: root.has-hover
+            ? MaterialPalette.primary-container
+            : MaterialPalette.surface-container;
+        drop-shadow-blur: root.has-hover ? 8px : 2px;
+        drop-shadow-color: MaterialPalette.drop-shadow;
+        drop-shadow-offset-y: root.has-hover ? 4px : 1px;
+        animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+        animate border-color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+        animate drop-shadow-blur { duration: 200ms; }
+        animate drop-shadow-offset-y { duration: 200ms; }
+
+        VerticalLayout { alignment: center; spacing: 6px;
+            HorizontalLayout { alignment: center;
+                Rectangle {
+                    width: 36px; height: 36px; border-radius: 18px;
+                    background: root.has-hover
+                        ? MaterialPalette.primary
+                        : MaterialPalette.surface-container-high;
+                    animate background { duration: 200ms; }
+                    Image {
+                        source: icon;
+                        width: 20px; height: 20px;
+                        x: (parent.width - 20px) / 2;
+                        y: (parent.height - 20px) / 2;
+                        colorize: root.has-hover
+                            ? MaterialPalette.on-primary
+                            : MaterialPalette.on-surface-variant;
+                        animate colorize { duration: 200ms; }
+                    }
+                }
+            }
+            Text {
+                text: label;
+                font-size: Typography.label-large-size;
+                font-weight: Typography.label-large-weight;
+                color: root.has-hover
+                    ? MaterialPalette.on-primary-container
+                    : MaterialPalette.on-surface;
+                horizontal-alignment: center;
+                animate color { duration: 200ms; }
+            }
+        }
+    }
+    clicked => { root.card-clicked(); }
+}
+
+// ── Outlined Card (sections, forms) ────────────────────────────────────────
+export component OutlinedCard inherits Rectangle {
+    in property <bool> has-hover: false;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: has-hover ? MaterialPalette.primary : MaterialPalette.outline-variant;
+    background: has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container-low;
+    animate background { duration: 150ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+    animate border-color { duration: 150ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+}
+
+// ── Elevated Card (dialogs, floating panels) ───────────────────────────────
+export component ElevatedCard inherits Rectangle {
+    border-radius: 20px;
+    background: MaterialPalette.surface-container-high;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: MaterialPalette.drop-shadow;
+    drop-shadow-offset-y: 4px;
+}
+
+// ── Chip (compact action button) ───────────────────────────────────────────
+export component Chip inherits TouchArea {
+    in property <string> text;
+    callback chip-clicked();
+    height: 32px;
+
+    Rectangle {
+        width: 100%; height: 100%;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: root.has-hover
+            ? MaterialPalette.primary
+            : MaterialPalette.outline-variant;
+        background: root.has-hover
+            ? MaterialPalette.primary.with-alpha(0.08)
+            : MaterialPalette.surface-container;
+        animate background { duration: 150ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+        animate border-color { duration: 150ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+
+        Text {
+            text: root.text;
+            font-size: Typography.label-medium-size;
+            font-weight: Typography.label-medium-weight;
+            color: MaterialPalette.on-surface;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
+    }
+    clicked => { root.chip-clicked(); }
+}
