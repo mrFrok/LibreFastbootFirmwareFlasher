@@ -329,16 +329,22 @@ fn check_free_space(path: &Path) -> (bool, f64) {
             break;
         }
     }
-    let r = crate::utils::run_cmd(&["df", "-B1", &check.to_string_lossy()], 5);
-    if r.success()
-        && let Some(line) = r.stdout.lines().nth(1) {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 4
-                && let Ok(avail) = parts[3].parse::<u64>() {
-                    let gb = avail as f64 / (1024.0 * 1024.0 * 1024.0);
-                    return (gb >= 20.0, gb);
-                }
+    // Use --output=avail so the line never contains the mount path
+    // (which may include spaces and breaks simple column parsing).
+    let r = crate::utils::run_cmd(
+        &["df", "-B1", "--output=avail", &check.to_string_lossy()],
+        5,
+    );
+    if r.success() {
+        // First line is the header "Avail"; second line is the value.
+        if let Some(line) = r.stdout.lines().nth(1) {
+            if let Ok(avail) = line.trim().parse::<u64>() {
+                let gb = avail as f64 / (1024.0 * 1024.0 * 1024.0);
+                return (gb >= 20.0, gb);
+            }
         }
+    }
+    // On error (e.g. Windows without df) we silently skip the check.
     (true, 0.0)
 }
 

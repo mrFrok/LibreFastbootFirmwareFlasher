@@ -91,7 +91,7 @@ pub fn run(
             pb2.set_position(p.done as u64);
             pb2.set_message(format!("{}_{}", p.partition, p.slot));
         }
-        if p.done == p.total {
+        if p.done == p.total && p.total > 0 {
             pb2.finish_with_message("Done");
         }
     };

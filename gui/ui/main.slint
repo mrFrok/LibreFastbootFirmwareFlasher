@@ -1,18 +1,33 @@
 // LibreFastbootFirmwareFlasher — Material Design 3 GUI (Slint built-in material)
 
-import { Palette, ScrollView, CheckBox } from "std-widgets.slint";
+import { Palette } from "std-widgets.slint";
 import { MaterialPalette } from "globals/material-palette.slint";
-import { Typography } from "globals/typography.slint";
 import { Tr } from "globals/tr.slint";
-import { DeviceInfo, LogEntry, FlashHistoryItem, RebootOption, ConfirmAction, RebootChoice } from "structs.slint";
-import { FilledButton, OutlinedButton, TextButton, FilledTonalButton, ElevatedButton, HorizontalDivider, LinearProgressIndicator, SectionTitle, PathField, DeviceBanner, BackButton } from "components/buttons.slint";
-import { NavCard, OutlinedCard, Chip } from "components/cards.slint";
-import { LogView } from "components/log-view.slint";
-import { NavItem, AboutLink } from "components/nav.slint";
-import { ConfirmDialog, WarningDialog, RebootChoiceDialog } from "dialogs/all.slint";
+import { DeviceInfo, LogEntry, FlashHistoryItem } from "structs.slint";
+import { Sidebar } from "components/sidebar.slint";
+import { TopBar } from "components/top-bar.slint";
 
+import { HomePage } from "pages/home-page.slint";
+import { DevicePage } from "pages/device-page.slint";
+import { DownloadPage } from "pages/download-page.slint";
+import { FlashPage } from "pages/flash-page.slint";
+import { PartitionPage } from "pages/partition-page.slint";
+import { HistoryPage } from "pages/history-page.slint";
+import { AboutPage } from "pages/about-page.slint";
 
-// ═══════════════════════════════ MAIN WINDOW ══════════════════════════════════
+import { FlashAllRebootDialog } from "dialogs/flash-all-reboot-dialog.slint";
+import { FlashAllFinalDialog } from "dialogs/flash-all-final-dialog.slint";
+import { SourceFlashFinalDialog } from "dialogs/source-flash-final-dialog.slint";
+import { PartitionRebootDialog } from "dialogs/partition-reboot-dialog.slint";
+import { PartitionFinalDialog } from "dialogs/partition-final-dialog.slint";
+import { PostFlashSuccessDialog } from "dialogs/post-flash-success-dialog.slint";
+import { CableTestDialog } from "dialogs/cable-test-dialog.slint";
+import { FlashFailureDialog } from "dialogs/flash-failure-dialog.slint";
+import { ArbWarningDialog } from "dialogs/arb-warning-dialog.slint";
+import { ArbDeviceWarningDialog } from "dialogs/arb-device-warning-dialog.slint";
+import { PreloaderWarningDialog } from "dialogs/preloader-warning-dialog.slint";
+import { FlashErrorDialog } from "dialogs/flash-error-dialog.slint";
+import { UpdateDialog } from "dialogs/update-dialog.slint";
 
 export component MainWindow inherits Window {
     title: "LibreFastbootFirmwareFlasher";
@@ -29,19 +44,19 @@ export component MainWindow inherits Window {
     in-out property <float> ui-scale: 1.0;
     in-out property <float> pending-scale: 0;
     in-out property <float> effect-opacity: 0;
+
     callback set-scale(float);
     callback apply-pending-scale();
     callback save-lang(string);
     callback save-theme(bool);
-    changed is-dark => { Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
 
-    // Page transition — overlay flashes white/dark then fades out
-    private property <float> page-opacity: 0.0;  // 0 = invisible overlay
+    // Page transition
+    private property <float> page-opacity: 0.0;
     private property <length> page-x: 0px;
 
     changed page => {
-        page-opacity = 1.0;   // overlay instantly covers content
-        page-x = 30px;        // content starts offset
+        page-opacity = 1.0;
+        page-x = 30px;
         anim-timer.running = true;
     }
 
@@ -50,12 +65,11 @@ export component MainWindow inherits Window {
         running: false;
         triggered => {
             self.running = false;
-            root.page-opacity = 0.0;  // overlay fades away revealing new page
-            root.page-x = 0px;        // content slides into place
+            root.page-opacity = 0.0;
+            root.page-x = 0px;
         }
     }
 
-    // Spring-like overshoot for page entrance
     animate page-opacity { duration: 250ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
     animate page-x       { duration: 350ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1.0); }
     animate effect-opacity { duration: 300ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
@@ -77,11 +91,13 @@ export component MainWindow inherits Window {
         }
     }
 
-    in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—" };
+    // State
+    in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—", is-fastboot-mode: false };
     in-out property <string>  firmware-path;
-    in-out property <int>     flash-source-mode: 0;  // 0=folder, 1=source dir
+    in-out property <int>     flash-source-mode: 0;
     in-out property <string>  source-dir;
     in-out property <int>     source-image-count: 0;
+    in-out property <int>     source-total-ops: 0;
     in-out property <string>  single-image-path;
     in-out property <string>  partition-name;
     in-out property <bool>    is-flashing: false;
@@ -112,18 +128,8 @@ export component MainWindow inherits Window {
     in-out property <bool>    show-skip-partitions: false;
     in-out property <bool>    show-confirm: false;
     in-out property <int>     confirm-action: 0;
-    // confirm-action:
-    //   1 = flash all (step 2: final confirm after reboot choice)
-    //   2 = flash partition
-    //   3 = flash all step 1: choose reboot source
-    //   4 = flash all step 2: final confirm
-    //   5 = flash partition step 1: reboot to bootloader
-    //   6 = flash partition step 2: final confirm
-    //   7 = post-flash success dialog
-    //   8 = source flash final confirm
-    //   9 = cable test dialog
+    // confirm-action: 3=reboot-choice 4=flash-all-final 5=part-reboot 6=part-final 7=success 8=source-final 9=cable-test 10=flash-failure
     in-out property <int>     reboot-choice: 0;
-    // reboot-choice: 0=not chosen, 1=from system (adb), 2=from bootloader (fastboot), 3=no reboot
     in-out property <bool>    show-arb-warning: false;
     in-out property <int>     arb-warning-version: 0;
     in-out property <bool>    as-mediatek: false;
@@ -139,28 +145,23 @@ export component MainWindow inherits Window {
     in-out property <string>  flash-error-message: "";
     in-out property <bool>    flash-error-is-source: false;
     in-out property <string>  app-version: "dev";
-    // Update dialog
     in-out property <bool>    show-update-dialog: false;
     in-out property <string>  update-version: "";
     in-out property <string>  update-url: "";
     in-out property <string>  update-body: "";
-    // Cable test
     in-out property <float>   cable-test-progress: 0;
     in-out property <string>  cable-test-status: "";
     in-out property <bool>    cable-test-passed: false;
-    // Retry flash
     in-out property <string>  flash-failed-partitions: "";
-    // Flash failure dialog
     in-out property <string>  flash-fail-partition: "";
     in-out property <string>  flash-fail-slot: "";
     in-out property <string>  flash-fail-error: "";
 
     init => { Tr.lang = lang; Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
     changed lang => { Tr.lang = lang; }
+    changed is-dark => { Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
     changed confirm-action => {
-        if confirm-action == 9 {
-            root.run-cable-test();
-        }
+        if confirm-action == 9 { root.run-cable-test(); }
     }
 
     callback check-device();       callback browse-firmware();
@@ -183,11 +184,11 @@ export component MainWindow inherits Window {
     callback retry-flash();
     callback reboot-device();
     callback run-cable-test();
-    callback reboot-for-flash();  // start reboot to fastbootd, show cable test when ready
-    callback post-flash-reboot(); // reboot to system after successful flash
-    callback post-flash-wipe();   // fastboot -w then reboot after successful flash
-    callback flash-fail-skip();   // skip failed partition and continue
-    callback flash-fail-abort();  // abort flash session
+    callback reboot-for-flash();
+    callback post-flash-reboot();
+    callback post-flash-wipe();
+    callback flash-fail-skip();
+    callback flash-fail-abort();
     callback export-flash-log();
     callback export-partition-log();
     callback export-device-log();
@@ -197,1143 +198,150 @@ export component MainWindow inherits Window {
     callback open-update-url();
 
     // ── Root layout ───────────────────────────────────────────────────────────
-
     HorizontalLayout {
         width: 100%;
         height: 100%;
 
-        // ── Sidebar — MD3 Navigation Drawer ──────────────────────────────────
-        Rectangle {
-            width: 240px;
-            background: MaterialPalette.surface-container-low;
-
-            VerticalLayout {
-                padding-top: 0px;
-                padding-bottom: 16px;
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 0px;
-
-                // MD3 Drawer header — 72px tall
-                Rectangle { height: 72px;
-                    HorizontalLayout { padding-left: 16px; spacing: 8px;
-                        Text {
-                            text: "⚡";
-                            font-size: 20px;
-                            vertical-alignment: center;
-                            width: 24px;
-                            color: MaterialPalette.primary;
-                        }
-                        VerticalLayout { spacing: 1px; horizontal-stretch: 1; alignment: center;
-                            Text {
-                                text: "LibreFastboot";
-                                font-size: 13px; font-weight: 600;
-                                color: MaterialPalette.on-surface;
-                                overflow: elide;
-                            }
-                            Text {
-                                text: "FirmwareFlasher";
-                                font-size: 13px; font-weight: 600;
-                                color: MaterialPalette.on-surface;
-                                overflow: elide;
-                            }
-                        }
-                    }
-                }
-
-                NavItem {
-                    label: Tr.home; icon: @image-url("icons/home.svg");
-                    selected: root.page == 0;
-                    clicked => { root.page = 0; }
-                }
-                NavItem {
-                    label: Tr.nav-device; icon: @image-url("icons/smartphone.svg");
-                    selected: root.page == 1;
-                    clicked => { root.page = 1; }
-                }
-                NavItem {
-                    label: Tr.nav-download; icon: @image-url("icons/download.svg");
-                    selected: root.page == 2;
-                    clicked => { root.page = 2; }
-                }
-                NavItem {
-                    label: Tr.nav-flash; icon: @image-url("icons/flash.svg");
-                    selected: root.page == 3;
-                    clicked => { root.page = 3; }
-                }
-                NavItem {
-                    label: Tr.nav-part; icon: @image-url("icons/storage.svg");
-                    selected: root.page == 4;
-                    clicked => { root.page = 4; }
-                }
-
-                Rectangle { vertical-stretch: 1; }
-
-                // MD3: section divider
-                Rectangle { height: 16px; }
-                Rectangle {
-                    height: 1px;
-                    background: MaterialPalette.outline-variant;
-                }
-                Rectangle { height: 8px; }
-
-                NavItem {
-                    label: lang == "ru" ? "История" : "History"; icon: @image-url("icons/history.svg");
-                    selected: root.page == 5;
-                    clicked => { root.page = 5; }
-                }
-
-                NavItem {
-                    label: Tr.nav-about; icon: @image-url("icons/info.svg");
-                    selected: root.page == 6;
-                    clicked => { root.page = 6; }
-                }
-            }
+        // ── Sidebar ──────────────────────────────────────────────────────────
+        Sidebar {
+            page: root.page;
+            lang: root.lang;
+            navigate(p) => { root.page = p; }
         }
 
         // ── Content area ──────────────────────────────────────────────────────
         VerticalLayout { horizontal-stretch: 1;
 
             // ── Top bar ───────────────────────────────────────────────────────
-            Rectangle {
-                height: 44px;
-                background: Palette.color-scheme == ColorScheme.dark
-                    ? #22222a
-                    : MaterialPalette.surface-container;
-
-                Rectangle {
-                    y: 43px; height: 1px; width: 100%;
-                    background: MaterialPalette.outline-variant;
-                }
-
-                HorizontalLayout {
-                    padding-left: 16px; padding-right: 12px;
-                    alignment: end; spacing: 6px;
-
-                    // Scale control — S/M/L/XL (relaunches with new scale)
-                    HorizontalLayout { spacing: 2px; y: (parent.height - 26px) / 2; height: 26px;
-                        for item in [{ label: "S", val: 0.85 }, { label: "M", val: 1.0 }, { label: "L", val: 1.25 }, { label: "XL", val: 1.5 }]:
-                        TouchArea {
-                            width: 26px; height: 26px;
-                            clicked => { root.set-scale(item.val); root.ui-scale = item.val; }
-                            Rectangle {
-                                border-radius: 5px;
-                                background: root.ui-scale == item.val
-                                    ? MaterialPalette.primary
-                                    : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent);
-                                animate background { duration: 80ms; }
-                                Text {
-                                    text: item.label; font-size: 10px; font-weight: 600;
-                                    color: root.ui-scale == item.val ? MaterialPalette.on-primary : MaterialPalette.on-surface-variant;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle { width: 1px; height: 18px; background: MaterialPalette.outline-variant; y: 13px; }
-
-                    // Language switcher — animated sliding pill
-                    Rectangle {
-                        width: 82px; height: 28px;
-                        y: (parent.height - 28px) / 2;
-                        border-radius: 8px;
-                        background: MaterialPalette.surface-container-high;
-                        border-width: 1px;
-                        border-color: MaterialPalette.outline-variant;
-
-                        // Sliding pill indicator
-                        Rectangle {
-                            x: root.lang == "en" ? 2px : 42px;
-                            y: 2px;
-                            width: 38px; height: 24px;
-                            border-radius: 5px;
-                            background: MaterialPalette.primary;
-                            animate x { duration: 180ms; easing: ease-in-out; }
-                        }
-
-                        // EN touch zone
-                        TouchArea {
-                            x: 0; y: 0; width: 42px; height: 28px;
-                            clicked => { root.lang = "en"; root.save-lang("en"); }
-                            Text {
-                                text: "EN";
-                                font-size: 13px; font-weight: 600;
-                                color: root.lang == "en"
-                                    ? MaterialPalette.on-primary
-                                    : MaterialPalette.on-surface-variant;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                animate color { duration: 150ms; }
-                            }
-                        }
-
-                        // RU touch zone
-                        TouchArea {
-                            x: 42px; y: 0; width: 40px; height: 28px;
-                            clicked => { root.lang = "ru"; root.save-lang("ru"); }
-                            Text {
-                                text: "RU";
-                                font-size: 13px; font-weight: 600;
-                                color: root.lang == "ru"
-                                    ? MaterialPalette.on-primary
-                                    : MaterialPalette.on-surface-variant;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                animate color { duration: 150ms; }
-                            }
-                        }
-                    }
-
-                    // Separator
-                    Rectangle { width: 1px; height: 20px; background: MaterialPalette.outline-variant; y: 12px; }
-
-                    // Theme toggle
-                    TouchArea {
-                        width: 36px; height: 28px;
-                        y: (parent.height - 28px) / 2;
-                        clicked => {
-                            root.is-dark = !root.is-dark;
-                            root.save-theme(root.is-dark);
-                        }
-                        Rectangle {
-                            border-radius: 8px;
-                            background: parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
-                            animate background { duration: 80ms; }
-                            Text {
-                                text: root.is-dark ? "☀" : "🌙";
-                                font-size: 16px;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
+            TopBar {
+                lang: root.lang;
+                is-dark: root.is-dark;
+                ui-scale: root.ui-scale;
+                set-scale(v) => { root.set-scale(v); root.ui-scale = v; }
+                set-lang(l) => { root.lang = l; root.save-lang(l); }
+                toggle-theme => { root.is-dark = !root.is-dark; root.save-theme(root.is-dark); }
             }
 
             // ── Pages ─────────────────────────────────────────────────────────
-            // Outer clip container fills remaining space
             Rectangle {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
                 clip: true;
 
-                // Inner container — animates x slide
                 Rectangle {
                     width: parent.width;
                     height: parent.height;
                     x: root.page-x;
 
-            VerticalLayout { padding: 24px; spacing: 14px; height: 100%;
+                    VerticalLayout { padding: 24px; spacing: 14px; height: 100%;
 
-                // ── P0: Home ──────────────────────────────────────────────────
-                if root.page == 0: VerticalLayout { spacing: 14px;
+                        if root.page == 0: HomePage {
+                            app-version: root.app-version;
+                            lang: root.lang;
+                            navigate-to(p) => { root.page = p; }
+                        }
 
-                    // ── Warning banner (merged) ────────────────────────────────
-                    Rectangle {
-                        border-radius: 12px;
-                        background: Palette.color-scheme == ColorScheme.dark
-                            ? MaterialPalette.error-container.with-alpha(0.35)
-                            : MaterialPalette.error-container.with-alpha(0.25);
-                        border-width: 1px;
-                        border-color: MaterialPalette.error;
-                        HorizontalLayout { padding-left: 14px; padding-right: 14px; padding-top: 12px; padding-bottom: 12px; spacing: 10px;
-                            Text { text: "⚠"; font-size: 15px; width: 20px; vertical-alignment: center;
-                                color: MaterialPalette.error; }
-                            VerticalLayout { spacing: 4px; horizontal-stretch: 1;
-                                Text { text: Tr.home-warning; font-size: 13px; wrap: word-wrap;
-                                    color: MaterialPalette.on-error-container; }
-                                Text { text: Tr.supported-devices; font-size: 12px; wrap: word-wrap;
-                                    color: MaterialPalette.on-error-container; }
-                            }
+                        if root.page == 1: DevicePage {
+                            device: root.device;
+                            test-step: root.test-step;
+                            test-status: root.test-status;
+                            device-log: root.device-log;
+                            device-export-status: root.device-export-status;
+                            check-device => { root.check-device(); }
+                            check-deps => { root.check-deps(); }
+                            install-deps => { root.install-deps(); }
+                            run-driver-test => { root.run-driver-test(); }
+                            reboot-to(t) => { root.reboot-to(t); }
+                            set-active-slot(s) => { root.set-active-slot(s); }
+                            export-device-log => { root.export-device-log(); }
                         }
-                    }
 
-                    // ── Hero section ──────────────────────────────────────────
-                    Rectangle { vertical-stretch: 1; }
-                    HorizontalLayout { alignment: center;
-                        VerticalLayout { spacing: 10px; alignment: center;
-                            // App icon
-                            HorizontalLayout { alignment: center;
-                                Image {
-                                    source: @image-url("icons/logo_icon.svg");
-                                    width: 96px; height: 96px;
-                                }
-                            }
-                            Text {
-                                text: "LibreFastbootFirmwareFlasher";
-                                font-size: Typography.headline-small-size;
-                                font-weight: Typography.headline-small-weight-em;
-                                color: MaterialPalette.primary;
-                                horizontal-alignment: center;
-                                letter-spacing: 0.5px;
-                            }
-                            Text {
-                                text: root.app-version + "  •  " + (lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
-                                font-size: Typography.body-large-size;
-                                color: MaterialPalette.on-surface-variant;
-                                horizontal-alignment: center;
-                            }
+                        if root.page == 2: DownloadPage {
+                            device: root.device;
+                            output-dir: root.output-dir;
+                            download-url <=> root.download-url;
+                            dl-speed: root.dl-speed;
+                            dl-eta: root.dl-eta;
+                            dl-downloaded: root.dl-downloaded;
+                            dl-total: root.dl-total;
+                            dl-percent: root.dl-percent;
+                            is-downloading: root.is-downloading;
+                            firmware-path: root.firmware-path;
+                            download-log: root.download-log;
+                            download-export-status: root.download-export-status;
+                            browse-output-dir => { root.browse-output-dir(); }
+                            paste-clipboard => { root.paste-clipboard(); }
+                            download-firmware(url) => { root.download-firmware(url); }
+                            cancel-download => { root.cancel-download(); }
+                            browse-firmware => { root.browse-firmware(); }
+                            extract-firmware => { root.extract-firmware(); }
+                            export-download-log => { root.export-download-log(); }
                         }
-                    }
-                    Rectangle { vertical-stretch: 1; }
 
-                    // ── Navigation cards ──────────────────────────────────────
-                    HorizontalLayout { spacing: 10px; height: 90px;
-                        NavCard {
-                            width: (parent.width - 30px) / 4;
-                            label: Tr.home-goto-device;
-                            icon: @image-url("icons/smartphone.svg");
-                            card-clicked => { root.page = 1; }
+                        if root.page == 3: FlashPage {
+                            device: root.device;
+                            flash-source-mode: root.flash-source-mode;
+                            firmware-path: root.firmware-path;
+                            source-dir: root.source-dir;
+                            source-image-count: root.source-image-count;
+                            source-total-ops: root.source-total-ops;
+                            skip-arb-check <=> root.skip-arb-check;
+                            show-skip-partitions <=> root.show-skip-partitions;
+                            skip-partitions <=> root.skip-partitions;
+                            is-flashing: root.is-flashing;
+                            flash-progress: root.flash-progress;
+                            flash-status: root.flash-status;
+                            flash-log: root.flash-log;
+                            flash-export-status: root.flash-export-status;
+                            lang: root.lang;
+                            browse-folder => { root.browse-folder(); }
+                            check-device => { root.check-device(); }
+                            browse-source-dir => { root.browse-source-dir(); }
+                            start-flash-from-source => { root.start-flash-from-source(); }
+                            start-flash => { root.start-flash(); }
+                            cancel-flash => { root.cancel-flash(); }
+                            export-flash-log => { root.export-flash-log(); }
+                            show-reboot-choice => {
+                                root.reboot-choice = 0;
+                                root.confirm-action = 3;
+                                root.show-confirm = true;
+                            }
                         }
-                        NavCard {
-                            width: (parent.width - 30px) / 4;
-                            label: Tr.home-goto-download;
-                            icon: @image-url("icons/download.svg");
-                            card-clicked => { root.page = 2; }
-                        }
-                        NavCard {
-                            width: (parent.width - 30px) / 4;
-                            label: Tr.home-goto-flash;
-                            icon: @image-url("icons/flash.svg");
-                            card-clicked => { root.page = 3; }
-                        }
-                        NavCard {
-                            width: (parent.width - 30px) / 4;
-                            label: Tr.home-goto-part;
-                            icon: @image-url("icons/storage.svg");
-                            card-clicked => { root.page = 4; }
-                        }
-                    }
 
-                    // ── Features list ─────────────────────────────────────────
-                    OutlinedCard {
-                        VerticalLayout { padding: 16px; spacing: 8px;
-                            Text {
-                                text: Tr.home-features-title;
-                                font-size: Typography.label-medium-size;
-                                font-weight: Typography.label-medium-weight;
-                                letter-spacing: 0.8px;
-                                color: MaterialPalette.primary;
+                        if root.page == 4: PartitionPage {
+                            device: root.device;
+                            single-image-path: root.single-image-path;
+                            partition-name <=> root.partition-name;
+                            is-flashing: root.is-flashing;
+                            flash-progress: root.flash-progress;
+                            flash-status: root.flash-status;
+                            partition-log: root.partition-log;
+                            partition-export-status: root.partition-export-status;
+                            lang: root.lang;
+                            browse-single-image => { root.browse-single-image(); }
+                            check-device => { root.check-device(); }
+                            show-partition-reboot-choice => {
+                                root.reboot-choice = 0;
+                                root.confirm-action = 5;
+                                root.show-confirm = true;
                             }
-                            for feat in [
-                                Tr.home-feat1, Tr.home-feat2,
-                                Tr.home-feat3, Tr.home-feat4, Tr.home-feat5,
-                            ]: HorizontalLayout { spacing: 10px;
-                                Rectangle {
-                                    width: 6px; height: 6px; border-radius: 3px;
-                                    background: MaterialPalette.tertiary;
-                                    y: (parent.height - 6px) / 2;
-                                }
-                                Text {
-                                    text: feat;
-                                    font-size: Typography.body-medium-size;
-                                    color: MaterialPalette.on-surface-variant;
-                                    vertical-alignment: center;
-                                    horizontal-stretch: 1;
-                                }
-                            }
+                            start-single-flash => { root.start-single-flash(); }
+                            cancel-flash => { root.cancel-flash(); }
+                            export-partition-log => { root.export-partition-log(); }
+                        }
+
+                        if root.page == 5: HistoryPage {
+                            lang: root.lang;
+                            history-items: root.history-items;
+                        }
+
+                        if root.page == 6: AboutPage {
+                            app-version: root.app-version;
+                            open-url(u) => { root.open-url(u); }
                         }
                     }
                 }
 
-                // ── P1: Device & Drivers ──────────────────────────────────────
-                if root.page == 1: VerticalLayout { spacing: 0px;
-
-                    SectionTitle { text: Tr.nav-device; }
-                    Rectangle { height: 12px; }
-                    DeviceBanner { device: root.device; }
-                    Rectangle { height: 8px; }
-
-                    if root.device.connected: Rectangle {
-                        background: MaterialPalette.error-container;
-                        border-radius: 12px;
-                        border-width: 1px;
-                        border-color: MaterialPalette.error;
-                        VerticalLayout { spacing: 8px; padding: 12px;
-                            Text {
-                                text: Tr.slot-switch-warn;
-                                font-size: 13px;
-                                color: MaterialPalette.on-error-container;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout { spacing: 8px;
-                                FilledButton {
-                                    text: Tr.slot-switch-btn + "A";
-                                    enabled: root.device.is_fastboot_mode && root.device.slot != "a";
-                                    clicked => { root.set-active-slot("a"); }
-                                }
-                                FilledButton {
-                                    text: Tr.slot-switch-btn + "B";
-                                    enabled: root.device.is_fastboot_mode && root.device.slot != "b";
-                                    clicked => { root.set-active-slot("b"); }
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle { height: 8px; }
-                    HorizontalLayout { spacing: 8px;
-                        OutlinedButton { text: Tr.find-device;  horizontal-stretch: 1; clicked => { root.check-device(); } }
-                        OutlinedButton { text: Tr.check-deps;   horizontal-stretch: 1; clicked => { root.check-deps(); } }
-                        FilledButton  { text: Tr.install-deps; horizontal-stretch: 1; clicked => { root.install-deps(); } }
-                    }
-
-                    Rectangle { height: 12px; }
-                    HorizontalDivider { }
-                    Rectangle { height: 8px; }
-
-                    HorizontalLayout { spacing: 8px; height: 32px;
-                        Text {
-                            text: Tr.driver-test;
-                            font-size: 15px; font-weight: 500;
-                            color: MaterialPalette.on-surface;
-                            vertical-alignment: center;
-                        }
-                        Rectangle { horizontal-stretch: 1; }
-                        FilledTonalButton {
-                            text: Tr.run-test;
-                            enabled: test-step == 0 || test-step >= 5 || test-step < 0;
-                            clicked => { root.run-driver-test(); }
-                        }
-                    }
-
-                    Rectangle { height: 4px; }
-                    HorizontalLayout { spacing: 16px; height: 24px;
-                        for s in [
-                            { label: "ADB", n: 2 }, { label: "Bootloader", n: 3 },
-                            { label: "Fastbootd", n: 4 }, { label: "Done", n: 5 },
-                        ]: HorizontalLayout { spacing: 6px;
-                            Rectangle {
-                                width: 10px; height: 10px; border-radius: 5px;
-                                background: test-step >= s.n
-                                        ? #4caf50
-                                    : test-step < 0 ? MaterialPalette.error
-                                    : MaterialPalette.outline-variant;
-                                animate background { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-                                y: (parent.height - 10px) / 2;
-                            }
-                            Text {
-                                text: s.label; font-size: 14px;
-                                color: test-step >= s.n
-                                    ? #4caf50
-                                    : MaterialPalette.on-surface-variant;
-                                vertical-alignment: center;
-                                animate color { duration: 200ms; }
-                            }
-                        }
-                    }
-
-                    Rectangle { height: 4px; visible: test-status != ""; }
-                    Text {
-                        visible: test-status != "";
-                        opacity: test-status != "" ? 1.0 : 0.0;
-                        text: test-status; font-size: 14px;
-                        color: test-step < 0 ? MaterialPalette.error : MaterialPalette.primary;
-                        animate color { duration: 200ms; }
-                        animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-                    }
-
-                    Rectangle { height: 12px; }
-                    HorizontalDivider { }
-                    Rectangle { height: 8px; }
-
-                    // Reboot menu
-                    HorizontalLayout { spacing: 8px; height: 32px;
-                        Text {
-                            text: Tr.reboot-title;
-                            font-size: 15px; font-weight: 500;
-                            color: MaterialPalette.on-surface;
-                            vertical-alignment: center;
-                        }
-                        Rectangle { horizontal-stretch: 1; }
-                    }
-
-                    Rectangle { height: 8px; }
-
-                    // ADB reboot row
-                    Text { text: "ADB"; font-size: Typography.label-medium-size; color: MaterialPalette.on-surface-variant; min-height: 14px; }
-                    Rectangle { height: 4px; }
-                    HorizontalLayout { spacing: 8px;
-                        for item in [
-                            { label: Tr.reboot-recovery,    target: "adb-recovery"    },
-                            { label: Tr.reboot-bootloader,  target: "adb-bootloader"  },
-                            { label: Tr.reboot-fastbootd,   target: "adb-fastboot"    },
-                            { label: Tr.reboot-system,      target: "adb-reboot"      },
-                        ]: Chip {
-                            horizontal-stretch: 1;
-                            text: item.label;
-                            chip-clicked => { root.reboot-to(item.target); }
-                        }
-                    }
-
-                    Rectangle { height: 12px; }
-
-                    // Fastboot reboot row
-                    Text { text: "Fastboot"; font-size: Typography.label-medium-size; color: MaterialPalette.on-surface-variant; min-height: 14px; }
-                    Rectangle { height: 4px; }
-                    HorizontalLayout { spacing: 8px;
-                        for item in [
-                            { label: Tr.reboot-recovery,    target: "fb-recovery"    },
-                            { label: Tr.reboot-bootloader,  target: "fb-bootloader"  },
-                            { label: Tr.reboot-fastbootd,   target: "fb-fastboot"    },
-                            { label: Tr.reboot-system,      target: "fb-reboot"      },
-                        ]: Chip {
-                            horizontal-stretch: 1;
-                            text: item.label;
-                            chip-clicked => { root.reboot-to(item.target); }
-                        }
-                    }
-
-                    LogView { entries: root.device-log; vertical-stretch: 1; export-status: root.device-export-status; export-log => { root.export-device-log(); } }
-                }
-
-                // ── P2: Download ──────────────────────────────────────────────
-                if root.page == 2: VerticalLayout { spacing: 12px;
-
-                    SectionTitle { text: Tr.nav-download; }
-                    DeviceBanner { device: root.device; }
-
-                    // Output directory selector — shown before download
-                    Text { text: Tr.output-dir; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
-                    HorizontalLayout { spacing: 8px; height: 44px;
-                        PathField { path: root.output-dir; horizontal-stretch: 1; }
-                        OutlinedButton {
-                            width: 90px;
-                            text: Tr.browse;
-                            clicked => { root.browse-output-dir(); }
-                        }
-                    }
-
-                    // URL row with Paste & Download
-                    HorizontalLayout { spacing: 8px; height: 44px;
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            min-width: 0px;
-                            clip: true;
-                            border-radius: 12px;
-                            background: MaterialPalette.surface-container;
-                            border-width: 1px;
-                            border-color: url-input.has-focus
-                                ? MaterialPalette.primary
-                                : MaterialPalette.outline-variant;
-                            animate border-color { duration: 80ms; }
-
-                            Text {
-                                x: 14px; y: 0px;
-                                width: parent.width - 28px; height: parent.height;
-                                visible: download-url == "" && !url-input.has-focus;
-                                opacity: download-url == "" && !url-input.has-focus ? 1.0 : 0.0;
-                                text: Tr.ota-url;
-                                font-size: 14px;
-                                color: MaterialPalette.on-surface-variant;
-                                vertical-alignment: center;
-                                overflow: elide;
-                                animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-                            }
-
-                            url-input := TextInput {
-                                x: 14px; y: 0px;
-                                width: parent.width - 28px; height: parent.height;
-                                text <=> root.download-url;
-                                font-size: 14px;
-                                color: MaterialPalette.on-surface;
-                                vertical-alignment: center;
-                                single-line: true;
-                            }
-                        }
-
-                        OutlinedButton {
-                            width: 90px;
-                            text: Tr.paste;
-                            clicked => { root.paste-clipboard(); }
-                        }
-
-                        if !is-downloading: FilledButton {
-                            width: 110px;
-                            enabled: download-url != "";
-                            text: Tr.dl-btn;
-                            clicked => { root.download-firmware(download-url); }
-                        }
-
-                        if is-downloading: OutlinedButton {
-                            width: 110px;
-                            text: "Cancel";
-                            clicked => { root.cancel-download(); }
-                        }
-                    }
-
-                    // Download progress + statistics
-                    if dl-percent > 0 || dl-total != "": VerticalLayout { spacing: 6px;
-                        HorizontalLayout { spacing: 10px;
-                            Text { text: Math.round(dl-percent) + "%"; font-size: 15px; font-weight: 700; color: MaterialPalette.primary; }
-                            Text { text: dl-downloaded + " / " + dl-total; font-size: 14px; color: MaterialPalette.on-surface-variant; }
-                            Rectangle { horizontal-stretch: 1; }
-                            Text { text: "↓ " + dl-speed; font-size: 14px; font-weight: 500; color: Palette.color-scheme == ColorScheme.dark ? #4caf50 : #4caf50; }
-                            Text { text: "ETA " + dl-eta; font-size: 14px; color: MaterialPalette.on-surface-variant; }
-                        }
-                        LinearProgressIndicator { progress: dl-percent / 100; }
-                    }
-
-                    HorizontalDivider { }
-
-                    Text { text: Tr.local-lbl; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
-
-                    HorizontalLayout { spacing: 8px; height: 44px;
-                        PathField { path: firmware-path; horizontal-stretch: 1; }
-
-                        OutlinedButton {
-                            width: 110px;
-                            text: Tr.select-zip;
-                            clicked => { root.browse-firmware(); }
-                        }
-
-                        FilledButton {
-                            width: 100px;
-                            enabled: firmware-path != "";
-                            text: Tr.extract;
-                            clicked => { root.extract-firmware(); }
-                        }
-                    }
-
-                    LogView { entries: root.download-log; vertical-stretch: 1; export-status: root.download-export-status; export-log => { root.export-download-log(); } }
-                }
-
-                // ── P3: Flash All ─────────────────────────────────────────────
-                if root.page == 3: VerticalLayout { spacing: 12px;
-
-                    SectionTitle { text: Tr.nav-flash; }
-                    DeviceBanner { device: root.device; }
-
-                    HorizontalLayout { spacing: 6px; height: 36px;
-                        for item in [
-                            { label: Tr.flash-from-folder, val: 0 },
-                            { label: Tr.flash-from-src, val: 1 },
-                        ]: TouchArea {
-                            horizontal-stretch: 1;
-                            clicked => { root.flash-source-mode = item.val; }
-                            Rectangle {
-                                border-radius: 10px;
-                                border-width: root.flash-source-mode == item.val ? 2px : 1px;
-                                border-color: root.flash-source-mode == item.val
-                                    ? MaterialPalette.primary : MaterialPalette.outline-variant;
-                                background: root.flash-source-mode == item.val
-                                    ? MaterialPalette.secondary-container
-                                    : (parent.has-hover
-                                        ? MaterialPalette.surface-container-high
-                                        : MaterialPalette.surface-container);
-                                animate background    { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-                                animate border-color  { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-                                animate border-width  { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-                                Text {
-                                    text: item.label;
-                                    font-size: 13px; font-weight: 500;
-                                    color: root.flash-source-mode == item.val
-                                        ? MaterialPalette.on-secondary-container
-                                        : MaterialPalette.on-surface;
-                                    animate color { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                }
-                            }
-                        }
-                    }
-
-                    if flash-source-mode == 0: HorizontalLayout { spacing: 8px;
-                        PathField { path: firmware-path; horizontal-stretch: 1; }
-                        OutlinedButton { text: Tr.select-folder; enabled: !is-flashing; clicked => { root.browse-folder(); } }
-                        OutlinedButton { text: Tr.find-phone;    enabled: !is-flashing; clicked => { root.check-device(); } }
-                    }
-
-                    if flash-source-mode == 1: VerticalLayout { spacing: 8px;
-                        HorizontalLayout { spacing: 8px;
-                            PathField { path: source-dir; horizontal-stretch: 1; }
-                            OutlinedButton {
-                                text: Tr.src-select;
-                                enabled: !is-flashing;
-                                clicked => { root.browse-source-dir(); }
-                            }
-                            OutlinedButton { text: Tr.find-phone; enabled: !is-flashing; clicked => { root.check-device(); } }
-                        }
-                        Rectangle {
-                            height: 28px; border-radius: 8px; border-width: 1px;
-                            border-color: MaterialPalette.primary;
-                            background: MaterialPalette.primary-container;
-                            visible: source-image-count > 0;
-                            opacity: source-image-count > 0 ? 1.0 : 0.0;
-                            HorizontalLayout { padding-left: 12px; padding-right: 12px;
-                                Text {
-                                    text: "✓ " + source-image-count + " " + Tr.src-images;
-                                    font-size: 12px; font-weight: 600;
-                                    color: MaterialPalette.on-primary-container;
-                                    vertical-alignment: center;
-                                }
-                            }
-                            animate opacity { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-                        }
-                    }
-
-                    if flash-source-mode == 0: VerticalLayout { spacing: 8px;
-                        TouchArea {
-                            height: 32px;
-                            clicked => { root.skip-arb-check = !root.skip-arb-check; }
-
-                            HorizontalLayout { spacing: 10px;
-                                Rectangle {
-                                    width: 18px; height: 18px;
-                                    border-radius: 4px;
-                                    border-width: 2px;
-                                    border-color: root.skip-arb-check
-                                        ? MaterialPalette.primary
-                                        : MaterialPalette.outline;
-                                    background: root.skip-arb-check
-                                        ? MaterialPalette.primary
-                                        : transparent;
-                                    animate background { duration: 100ms; }
-                                    animate border-color { duration: 100ms; }
-                                    y: (parent.height - 18px) / 2;
-
-                                    Text {
-                                        visible: root.skip-arb-check;
-                                        opacity: root.skip-arb-check ? 1.0 : 0.0;
-                                        text: "✓";
-                                        font-size: 14px; font-weight: 700;
-                                        color: MaterialPalette.on-primary;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                        animate opacity { duration: 150ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1.0); }
-                                    }
-                                }
-                                Text {
-                                    text: Tr.skip-arb;
-                                    font-size: 15px;
-                                    color: MaterialPalette.on-surface;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-
-                        TouchArea {
-                            height: 32px;
-                            clicked => { root.show-skip-partitions = !root.show-skip-partitions; }
-
-                            HorizontalLayout { spacing: 10px;
-                                Rectangle {
-                                    width: 18px; height: 18px;
-                                    border-radius: 4px;
-                                    border-width: 2px;
-                                    border-color: root.show-skip-partitions
-                                        ? MaterialPalette.primary
-                                        : MaterialPalette.outline;
-                                    background: root.show-skip-partitions
-                                        ? MaterialPalette.primary
-                                        : transparent;
-                                    animate background { duration: 100ms; }
-                                    animate border-color { duration: 100ms; }
-                                    y: (parent.height - 18px) / 2;
-
-                                    Text {
-                                        visible: root.show-skip-partitions;
-                                        opacity: root.show-skip-partitions ? 1.0 : 0.0;
-                                        text: "✓";
-                                        font-size: 14px; font-weight: 700;
-                                        color: MaterialPalette.on-primary;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                        animate opacity { duration: 150ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1.0); }
-                                    }
-                                }
-                                Text {
-                                    text: lang == "ru" ? "Пропустить свои разделы" : "Skip custom partitions";
-                                    font-size: 15px;
-                                    color: MaterialPalette.on-surface;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-
-                        if root.show-skip-partitions: Rectangle {
-                            height: 64px;
-                            background: transparent;
-
-                            VerticalLayout { spacing: 4px;
-                                Text {
-                                    text: lang == "ru" ? "Разделы для пропуска (через запятую):" : "Partitions to skip (comma-separated):";
-                                    font-size: 13px;
-                                    color: MaterialPalette.on-surface-variant;
-                                }
-                                Rectangle {
-                                    height: 36px; border-radius: 12px;
-                                    background: MaterialPalette.surface-container;
-                                    border-width: 1px;
-                                    border-color: skip-part-input.has-focus
-                                        ? MaterialPalette.primary
-                                        : MaterialPalette.outline-variant;
-                                    animate border-color { duration: 80ms; }
-
-                                    skip-part-input := TextInput {
-                                        x: 12px; y: 0;
-                                        width: parent.width - 24px; height: parent.height;
-                                        text <=> root.skip-partitions;
-                                        font-size: 14px;
-                                        color: MaterialPalette.on-surface;
-                                        vertical-alignment: center;
-                                        single-line: true;
-                                    }
-
-                                    Text {
-                                        x: 12px; y: 0;
-                                        width: parent.width - 24px; height: parent.height;
-                                        visible: skip-part-input.text == "" && !skip-part-input.has-focus;
-                                        opacity: skip-part-input.text == "" && !skip-part-input.has-focus ? 1.0 : 0.0;
-                                        text: lang == "ru" ? "например: recovery, boot, vendor_boot" : "e.g. recovery, boot, vendor_boot";
-                                        font-size: 14px;
-                                        color: MaterialPalette.on-surface-variant;
-                                        vertical-alignment: center;
-                                        animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if is-flashing || flash-progress > 0: VerticalLayout { spacing: 6px;
-                        if flash-status != "": Text { text: flash-status; font-size: 14px; color: MaterialPalette.primary; }
-                        LinearProgressIndicator { progress: flash-progress; }
-                    }
-
-                    HorizontalLayout { spacing: 8px;
-                        if flash-source-mode == 0: FilledButton {
-                            text: is-flashing ? Tr.flashing : Tr.flash-all-btn;
-                            enabled: !is-flashing && firmware-path != "" && device.connected;
-                            clicked => { reboot-choice = 0; confirm-action = 3; show-confirm = true; }
-                        }
-                        if flash-source-mode == 1: FilledButton {
-                            text: is-flashing ? Tr.flashing : Tr.flash-all-btn;
-                            enabled: !is-flashing && source-dir != "" && source-image-count > 0 && device.connected;
-                            clicked => { root.start-flash-from-source(); }
-                        }
-                        if is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
-                    }
-
-                    LogView { entries: root.flash-log; vertical-stretch: 1; export-status: root.flash-export-status; export-log => { root.export-flash-log(); } }
-                }
-
-                // ── P4: Flash Partition ───────────────────────────────────────
-                if root.page == 4: VerticalLayout { spacing: 12px;
-
-                    SectionTitle { text: Tr.nav-part; }
-                    DeviceBanner { device: root.device; }
-
-                    HorizontalLayout { spacing: 8px;
-                        PathField { path: single-image-path; horizontal-stretch: 1; }
-                        OutlinedButton { text: ".img";        clicked => { root.browse-single-image(); } }
-                        OutlinedButton { text: Tr.find-phone; clicked => { root.check-device(); } }
-                    }
-
-                    HorizontalLayout { spacing: 8px; height: 20px;
-                        Text { text: Tr.part-lbl; font-size: 15px; font-weight: 500;
-                            color: MaterialPalette.on-surface-variant; vertical-alignment: center; }
-                        Text {
-                            text: partition-name != "" ? partition-name : "—";
-                            font-size: 15px; font-weight: 600;
-                            color: partition-name != "" ? MaterialPalette.primary : MaterialPalette.on-surface-variant;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    HorizontalLayout { spacing: 6px; height: 36px;
-                        for p in ["recovery", "boot", "init_boot", "modem", "vendor_boot"]:
-                        TouchArea {
-                            horizontal-stretch: 1;
-                            clicked => { root.partition-name = p; }
-                            Rectangle {
-                                border-radius: 12px;
-                                background: root.partition-name == p
-                                    ? MaterialPalette.primary-container
-                                    : parent.has-hover
-                                        ? MaterialPalette.surface-container-highest
-                                        : MaterialPalette.surface-container-high;
-                                border-width: root.partition-name == p ? 2px : 1px;
-                                border-color: root.partition-name == p
-                                    ? MaterialPalette.primary : MaterialPalette.outline-variant;
-                                animate background   { duration: 80ms; }
-                                animate border-color { duration: 80ms; }
-                                animate border-width { duration: 80ms; }
-                                Text {
-                                    text: p; font-size: 13px;
-                                    font-weight: root.partition-name == p ? 700 : 400;
-                                    color: root.partition-name == p
-                                        ? MaterialPalette.on-primary-container : MaterialPalette.on-surface;
-                                    animate color { duration: 80ms; }
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                }
-                            }
-                        }
-                    }
-
-                    HorizontalLayout { spacing: 8px; height: 36px;
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            height: 36px; border-radius: 12px;
-                            background: MaterialPalette.surface-container;
-                            border-width: 1px;
-                            border-color: custom-part-input.has-focus
-                                ? MaterialPalette.primary
-                                : MaterialPalette.outline-variant;
-                            animate border-color { duration: 80ms; }
-
-                            custom-part-input := TextInput {
-                                x: 12px; y: 0;
-                                width: parent.width - 24px; height: parent.height;
-                                text <=> root.partition-name;
-                                font-size: 14px;
-                                color: MaterialPalette.on-surface;
-                                vertical-alignment: center;
-                                single-line: true;
-                            }
-
-                            Text {
-                                x: 12px; y: 0;
-                                width: parent.width - 24px; height: parent.height;
-                                visible: custom-part-input.text == "";
-                                opacity: custom-part-input.text == "" ? 1.0 : 0.0;
-                                text: lang == "ru" ? "или введите свой раздел…" : "or type custom partition…";
-                                font-size: 14px;
-                                color: MaterialPalette.on-surface-variant;
-                                vertical-alignment: center;
-                                animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-                            }
-                        }
-                    }
-
-                    if is-flashing || flash-progress > 0: VerticalLayout { spacing: 6px;
-                        if flash-status != "": Text { text: flash-status; font-size: 14px; color: MaterialPalette.primary; }
-                        LinearProgressIndicator { progress: flash-progress; }
-                    }
-
-                    HorizontalLayout { spacing: 8px;
-                        FilledButton {
-                            text: is-flashing ? Tr.flashing : Tr.flash-part-btn;
-                            enabled: !is-flashing && single-image-path != "" && device.connected && partition-name != "";
-                            clicked => { reboot-choice = 0; confirm-action = 5; show-confirm = true; }
-                        }
-                        if is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
-                    }
-
-                    LogView { entries: root.partition-log; vertical-stretch: 1; export-status: root.partition-export-status; export-log => { root.export-partition-log(); } }
-                }
-
-                // ── P5: History ───────────────────────────────────────────────
-                if root.page == 5: VerticalLayout { spacing: 0px; vertical-stretch: 1;
-                    SectionTitle { text: (lang == "ru" ? "История прошивок" : "Flash History"); }
-                    Rectangle { height: 12px; }
-
-                    // Table card
-                    Rectangle {
-                        vertical-stretch: 1;
-                        horizontal-stretch: 1;
-                        border-radius: 16px;
-                        border-width: 1px;
-                        border-color: MaterialPalette.outline-variant;
-                        background: MaterialPalette.surface-container-low;
-                        clip: true;
-
-                        VerticalLayout { spacing: 0px; horizontal-stretch: 1;
-                            // Table header
-                            Rectangle {
-                                height: 40px;
-                                background: Palette.color-scheme == ColorScheme.dark
-                                    ? MaterialPalette.surface-container-highest
-                                    : MaterialPalette.surface-container-high;
-                                HorizontalLayout { spacing: 8px; padding-left: 16px; padding-right: 16px;
-                                    Rectangle { width: 145px;
-                                        Text { text: lang == "ru" ? "Дата" : "Date"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
-                                    }
-                                    Rectangle { horizontal-stretch: 2;
-                                        Text { text: lang == "ru" ? "Прошивка" : "Firmware"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
-                                    }
-                                    Rectangle { width: 130px;
-                                        Text { text: lang == "ru" ? "Устройство" : "Device"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
-                                    }
-                                    Rectangle { width: 80px;
-                                        Text { text: lang == "ru" ? "Результат" : "Result"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: center; overflow: elide; width: 100%; }
-                                    }
-                                    Rectangle { width: 70px;
-                                        Text { text: lang == "ru" ? "Время" : "Duration"; font-size: 12px; font-weight: 700; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: right; overflow: elide; width: 100%; }
-                                    }
-                                }
-                            }
-
-                            HorizontalDivider { }
-
-                            if history-items.length == 0: Rectangle {
-                                vertical-stretch: 1;
-                                VerticalLayout { alignment: center; spacing: 8px;
-                                    Rectangle { vertical-stretch: 1; }
-                                    Text {
-                                        text: "🕘";
-                                        font-size: 32px;
-                                        color: MaterialPalette.on-surface-variant;
-                                        horizontal-alignment: center;
-                                    }
-                                    Text {
-                                        text: lang == "ru" ? "История пуста" : "No flash history yet";
-                                        color: MaterialPalette.on-surface-variant;
-                                        font-size: 14px;
-                                        horizontal-alignment: center;
-                                    }
-                                    Rectangle { vertical-stretch: 1; }
-                                }
-                            }
-
-                            ScrollView {
-                                vertical-stretch: 1;
-                                horizontal-stretch: 1;
-                                VerticalLayout { spacing: 0px; horizontal-stretch: 1;
-                                    for item[index] in history-items: row-ta := TouchArea {
-                                        height: 44px;
-                                        horizontal-stretch: 1;
-                                        Rectangle {
-                                            width: 100%; height: 100%;
-                                            background: Math.mod(index, 2) == 0
-                                                ? transparent
-                                                : MaterialPalette.on-surface.with-alpha(0.03);
-                                            animate background { duration: 150ms; }
-
-                                            // Hover overlay
-                                            Rectangle {
-                                                width: 100%; height: 100%;
-                                                background: row-ta.has-hover
-                                                    ? MaterialPalette.on-surface.with-alpha(0.06)
-                                                    : transparent;
-                                                animate background { duration: 150ms; }
-                                            }
-
-                                            HorizontalLayout { spacing: 8px; padding-left: 16px; padding-right: 16px;
-                                                Rectangle { width: 145px;
-                                                    Text { text: item.timestamp; font-size: 12px; font-family: "monospace"; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
-                                                }
-                                                Rectangle { horizontal-stretch: 2;
-                                                    Text { text: item.firmware; font-size: 12px; color: MaterialPalette.on-surface; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
-                                                }
-                                                Rectangle { width: 130px;
-                                                    Text { text: item.device; font-size: 12px; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: left; overflow: elide; width: 100%; }
-                                                }
-                                                Rectangle { width: 80px;
-                                                    Rectangle {
-                                                        x: (parent.width - 64px) / 2;
-                                                        y: (parent.height - 22px) / 2;
-                                                        width: 64px; height: 22px; border-radius: 6px;
-                                                        background: item.result == "OK" ? MaterialPalette.success-container
-                                                                  : item.result == "Aborted" ? MaterialPalette.warning-container
-                                                                  : MaterialPalette.error-container;
-                                                        border-width: 1px;
-                                                        border-color: item.result == "OK" ? MaterialPalette.success.with-alpha(0.3)
-                                                                  : item.result == "Aborted" ? MaterialPalette.warning.with-alpha(0.3)
-                                                                  : MaterialPalette.error.with-alpha(0.3);
-                                                        Text {
-                                                            text: item.result;
-                                                            font-size: 10px; font-weight: 700; font-family: "monospace";
-                                                            horizontal-alignment: center; vertical-alignment: center;
-                                                            color: item.result == "OK" ? MaterialPalette.on-success-container
-                                                                 : item.result == "Aborted" ? MaterialPalette.on-warning-container
-                                                                 : MaterialPalette.on-error-container;
-                                                        }
-                                                    }
-                                                }
-                                                Rectangle { width: 70px;
-                                                    Text { text: item.duration; font-size: 12px; font-family: "monospace"; color: MaterialPalette.on-surface-variant; vertical-alignment: center; horizontal-alignment: right; overflow: elide; width: 100%; }
-                                                }
-                                            }
-
-                                            // Bottom divider
-                                            Rectangle {
-                                                y: parent.height - 1px;
-                                                height: 1px; width: 100%;
-                                                background: MaterialPalette.outline-variant.with-alpha(0.5);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ── P6: About ─────────────────────────────────────────────────
-                if root.page == 6: VerticalLayout { spacing: 0px;
-                    Rectangle { vertical-stretch: 1; }
-
-                    VerticalLayout { spacing: 8px;
-                        Text {
-                            text: "LibreFastbootFirmwareFlasher";
-                            font-size: Typography.display-small-size;
-                            font-weight: Typography.display-small-weight-em;
-                            color: MaterialPalette.primary;
-                            horizontal-alignment: center;
-                            letter-spacing: 1px;
-                        }
-                        Text {
-                            text: root.app-version;
-                            font-size: Typography.body-large-size;
-                            color: MaterialPalette.on-surface-variant;
-                            horizontal-alignment: center;
-                        }
-                        Text {
-                            text: Tr.author-lbl;
-                            font-size: Typography.body-large-size;
-                            color: MaterialPalette.on-surface-variant;
-                            horizontal-alignment: center;
-                        }
-                    }
-
-                    Rectangle { height: 24px; }
-                    HorizontalDivider { }
-                    Rectangle { height: 20px; }
-
-                    HorizontalLayout { alignment: center;
-                        VerticalLayout { spacing: 10px; width: 520px;
-                            AboutLink {
-                                icon: @image-url("icons/github.svg");
-                                label: "GitHub — LibreFastbootFirmwareFlasher";
-                                url: "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
-                                open(u) => { root.open-url(u); }
-                            }
-                            AboutLink {
-                                icon: @image-url("icons/telegram.svg");
-                                label: "Author on Telegram";
-                                url: "https://t.me/mrFrok228";
-                                open(u) => { root.open-url(u); }
-                            }
-                            AboutLink {
-                                icon: @image-url("icons/telegram.svg");
-                                label: "Telegram group";
-                                url: "https://t.me/gt3neo5hub";
-                                open(u) => { root.open-url(u); }
-                            }
-                            AboutLink {
-                                icon: @image-url("icons/boosty.svg");
-                                label: "Donate — Boosty";
-                                url: "https://boosty.to/mrfrok/donate";
-                                open(u) => { root.open-url(u); }
-                            }
-                        }
-                    }
-
-                    Rectangle { height: 16px; }
-                    Text {
-                        text: Tr.license-lbl;
-                        font-size: 13px; color: MaterialPalette.on-surface-variant;
-                        horizontal-alignment: center;
-                    }
-
-                    Rectangle { vertical-stretch: 1; }
-                }
-
-            } // pages VerticalLayout
-            } // inner slide Rectangle
-
-                // Fade overlay — sits on top, animates opacity 1→0 after page change
                 Rectangle {
                     width: parent.width;
                     height: parent.height;
@@ -1343,818 +351,131 @@ export component MainWindow inherits Window {
                     opacity: root.page-opacity;
                     animate opacity { duration: 300ms; easing: ease-in-out; }
                 }
-            } // outer clip container
-        } // content
-    } // HorizontalLayout
-
-    // ── Confirm dialog ────────────────────────────────────────────────────────
-    Rectangle {
-        visible: show-confirm;
-        opacity: show-confirm ? 1.0 : 0.0;
-        animate opacity { duration: 250ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        z: 100; background: MaterialPalette.overlay-backdrop; width: 100%; height: 100%;
-
-        // Dialog entrance scale
-        private property <float> dialog-scale: show-confirm ? 1.0 : 0.96;
-        animate dialog-scale { duration: 300ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1.0); }
-
-        // ── Step 1: choose reboot source before Flash All ─────────────────────
-        Rectangle {
-            visible: show-confirm && confirm-action == 3;
-            opacity: show-confirm && confirm-action == 3 ? 1.0 : 0.0;
-            animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-            x: (parent.width - 460px) / 2;
-            y: (parent.height - 275px) / 2;
-            width: 460px; height: 275px;
-            border-radius: 20px;
-            background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px;
-            drop-shadow-color: MaterialPalette.drop-shadow;
-            drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 20px; spacing: 10px;
-                Text {
-                    text: Tr.flash-reboot-title;
-                    font-size: 15px; font-weight: 600;
-                    color: MaterialPalette.on-surface;
-                    wrap: word-wrap;
-                }
-
-                VerticalLayout { spacing: 6px;
-                    for item in [
-                        { label: Tr.flash-reboot-from-system,     val: 1 },
-                        { label: Tr.flash-reboot-from-bootloader, val: 2 },
-                        { label: Tr.flash-reboot-skip,            val: 3 },
-                    ]: TouchArea {
-                        height: 48px;
-                        // Just select — do NOT jump to step 2 automatically
-                        clicked => { reboot-choice = item.val; }
-
-                        Rectangle {
-                            border-radius: 12px;
-                            border-width: 2px;
-                            border-color: reboot-choice == item.val
-                                ? MaterialPalette.primary
-                                : MaterialPalette.outline-variant;
-                            background: reboot-choice == item.val
-                                ? MaterialPalette.secondary-container
-                                : (parent.has-hover
-                                    ? MaterialPalette.surface-container-highest
-                                    : MaterialPalette.surface-container);
-                            animate background { duration: 80ms; }
-                            animate border-color { duration: 80ms; }
-
-                            Text {
-                                text: item.label;
-                                font-size: 13px;
-                                color: reboot-choice == item.val
-                                    ? MaterialPalette.on-secondary-container
-                                    : MaterialPalette.on-surface;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                wrap: word-wrap;
-                            }
-                        }
-                    }
-                }
-
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton { text: Tr.cancel; clicked => { show-confirm = false; reboot-choice = 0; } }
-                    // Next — reboot device, step 4 appears when device is ready
-                    FilledButton {
-                        text: lang == "ru" ? "Перезагрузить и прошить →" : "Reboot & flash →";
-                        enabled: reboot-choice != 0;
-                        clicked => {
-                            show-confirm = false;
-                            root.reboot-for-flash();
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Step 2: final confirmation ────────────────────────────────────────
-        Rectangle {
-            visible: show-confirm && confirm-action == 4;
-            opacity: show-confirm && confirm-action == 4 ? 1.0 : 0.0;
-            animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            x: (parent.width - 420px) / 2;
-            y: (parent.height - 240px) / 2;
-            width: 420px; height: 240px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px;
-            drop-shadow-color: #00000040;
-            drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 28px; spacing: 12px;
-                Text {
-                    text: Tr.flash-final-title;
-                    font-size: 18px; font-weight: 700;
-                    color: MaterialPalette.error;
-                }
-                Text {
-                    text: Tr.flash-final-body;
-                    font-size: 14px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        text: Tr.cancel;
-                        clicked => { show-confirm = false; }
-                    }
-                    BackButton {
-                        clicked => { confirm-action = 3; }
-                    }
-                    FilledButton {
-                        text: Tr.flash-btn;
-                        clicked => {
-                            show-confirm = false;
-                            root.start-flash();
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Source Flash step 2: final confirmation ────────────────────────────
-        Rectangle {
-            visible: show-confirm && confirm-action == 8;
-            opacity: show-confirm && confirm-action == 8 ? 1.0 : 0.0;
-            animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            x: (parent.width - 420px) / 2;
-            y: (parent.height - 240px) / 2;
-            width: 420px; height: 240px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px;
-            drop-shadow-color: #00000040;
-            drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 28px; spacing: 12px;
-                Text {
-                    text: Tr.src-final-title;
-                    font-size: 18px; font-weight: 700;
-                    color: MaterialPalette.error;
-                }
-                Text {
-                    text: Tr.src-final-body;
-                    font-size: 14px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        text: Tr.cancel;
-                        clicked => { show-confirm = false; }
-                    }
-                    BackButton {
-                        clicked => { confirm-action = 3; }
-                    }
-                    FilledButton {
-                        text: Tr.flash-btn;
-                        clicked => {
-                            show-confirm = false;
-                            root.confirm-source-flash();
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Flash Partition step 1: choose reboot to bootloader ──────────────
-        // ── Flash Partition step 1: choose reboot to bootloader ──────────────
-        Rectangle {
-            visible: show-confirm && confirm-action == 5;
-            opacity: show-confirm && confirm-action == 5 ? 1.0 : 0.0;
-            animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            x: (parent.width - 440px) / 2;
-            y: (parent.height - 280px) / 2;
-            width: 440px; height: 280px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 24px; spacing: 14px;
-                Text {
-                    text: Tr.part-reboot-title;
-                    font-size: 16px; font-weight: 600;
-                    color: MaterialPalette.on-surface; wrap: word-wrap;
-                }
-                VerticalLayout { spacing: 8px;
-                    for item in [
-                        { label: Tr.part-reboot-from-system,   val: 1 },
-                        { label: Tr.part-reboot-from-fastboot, val: 2 },
-                        { label: Tr.part-reboot-skip,          val: 3 },
-                    ]: TouchArea {
-                        height: 48px;
-                        clicked => { reboot-choice = item.val; confirm-action = 6; }
-                        Rectangle {
-                            border-radius: 12px; border-width: 2px;
-                            border-color: reboot-choice == item.val ? MaterialPalette.primary : MaterialPalette.outline-variant;
-                            background: reboot-choice == item.val
-                                ? MaterialPalette.primary-container
-                                : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : MaterialPalette.surface-container);
-                            animate background { duration: 80ms; }
-                            animate border-color { duration: 80ms; }
-                            Text {
-                                text: item.label; font-size: 13px;
-                                color: reboot-choice == item.val ? MaterialPalette.on-primary-container : MaterialPalette.on-surface;
-                                horizontal-alignment: center; vertical-alignment: center; wrap: word-wrap;
-                            }
-                        }
-                    }
-                }
-                HorizontalLayout { alignment: end;
-                    TextButton { text: Tr.cancel; clicked => { show-confirm = false; } }
-                }
-            }
-        }
-
-        // ── Flash Partition step 2: final confirm ─────────────────────────────
-        Rectangle {
-            visible: show-confirm && confirm-action == 6;
-            opacity: show-confirm && confirm-action == 6 ? 1.0 : 0.0;
-            animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            x: (parent.width - 400px) / 2;
-            y: (parent.height - 220px) / 2;
-            width: 400px; height: 220px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 28px; spacing: 12px;
-                Text {
-                    text: Tr.part-final-title + ": " + partition-name;
-                    font-size: 18px; font-weight: 700; color: MaterialPalette.on-surface;
-                }
-                Text {
-                    text: Tr.part-final-body;
-                    font-size: 14px; color: MaterialPalette.on-surface-variant; wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton { text: Tr.cancel; clicked => { show-confirm = false; } }
-                    BackButton { clicked => { confirm-action = 5; } }
-                    FilledButton {
-                        text: Tr.flash-btn;
-                        clicked => { show-confirm = false; root.start-single-flash(); }
-                    }
-                }
-            }
-        }
-
-        Rectangle {
-            visible: show-confirm && confirm-action == 7;
-            opacity: show-confirm && confirm-action == 7 ? 1.0 : 0.0;
-            animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            x: (parent.width - 560px) / 2;
-            y: (parent.height - 240px) / 2;
-            width: 560px; height: 240px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 28px; spacing: 12px;
-                HorizontalLayout { spacing: 8px; alignment: start;
-                    Image {
-                        source: @image-url("icons/check.svg");
-                        width: 22px; height: 22px;
-                        colorize: #4caf50;
-                        y: (parent.height - 22px) / 2;
-                    }
-                    Text {
-                        text: lang == "ru" ? "Прошивка завершена" : "Flash complete";
-                        font-size: 18px; font-weight: 700; color: #4caf50;
-                    }
-                }
-                Text {
-                    text: lang == "ru"
-                        ? "Что сделать с устройством?"
-                        : "What would you like to do next?";
-                    font-size: 14px; color: MaterialPalette.on-surface-variant; wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        min-width: 90px;
-                        text: lang == "ru" ? "Закрыть" : "Dismiss";
-                        clicked => { show-confirm = false; }
-                    }
-                    OutlinedButton {
-                        min-width: 150px;
-                        text: lang == "ru" ? "Перезагрузить" : "Reboot";
-                        clicked => { show-confirm = false; root.post-flash-reboot(); }
-                    }
-                    FilledButton {
-                        min-width: 220px;
-                        text: lang == "ru" ? "Сброс данных + перезагрузка" : "Wipe data + reboot";
-                        clicked => { show-confirm = false; root.post-flash-wipe(); }
-                    }
-                }
-            }
-        }
-
-        // ── Cable Test dialog ──────────────────────────────────────────────────
-        Rectangle {
-            visible: show-confirm && confirm-action == 9;
-            opacity: show-confirm && confirm-action == 9 ? 1.0 : 0.0;
-            animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            x: (parent.width - 440px) / 2;
-            y: (parent.height - 260px) / 2;
-            width: 440px; height: 260px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 24px; spacing: 14px;
-                HorizontalLayout { spacing: 10px;
-                    Text { text: "🔌"; font-size: 22px; vertical-alignment: center; }
-                    Text {
-                        text: lang == "ru" ? "Тест кабеля" : "Cable Test";
-                        font-size: 17px; font-weight: 700;
-                        color: MaterialPalette.on-surface;
-                        vertical-alignment: center;
-                    }
-                }
-                Text {
-                    text: cable-test-status;
-                    font-size: 13px;
-                    color: cable-test-passed ? #4caf50 : MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                    min-height: 40px;
-                }
-                LinearProgressIndicator { progress: cable-test-progress; }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        text: Tr.cancel;
-                        enabled: !cable-test-passed;
-                        clicked => { show-confirm = false; }
-                    }
-                    FilledButton {
-                        text: lang == "ru" ? "Продолжить →" : "Continue →";
-                        enabled: cable-test-passed;
-                        clicked => {
-                            show-confirm = false;
-                            confirm-action = 4;
-                            show-confirm = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Flash Failure dialog ───────────────────────────────────────────────
-        Rectangle {
-            visible: show-confirm && confirm-action == 10;
-            opacity: show-confirm && confirm-action == 10 ? 1.0 : 0.0;
-            animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            x: (parent.width - 480px) / 2;
-            y: (parent.height - 280px) / 2;
-            width: 480px; height: 280px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 24px; spacing: 14px;
-                HorizontalLayout { spacing: 10px;
-                    Text { text: "⚠"; font-size: 22px; color: #f0b800; vertical-alignment: center; }
-                    Text {
-                        text: lang == "ru" ? "Ошибка прошивки" : "Flash Error";
-                        font-size: 17px; font-weight: 700;
-                        color: MaterialPalette.error;
-                        vertical-alignment: center;
-                    }
-                }
-                Text {
-                    text: lang == "ru"
-                        ? "Раздел " + flash-fail-partition + "_" + flash-fail-slot + " не удалось прошить"
-                        : "Failed to flash " + flash-fail-partition + "_" + flash-fail-slot;
-                    font-size: 14px;
-                    color: MaterialPalette.on-surface;
-                    wrap: word-wrap;
-                }
-                Text {
-                    text: flash-fail-error;
-                    font-size: 12px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                    min-height: 50px;
-                    max-height: 80px;
-                }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        text: lang == "ru" ? "Прервать" : "Abort";
-                        clicked => { show-confirm = false; root.flash-fail-abort(); }
-                    }
-                    FilledButton {
-                        text: lang == "ru" ? "Пропустить →" : "Skip →";
-                        clicked => { show-confirm = false; root.flash-fail-skip(); }
-                    }
-                }
             }
         }
     }
 
-    // ── ARB Warning dialog ─────────────────────────────────────────────────────
-    Rectangle {
-        visible: show-arb-warning;
-        opacity: show-arb-warning ? 1.0 : 0.0;
-        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 110; background: #00000070; width: 100%; height: 100%;
-
-        VerticalLayout { alignment: center;
-        HorizontalLayout { alignment: center;
-        Rectangle {
-            width: 460px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 28px; spacing: 12px;
-                HorizontalLayout { spacing: 12px;
-                    Text { text: "⚠"; font-size: 24px; color: #f0b800; vertical-alignment: center; }
-                    Text {
-                        text: lang == "ru" ? "Предупреждение ARB" : "ARB Warning";
-                        font-size: 18px; font-weight: 700;
-                        color: #f0b800; vertical-alignment: center;
-                    }
-                }
-                Text {
-                    text: lang == "ru"
-                        ? "Прошивка содержит ARB=" + arb-warning-version + ".\n\nПосле прошивки счётчик anti-rollback на устройстве будет необратимо повышен. Вы НЕ сможете откатиться на более старую прошивку с меньшим ARB — это приведёт к кирпичу.\n\nПродолжайте только если уверены, что не захотите сделать даунгрейд!"
-                        : "Firmware has ARB=" + arb-warning-version + ".\n\nAfter flashing, the anti-rollback counter on your device will be permanently raised. You will NOT be able to downgrade to firmware with a lower ARB — this will brick your device.\n\nOnly continue if you are sure you will never need to downgrade!";
-                    font-size: 13px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                VerticalLayout { spacing: 6px;
-                    Text {
-                        text: lang == "ru"
-                            ? "⚠ Пропуск xbl/abl может сохранить ARB=0, но может привести к кирпичу!"
-                            : "⚠ Skipping xbl/abl may preserve ARB=0, but may also brick your device!";
-                        font-size: 12px; color: #f0b800; wrap: word-wrap;
-                    }
-                }
-                CheckBox {
-                    text: lang == "ru" ? "Пропустить xbl/abl разделы" : "Skip xbl/abl partitions";
-                    checked <=> skip-xbl-abl;
-                }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        text: Tr.cancel;
-                        clicked => { show-arb-warning = false; }
-                    }
-                    FilledButton {
-                        text: lang == "ru" ? "Я понимаю, продолжить" : "I understand, continue";
-                        clicked => {
-                            show-arb-warning = false;
-                            root.confirm-arb-and-flash();
-                        }
-                    }
-                }
-            }
-        }
-        } // HorizontalLayout
-        } // VerticalLayout
+    // ── Dialogs ───────────────────────────────────────────────────────────────
+    FlashAllRebootDialog {
+        show: root.show-confirm && root.confirm-action == 3;
+        lang: root.lang;
+        reboot-choice <=> root.reboot-choice;
+        cancel => { root.show-confirm = false; root.reboot-choice = 0; }
+        reboot-and-flash => { root.show-confirm = false; root.reboot-for-flash(); }
     }
 
-    // ── Device ARB Warning dialog ────────────────────────────────────────────────
-    Rectangle {
-        visible: show-arb-device-warning;
-        opacity: show-arb-device-warning ? 1.0 : 0.0;
-        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 110; background: #00000070; width: 100%; height: 100%;
-
-        VerticalLayout { alignment: center;
-        HorizontalLayout { alignment: center;
-        Rectangle {
-            width: 460px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 28px; spacing: 12px;
-                HorizontalLayout { spacing: 12px;
-                    Text { text: "⚠"; font-size: 24px; color: #f0b800; vertical-alignment: center; }
-                    Text {
-                        text: Tr.arb-device-title;
-                        font-size: 18px; font-weight: 700;
-                        color: #f0b800; vertical-alignment: center;
-                    }
-                }
-                Text {
-                    text: arb-device-version > 0
-                        ? arb-device-is-source
-                            ? Tr.arb-device-body-src + arb-device-version + Tr.arb-device-body-suffix
-                            : Tr.arb-device-body-fw + arb-device-version + Tr.arb-device-body-suffix
-                        : arb-device-is-source
-                            ? lang == "ru" ? "Версия ARB исходной сборки и вашего устройства неизвестны. Прошивка с неверным ARB может привести к кирпичу!\n\nПродолжайте только если уверены." : "Source build ARB and device ARB are unknown. Flashing with incorrect ARB can brick your device!\n\nOnly continue if you are sure."
-                            : lang == "ru" ? "Прошивка имеет ARB=0.\n\nВозможно, у вас стоит прошивка с версией ARB>0, и дальнейшая прошивка может привести к кирпичу." : "Firmware has ARB=0.\n\nYour device may have firmware with ARB>0 — further flashing may brick your device.";
-                    font-size: 13px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                VerticalLayout { spacing: 6px;
-                    Text {
-                        text: lang == "ru"
-                            ? "⚠ Пропуск этих разделов может помочь откатить устройство, если телефон имеет ARB>0, но так же может привести к кирпичу!"
-                            : "⚠ Skipping these partitions may help downgrade if your device has ARB>0, but may also brick your device!";
-                        font-size: 12px; color: #f0b800; wrap: word-wrap;
-                    }
-                    TouchArea {
-                        height: 24px;
-                        clicked => { root.skip-xbl-abl = !root.skip-xbl-abl; }
-                        HorizontalLayout { spacing: 10px;
-                            Rectangle {
-                                width: 18px; height: 18px; border-radius: 4px;
-                                border-width: 2px;
-                                border-color: root.skip-xbl-abl ? MaterialPalette.primary : MaterialPalette.outline;
-                                background: root.skip-xbl-abl ? MaterialPalette.primary : transparent;
-                                animate background { duration: 100ms; }
-                                animate border-color { duration: 100ms; }
-                                y: (parent.height - 18px) / 2;
-                                Text {
-                                    visible: root.skip-xbl-abl;
-                                    opacity: root.skip-xbl-abl ? 1.0 : 0.0;
-                                    text: "✓"; font-size: 14px; font-weight: 700;
-                                    color: MaterialPalette.on-primary;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-                                }
-                            }
-                            Text {
-                                text: lang == "ru" ? "Пропустить xbl/abl разделы" : "Skip xbl/abl partitions";
-                                font-size: 14px; color: MaterialPalette.on-surface; vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        text: Tr.cancel;
-                        clicked => { show-arb-device-warning = false; }
-                    }
-                    FilledButton {
-                        text: Tr.arb-device-continue;
-                        clicked => {
-                            show-arb-device-warning = false;
-                            root.confirm-arb-device-flash();
-                        }
-                    }
-                }
-            }
-        }
-        } // HorizontalLayout
-        } // VerticalLayout
+    FlashAllFinalDialog {
+        show: root.show-confirm && root.confirm-action == 4;
+        cancel => { root.show-confirm = false; }
+        back => { root.confirm-action = 3; }
+        flash => { root.show-confirm = false; root.start-flash(); }
     }
 
-    // ── Preloader Warning dialog (Mediatek) ──────────────────────────────────────
-    Rectangle {
-        visible: show-preloader-warning;
-        opacity: show-preloader-warning ? 1.0 : 0.0;
-        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 110; background: #00000070; width: 100%; height: 100%;
-
-        VerticalLayout { alignment: center;
-        HorizontalLayout { alignment: center;
-        Rectangle {
-            width: 480px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 28px; spacing: 12px;
-                HorizontalLayout { spacing: 12px;
-                    Text { text: "⚠"; font-size: 24px; color: #f0b800; vertical-alignment: center; }
-                    Text {
-                        text: lang == "ru" ? "Предупреждение preloader" : "Preloader Warning";
-                        font-size: 18px; font-weight: 700;
-                        color: #f0b800; vertical-alignment: center;
-                    }
-                }
-                Text {
-                    text: lang == "ru"
-                        ? "В прошивке обнаружен preloader.img. Для прошивки preloader требуется preloader mode или brom mode — эти режимы недоступны без авторизации в сервисных утилитах.\n\nПропуск preloader может помочь установить новую прошивку, если стандартный метод не работает, но также может привести к кирпичу!"
-                        : "preloader.img found in firmware. Flashing preloader requires preloader mode or brom mode — these modes are unavailable without authorization in service utilities.\n\nSkipping preloader may help flash new firmware if the standard method fails, but may also brick your device!";
-                    font-size: 13px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                VerticalLayout { spacing: 6px;
-                    Text {
-                        text: lang == "ru"
-                            ? "⚠ Пропуск preloader может помочь установить новую прошивку, если стандартный метод не срабатывает, но также может сделать устройство неработоспособным"
-                            : "⚠ Skipping preloader may help flash new firmware when the standard method fails, but may also render the device unbootable";
-                        font-size: 12px; color: #f0b800; wrap: word-wrap;
-                    }
-                    TouchArea {
-                        height: 24px;
-                        clicked => { root.skip-preloader = !root.skip-preloader; }
-                        HorizontalLayout { spacing: 10px;
-                            Rectangle {
-                                width: 18px; height: 18px; border-radius: 4px;
-                                border-width: 2px;
-                                border-color: root.skip-preloader ? MaterialPalette.primary : MaterialPalette.outline;
-                                background: root.skip-preloader ? MaterialPalette.primary : transparent;
-                                animate background { duration: 100ms; }
-                                animate border-color { duration: 100ms; }
-                                y: (parent.height - 18px) / 2;
-                                Text {
-                                    visible: root.skip-preloader;
-                                    opacity: root.skip-preloader ? 1.0 : 0.0;
-                                    text: "✓"; font-size: 14px; font-weight: 700;
-                                    color: MaterialPalette.on-primary;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-                                }
-                            }
-                            Text {
-                                text: lang == "ru" ? "Пропустить preloader (риск кирпича!)" : "Skip preloader (brick risk!)";
-                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        text: Tr.cancel;
-                        clicked => { show-preloader-warning = false; }
-                    }
-                    FilledButton {
-                        text: lang == "ru" ? "Продолжить" : "Continue";
-                        clicked => {
-                            show-preloader-warning = false;
-                            root.confirm-preloader-flash();
-                        }
-                    }
-                }
-            }
-        }
-        } // HorizontalLayout
-        } // VerticalLayout
+    SourceFlashFinalDialog {
+        show: root.show-confirm && root.confirm-action == 8;
+        cancel => { root.show-confirm = false; }
+        back => { root.confirm-action = 3; }
+        flash => { root.show-confirm = false; root.confirm-source-flash(); }
     }
 
-    // ── Flash Error dialog ──────────────────────────────────────────────────
-    Rectangle {
-        visible: show-flash-error;
-        opacity: show-flash-error ? 1.0 : 0.0;
-        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 110; background: #00000070; width: 100%; height: 100%;
-
-        VerticalLayout { alignment: center;
-        HorizontalLayout { alignment: center;
-        Rectangle {
-            width: 640px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
-
-            VerticalLayout { padding: 28px; spacing: 12px;
-                HorizontalLayout { spacing: 12px;
-                    Text { text: "✕"; font-size: 24px; color: MaterialPalette.error; vertical-alignment: center; }
-                    Text {
-                        text: Tr.flash-error-title;
-                        font-size: 18px; font-weight: 700;
-                        color: MaterialPalette.error; vertical-alignment: center;
-                    }
-                }
-                Text {
-                    text: flash-error-message;
-                    font-size: 13px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Text {
-                    text: Tr.flash-error-hint;
-                    font-size: 12px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    FilledButton {
-                        min-width: 110px;
-                        text: Tr.retry;
-                        clicked => {
-                            show-flash-error = false;
-                            root.retry-flash();
-                        }
-                    }
-                    OutlinedButton {
-                        min-width: 100px;
-                        text: lang == "ru" ? "Пропустить" : "Skip";
-                        clicked => { show-flash-error = false; }
-                    }
-                    OutlinedButton {
-                        min-width: 220px;
-                        text: Tr.reboot;
-                        clicked => {
-                            show-flash-error = false;
-                            root.reboot-device();
-                        }
-                    }
-                    TextButton {
-                        min-width: 100px;
-                        text: Tr.cancel;
-                        clicked => { show-flash-error = false; }
-                    }
-                }
-            }
-        }
-        } // HorizontalLayout
-        } // VerticalLayout
+    PartitionRebootDialog {
+        show: root.show-confirm && root.confirm-action == 5;
+        lang: root.lang;
+        reboot-choice <=> root.reboot-choice;
+        cancel => { root.show-confirm = false; }
+        next => { root.confirm-action = 6; }
     }
 
-    // ── Update available dialog ──────────────────────────────────────────────
-    Rectangle {
-        z: 100;
-        visible: show-update-dialog;
-        opacity: show-update-dialog ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: ease-in-out; }
-        background: MaterialPalette.surface.with-alpha(0.6);
-        TouchArea { clicked => { } }
+    PartitionFinalDialog {
+        show: root.show-confirm && root.confirm-action == 6;
+        partition-name: root.partition-name;
+        cancel => { root.show-confirm = false; }
+        back => { root.confirm-action = 5; }
+        flash => { root.show-confirm = false; root.start-single-flash(); }
+    }
 
-        VerticalLayout { alignment: center;
-            Rectangle {
-                background: MaterialPalette.surface-container-high;
-                border-radius: 16px;
+    PostFlashSuccessDialog {
+        show: root.show-confirm && root.confirm-action == 7;
+        lang: root.lang;
+        dismiss => { root.show-confirm = false; }
+        reboot => { root.show-confirm = false; root.post-flash-reboot(); }
+        wipe-and-reboot => { root.show-confirm = false; root.post-flash-wipe(); }
+    }
 
-                VerticalLayout { spacing: 12px; padding: 20px;
-                    Text {
-                        text: lang == "ru" ? "Доступно обновление" : "Update Available";
-                        font-size: 20px; font-weight: 700;
-                        color: MaterialPalette.on-surface;
-                        horizontal-alignment: center;
-                    }
-
-                    Text {
-                        text: lang == "ru" ? "Версия " + update-version + " доступна для загрузки." : "Version " + update-version + " is available for download.";
-                        font-size: 14px;
-                        color: MaterialPalette.on-surface-variant;
-                        horizontal-alignment: center;
-                    }
-
-                    Rectangle {
-                        background: MaterialPalette.surface-container;
-                        border-radius: 8px;
-                        max-height: 180px;
-                        ScrollView {
-                            VerticalLayout { padding: 10px;
-                                Text {
-                                    text: update-body;
-                                    font-size: 13px;
-                                    color: MaterialPalette.on-surface-variant;
-                                    wrap: word-wrap;
-                                }
-                            }
-                        }
-                    }
-
-                    HorizontalLayout { spacing: 8px;
-                        TextButton {
-                            text: Tr.cancel;
-                            clicked => { show-update-dialog = false; }
-                        }
-                        FilledButton {
-                            text: lang == "ru" ? "Скачать" : "Download";
-                            clicked => { root.open-update-url(); }
-                        }
-                    }
-                }
-            }
+    CableTestDialog {
+        show: root.show-confirm && root.confirm-action == 9;
+        lang: root.lang;
+        cable-test-progress: root.cable-test-progress;
+        cable-test-status: root.cable-test-status;
+        cable-test-passed: root.cable-test-passed;
+        cancel => { root.show-confirm = false; }
+        continue-flash => {
+            root.show-confirm = false;
+            root.confirm-action = root.pending-source-flash ? 8 : 4;
+            root.show-confirm = true;
         }
     }
 
-    // ── Scale transition overlay — covers everything during scale change ─────
+    FlashFailureDialog {
+        show: root.show-confirm && root.confirm-action == 10;
+        lang: root.lang;
+        flash-fail-partition: root.flash-fail-partition;
+        flash-fail-slot: root.flash-fail-slot;
+        flash-fail-error: root.flash-fail-error;
+        abort => { root.show-confirm = false; root.flash-fail-abort(); }
+        skip => { root.show-confirm = false; root.flash-fail-skip(); }
+    }
+
+    ArbWarningDialog {
+        show: root.show-arb-warning;
+        lang: root.lang;
+        arb-warning-version: root.arb-warning-version;
+        skip-xbl-abl <=> root.skip-xbl-abl;
+        cancel => { root.show-arb-warning = false; }
+        confirm => { root.show-arb-warning = false; root.confirm-arb-and-flash(); }
+    }
+
+    ArbDeviceWarningDialog {
+        show: root.show-arb-device-warning;
+        lang: root.lang;
+        arb-device-version: root.arb-device-version;
+        arb-device-is-source: root.arb-device-is-source;
+        skip-xbl-abl <=> root.skip-xbl-abl;
+        cancel => { root.show-arb-device-warning = false; }
+        confirm => { root.show-arb-device-warning = false; root.confirm-arb-device-flash(); }
+    }
+
+    PreloaderWarningDialog {
+        show: root.show-preloader-warning;
+        lang: root.lang;
+        skip-preloader <=> root.skip-preloader;
+        cancel => { root.show-preloader-warning = false; }
+        confirm => { root.show-preloader-warning = false; root.confirm-preloader-flash(); }
+    }
+
+    FlashErrorDialog {
+        show: root.show-flash-error;
+        flash-error-message: root.flash-error-message;
+        retry => { root.show-flash-error = false; root.retry-flash(); }
+        skip => { root.show-flash-error = false; }
+        reboot => { root.show-flash-error = false; root.reboot-device(); }
+        cancel => { root.show-flash-error = false; }
+    }
+
+    UpdateDialog {
+        show: root.show-update-dialog;
+        lang: root.lang;
+        update-version: root.update-version;
+        update-body: root.update-body;
+        cancel => { root.show-update-dialog = false; }
+        download => { root.open-update-url(); }
+    }
+
     Rectangle {
         z: 200;
         width: 100%;
         height: 100%;
-        background: is-dark ? #000000 : #ffffff;
+        background: root.is-dark ? #000000 : #ffffff;
         opacity: root.effect-opacity;
         animate opacity { duration: 300ms; easing: ease-in-out; }
     }

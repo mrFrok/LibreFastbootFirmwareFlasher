@@ -1,0 +1,103 @@
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Tr } from "../globals/tr.slint";
+import { FilledButton, TextButton } from "../components/buttons.slint";
+
+export component ArbDeviceWarningDialog {
+    in property <bool> show;
+    in property <string> lang: "en";
+    in property <int> arb-device-version: 0;
+    in property <bool> arb-device-is-source: false;
+    in-out property <bool> skip-xbl-abl: false;
+
+    callback cancel();
+    callback confirm();
+
+    Rectangle {
+        visible: show;
+        opacity: show ? 1.0 : 0.0;
+        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+        z: 110; background: MaterialPalette.overlay-backdrop-heavy; width: 100%; height: 100%;
+
+        VerticalLayout { alignment: center;
+        HorizontalLayout { alignment: center;
+        Rectangle {
+            width: 460px;
+            border-radius: 16px;
+            background: MaterialPalette.surface-container-high;
+            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
+
+            VerticalLayout { padding: 28px; spacing: 12px;
+                HorizontalLayout { spacing: 12px;
+                    Text { text: "⚠"; font-size: 24px; color: #f0b800; vertical-alignment: center; }
+                    Text {
+                        text: Tr.arb-device-title;
+                        font-size: 18px; font-weight: 700;
+                        color: #f0b800; vertical-alignment: center;
+                    }
+                }
+                Text {
+                    text: root.arb-device-version > 0
+                        ? root.arb-device-is-source
+                            ? Tr.arb-device-body-src + root.arb-device-version + Tr.arb-device-body-suffix
+                            : Tr.arb-device-body-fw + root.arb-device-version + Tr.arb-device-body-suffix
+                        : root.arb-device-is-source
+                            ? (root.lang == "ru" ? "Версия ARB исходной сборки и вашего устройства неизвестны. Прошивка с неверным ARB может привести к кирпичу!\n\nПродолжайте только если уверены." : "Source build ARB and device ARB are unknown. Flashing with incorrect ARB can brick your device!\n\nOnly continue if you are sure.")
+                            : (root.lang == "ru" ? "Прошивка имеет ARB=0.\n\nВозможно, у вас стоит прошивка с версией ARB>0, и дальнейшая прошивка может привести к кирпичу." : "Firmware has ARB=0.\n\nYour device may have firmware with ARB>0 — further flashing may brick your device.");
+                    font-size: 13px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
+                }
+                Rectangle { vertical-stretch: 1; }
+                VerticalLayout { spacing: 6px;
+                    Text {
+                        text: root.lang == "ru"
+                            ? "⚠ Пропуск этих разделов может помочь откатить устройство, если телефон имеет ARB>0, но так же может привести к кирпичу!"
+                            : "⚠ Skipping these partitions may help downgrade if your device has ARB>0, but may also brick your device!";
+                        font-size: 12px; color: #f0b800; wrap: word-wrap;
+                    }
+                    TouchArea {
+                        height: 24px;
+                        clicked => { root.skip-xbl-abl = !root.skip-xbl-abl; }
+                        HorizontalLayout { spacing: 10px;
+                            Rectangle {
+                                width: 18px; height: 18px; border-radius: 4px;
+                                border-width: 2px;
+                                border-color: root.skip-xbl-abl ? MaterialPalette.primary : MaterialPalette.outline;
+                                background: root.skip-xbl-abl ? MaterialPalette.primary : transparent;
+                                animate background { duration: 100ms; }
+                                animate border-color { duration: 100ms; }
+                                y: (parent.height - 18px) / 2;
+                                Text {
+                                    visible: root.skip-xbl-abl;
+                                    opacity: root.skip-xbl-abl ? 1.0 : 0.0;
+                                    text: "✓"; font-size: 14px; font-weight: 700;
+                                    color: MaterialPalette.on-primary;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                                }
+                            }
+                            Text {
+                                text: root.lang == "ru" ? "Пропустить xbl/abl разделы" : "Skip xbl/abl partitions";
+                                font-size: 14px; color: MaterialPalette.on-surface; vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout { spacing: 8px; alignment: end;
+                    TextButton {
+                        text: Tr.cancel;
+                        clicked => { root.cancel(); }
+                    }
+                    FilledButton {
+                        text: Tr.arb-device-continue;
+                        clicked => { root.confirm(); }
+                    }
+                }
+            }
+        }
+        }
+        }
+    }
+}

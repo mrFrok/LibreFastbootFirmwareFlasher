@@ -1,0 +1,73 @@
+import { ScrollView } from "std-widgets.slint";
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Tr } from "../globals/tr.slint";
+import { FilledButton, TextButton } from "../components/buttons.slint";
+
+export component UpdateDialog {
+    in property <bool> show;
+    in property <string> lang: "en";
+    in property <string> update-version: "";
+    in property <string> update-body: "";
+
+    callback cancel();
+    callback download();
+
+    Rectangle {
+        visible: show;
+        opacity: show ? 1.0 : 0.0;
+        animate opacity { duration: 200ms; easing: ease-in-out; }
+        width: 100%; height: 100%;
+        background: MaterialPalette.overlay-backdrop-heavy;
+        TouchArea { clicked => { } }
+
+        VerticalLayout { alignment: center;
+            Rectangle {
+                background: MaterialPalette.surface-container-high;
+                border-radius: 16px;
+
+                VerticalLayout { spacing: 12px; padding: 20px;
+                    Text {
+                        text: root.lang == "ru" ? "Доступно обновление" : "Update Available";
+                        font-size: 20px; font-weight: 700;
+                        color: MaterialPalette.on-surface;
+                        horizontal-alignment: center;
+                    }
+
+                    Text {
+                        text: root.lang == "ru" ? "Версия " + root.update-version + " доступна для загрузки." : "Version " + root.update-version + " is available for download.";
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface-variant;
+                        horizontal-alignment: center;
+                    }
+
+                    Rectangle {
+                        background: MaterialPalette.surface-container;
+                        border-radius: 8px;
+                        max-height: 180px;
+                        ScrollView {
+                            VerticalLayout { padding: 10px;
+                                Text {
+                                    text: root.update-body;
+                                    font-size: 13px;
+                                    color: MaterialPalette.on-surface-variant;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout { spacing: 8px;
+                        TextButton {
+                            text: Tr.cancel;
+                            clicked => { root.cancel(); }
+                        }
+                        FilledButton {
+                            text: root.lang == "ru" ? "Скачать" : "Download";
+                            clicked => { root.download(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,80 @@
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Typography } from "../globals/typography.slint";
+import { Tr } from "../globals/tr.slint";
+import { HorizontalDivider } from "../components/buttons.slint";
+import { AboutLink } from "../components/nav.slint";
+
+export component AboutPage {
+    in property <string> app-version;
+
+    callback open-url(string);
+
+    VerticalLayout { spacing: 0px;
+        Rectangle { vertical-stretch: 1; }
+
+        VerticalLayout { spacing: 8px;
+            Text {
+                text: "LibreFastbootFirmwareFlasher";
+                font-size: Typography.display-small-size;
+                font-weight: Typography.display-small-weight-em;
+                color: MaterialPalette.primary;
+                horizontal-alignment: center;
+                letter-spacing: 1px;
+            }
+            Text {
+                text: root.app-version;
+                font-size: Typography.body-large-size;
+                color: MaterialPalette.on-surface-variant;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: Tr.author-lbl;
+                font-size: Typography.body-large-size;
+                color: MaterialPalette.on-surface-variant;
+                horizontal-alignment: center;
+            }
+        }
+
+        Rectangle { height: 24px; }
+        HorizontalDivider { }
+        Rectangle { height: 20px; }
+
+        HorizontalLayout { alignment: center;
+            VerticalLayout { spacing: 10px; width: 520px;
+                AboutLink {
+                    icon: @image-url("../icons/github.svg");
+                    label: "GitHub — LibreFastbootFirmwareFlasher";
+                    url: "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
+                    open(u) => { root.open-url(u); }
+                }
+                AboutLink {
+                    icon: @image-url("../icons/telegram.svg");
+                    label: "Author on Telegram";
+                    url: "https://t.me/mrFrok228";
+                    open(u) => { root.open-url(u); }
+                }
+                AboutLink {
+                    icon: @image-url("../icons/telegram.svg");
+                    label: "Telegram group";
+                    url: "https://t.me/gt3neo5hub";
+                    open(u) => { root.open-url(u); }
+                }
+                AboutLink {
+                    icon: @image-url("../icons/boosty.svg");
+                    label: "Donate — Boosty";
+                    url: "https://boosty.to/mrfrok/donate";
+                    open(u) => { root.open-url(u); }
+                }
+            }
+        }
+
+        Rectangle { height: 16px; }
+        Text {
+            text: Tr.license-lbl;
+            font-size: 13px; color: MaterialPalette.on-surface-variant;
+            horizontal-alignment: center;
+        }
+
+        Rectangle { vertical-stretch: 1; }
+    }
+}

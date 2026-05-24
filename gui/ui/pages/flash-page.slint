@@ -1,0 +1,256 @@
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Typography } from "../globals/typography.slint";
+import { Tr } from "../globals/tr.slint";
+import { DeviceInfo, LogEntry } from "../structs.slint";
+import { FilledButton, OutlinedButton, LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
+import { LogView } from "../components/log-view.slint";
+
+export component FlashPage {
+    in property <DeviceInfo> device;
+    in-out property <int> flash-source-mode: 0;
+    in property <string> firmware-path: "";
+    in property <string> source-dir: "";
+    in property <int> source-image-count: 0;
+    in property <int> source-total-ops: 0;
+    in-out property <bool> skip-arb-check: false;
+    in-out property <bool> show-skip-partitions: false;
+    in-out property <string> skip-partitions: "";
+    in property <bool> is-flashing: false;
+    private property <string> badge-text: root.source-image-count == root.source-total-ops ?
+        "✓ " + root.source-image-count + " " + Tr.src-images :
+        "✓ " + root.source-image-count + " " + Tr.src-images + " · " + root.source-total-ops + " " + Tr.src-ops;
+    in property <float> flash-progress: 0;
+    in property <string> flash-status: "";
+    in property <[LogEntry]> flash-log: [];
+    in property <string> flash-export-status: "";
+    in property <string> lang: "en";
+
+    callback browse-folder();
+    callback check-device();
+    callback browse-source-dir();
+    callback start-flash-from-source();
+    callback start-flash();
+    callback cancel-flash();
+    callback export-flash-log();
+    callback show-reboot-choice();
+
+    VerticalLayout { spacing: 12px;
+
+        Text {
+            text: Tr.nav-flash;
+            font-size: 20px; font-weight: 700;
+            color: MaterialPalette.on-surface;
+        }
+        DeviceBanner { device: root.device; }
+
+        HorizontalLayout { spacing: 6px; height: 36px;
+            for item in [
+                { label: Tr.flash-from-folder, val: 0 },
+                { label: Tr.flash-from-src, val: 1 },
+            ]: TouchArea {
+                horizontal-stretch: 1;
+                clicked => { root.flash-source-mode = item.val; }
+                Rectangle {
+                    border-radius: 10px;
+                    border-width: root.flash-source-mode == item.val ? 2px : 1px;
+                    border-color: root.flash-source-mode == item.val
+                        ? MaterialPalette.primary : MaterialPalette.outline-variant;
+                    background: root.flash-source-mode == item.val
+                        ? MaterialPalette.secondary-container
+                        : (parent.has-hover
+                            ? MaterialPalette.surface-container-high
+                            : MaterialPalette.surface-container);
+                    animate background    { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+                    animate border-color  { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+                    animate border-width  { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+                    Text {
+                        text: item.label;
+                        font-size: 13px; font-weight: 500;
+                        color: root.flash-source-mode == item.val
+                            ? MaterialPalette.on-secondary-container
+                            : MaterialPalette.on-surface;
+                        animate color { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if root.flash-source-mode == 0: HorizontalLayout { spacing: 8px;
+            PathField { path: root.firmware-path; horizontal-stretch: 1; }
+            OutlinedButton { text: Tr.select-folder; enabled: !root.is-flashing; clicked => { root.browse-folder(); } }
+            OutlinedButton { text: Tr.find-phone;    enabled: !root.is-flashing; clicked => { root.check-device(); } }
+        }
+
+        if root.flash-source-mode == 1: VerticalLayout { spacing: 8px;
+            HorizontalLayout { spacing: 8px;
+                PathField { path: root.source-dir; horizontal-stretch: 1; }
+                OutlinedButton {
+                    text: Tr.src-select;
+                    enabled: !root.is-flashing;
+                    clicked => { root.browse-source-dir(); }
+                }
+                OutlinedButton { text: Tr.find-phone; enabled: !root.is-flashing; clicked => { root.check-device(); } }
+            }
+            Rectangle {
+                height: 28px; border-radius: 8px; border-width: 1px;
+                border-color: MaterialPalette.primary;
+                background: MaterialPalette.primary-container;
+                visible: root.source-image-count > 0;
+                opacity: root.source-image-count > 0 ? 1.0 : 0.0;
+                HorizontalLayout { padding-left: 12px; padding-right: 12px;
+                    Text {
+                        text: root.badge-text;
+                        font-size: 12px; font-weight: 600;
+                        color: MaterialPalette.on-primary-container;
+                        vertical-alignment: center;
+                    }
+                }
+                animate opacity { duration: 200ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            }
+        }
+
+        if root.flash-source-mode == 0: TouchArea {
+            height: 32px;
+            clicked => { root.skip-arb-check = !root.skip-arb-check; }
+
+            HorizontalLayout { spacing: 10px;
+                Rectangle {
+                    width: 18px; height: 18px;
+                    border-radius: 4px;
+                    border-width: 2px;
+                    border-color: root.skip-arb-check
+                        ? MaterialPalette.primary
+                        : MaterialPalette.outline;
+                    background: root.skip-arb-check
+                        ? MaterialPalette.primary
+                        : transparent;
+                    animate background { duration: 100ms; }
+                    animate border-color { duration: 100ms; }
+                    y: (parent.height - 18px) / 2;
+
+                    Text {
+                        visible: root.skip-arb-check;
+                        opacity: root.skip-arb-check ? 1.0 : 0.0;
+                        text: "✓";
+                        font-size: 14px; font-weight: 700;
+                        color: MaterialPalette.on-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        animate opacity { duration: 150ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1.0); }
+                    }
+                }
+                Text {
+                    text: Tr.skip-arb;
+                    font-size: 15px;
+                    color: MaterialPalette.on-surface;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        TouchArea {
+            height: 32px;
+            clicked => { root.show-skip-partitions = !root.show-skip-partitions; }
+
+            HorizontalLayout { spacing: 10px;
+                Rectangle {
+                    width: 18px; height: 18px;
+                    border-radius: 4px;
+                    border-width: 2px;
+                    border-color: root.show-skip-partitions
+                        ? MaterialPalette.primary
+                        : MaterialPalette.outline;
+                    background: root.show-skip-partitions
+                        ? MaterialPalette.primary
+                        : transparent;
+                    animate background { duration: 100ms; }
+                    animate border-color { duration: 100ms; }
+                    y: (parent.height - 18px) / 2;
+
+                    Text {
+                        visible: root.show-skip-partitions;
+                        opacity: root.show-skip-partitions ? 1.0 : 0.0;
+                        text: "✓";
+                        font-size: 14px; font-weight: 700;
+                        color: MaterialPalette.on-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        animate opacity { duration: 150ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1.0); }
+                    }
+                }
+                Text {
+                    text: root.lang == "ru" ? "Пропустить свои разделы" : "Skip custom partitions";
+                    font-size: 15px;
+                    color: MaterialPalette.on-surface;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if root.show-skip-partitions: Rectangle {
+            height: 64px;
+            background: transparent;
+
+            VerticalLayout { spacing: 4px;
+                Text {
+                    text: root.lang == "ru" ? "Разделы для пропуска (через запятую):" : "Partitions to skip (comma-separated):";
+                    font-size: 13px;
+                    color: MaterialPalette.on-surface-variant;
+                }
+                Rectangle {
+                    height: 36px; border-radius: 12px;
+                    background: MaterialPalette.surface-container;
+                    border-width: 1px;
+                    border-color: skip-part-input.has-focus
+                        ? MaterialPalette.primary
+                        : MaterialPalette.outline-variant;
+                    animate border-color { duration: 80ms; }
+
+                    skip-part-input := TextInput {
+                        x: 12px; y: 0;
+                        width: parent.width - 24px; height: parent.height;
+                        text <=> root.skip-partitions;
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface;
+                        vertical-alignment: center;
+                        single-line: true;
+                    }
+
+                    Text {
+                        x: 12px; y: 0;
+                        width: parent.width - 24px; height: parent.height;
+                        visible: skip-part-input.text == "" && !skip-part-input.has-focus;
+                        opacity: skip-part-input.text == "" && !skip-part-input.has-focus ? 1.0 : 0.0;
+                        text: root.lang == "ru" ? "например: recovery, boot, vendor_boot" : "e.g. recovery, boot, vendor_boot";
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface-variant;
+                        vertical-alignment: center;
+                        animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                    }
+                }
+            }
+        }
+
+        if root.is-flashing || root.flash-progress > 0: VerticalLayout { spacing: 6px;
+            if root.flash-status != "": Text { text: root.flash-status; font-size: 14px; color: MaterialPalette.primary; }
+            LinearProgressIndicator { progress: root.flash-progress; }
+        }
+
+        HorizontalLayout { spacing: 8px;
+            if root.flash-source-mode == 0: FilledButton {
+                text: root.is-flashing ? Tr.flashing : Tr.flash-all-btn;
+                enabled: !root.is-flashing && root.firmware-path != "" && root.device.connected;
+                clicked => { root.show-reboot-choice(); }
+            }
+            if root.flash-source-mode == 1: FilledButton {
+                text: root.is-flashing ? Tr.flashing : Tr.flash-all-btn;
+                enabled: !root.is-flashing && root.source-dir != "" && root.source-image-count > 0 && root.device.connected;
+                clicked => { root.start-flash-from-source(); }
+            }
+            if root.is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
+        }
+
+        LogView { entries: root.flash-log; vertical-stretch: 1; export-status: root.flash-export-status; export-log => { root.export-flash-log(); } }
+    }
+}

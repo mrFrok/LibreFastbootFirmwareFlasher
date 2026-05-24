@@ -214,7 +214,9 @@ pub fn worker(
     flash_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     let mut serial: Option<String> = None;
+    #[allow(unused_assignments)]
     let mut skip_xbl_abl: bool = false;
+    #[allow(unused_assignments)]
     let mut skip_preloader: bool = false;
     let mut as_mediatek: Option<bool> = None;
     let mut current_source: Option<lfff_lib::flasher::FirmwareSource> = None;
@@ -466,6 +468,8 @@ pub fn worker(
 
         Cmd::FlashFromSource { dir, skip_partitions } => {
                     flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+                    skip_xbl_abl = false;
+                    skip_preloader = false;
                     tx.send(WMsg::Flashing(true)).ok();
                     log(&tx, LogLevel::Info, 2, format!("Flashing from source dir: {}", dir));
                     let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&dir));

@@ -29,6 +29,7 @@ export global Tr {
     out property <string> flash-from-src:lang == "ru" ? "Из исходников"     : "From build output";
     out property <string> src-select:    lang == "ru" ? "Выбрать папку"     : "Select folder";
     out property <string> src-images:    lang == "ru" ? "образов"           : "images";
+    out property <string> src-ops:       lang == "ru" ? "операций"          : "ops";
     out property <string> find-phone:   lang == "ru" ? "Найти телефон"  : "Find phone";
     out property <string> skip-arb:     lang == "ru" ? "Пропустить проверку ARB" : "Skip ARB check";
     out property <string> flash-all-btn:lang == "ru" ? "Прошить всё"   : "Flash all";
@@ -121,6 +122,12 @@ export global Tr {
     out property <string> retry: lang == "ru"
         ? "Повторить"
         : "Retry";
+    out property <string> skip: lang == "ru"
+        ? "Пропустить"
+        : "Skip";
+    out property <string> dismiss: lang == "ru"
+        ? "Закрыть"
+        : "Dismiss";
     out property <string> reboot: lang == "ru"
         ? "Перезагрузить устройство"
         : "Reboot device";
@@ -146,4 +153,42 @@ export global Tr {
     out property <string> log-empty: lang == "ru"
         ? "—"
         : "—";
+
+    // Dialog titles
+    out property <string> arb-warning-title: lang == "ru"
+        ? "Предупреждение ARB"
+        : "ARB Warning";
+    out property <string> preloader-warning-title: lang == "ru"
+        ? "Предупреждение preloader"
+        : "Preloader Warning";
+    out property <string> cable-test-title: lang == "ru"
+        ? "Тест кабеля"
+        : "Cable Test";
+    out property <string> flash-complete: lang == "ru"
+        ? "Прошивка завершена"
+        : "Flash complete";
+    out property <string> next-action: lang == "ru"
+        ? "Что сделать с устройством?"
+        : "What would you like to do next?";
+    out property <string> continue-next: lang == "ru"
+        ? "Продолжить →"
+        : "Continue →";
+    out property <string> reboot-and-flash: lang == "ru"
+        ? "Перезагрузить и прошить →"
+        : "Reboot & flash →";
+    out property <string> abort: lang == "ru"
+        ? "Прервать"
+        : "Abort";
+    out property <string> skip-next: lang == "ru"
+        ? "Пропустить →"
+        : "Skip →";
+    out property <string> wipe-data-reboot: lang == "ru"
+        ? "Сброс данных + перезагрузка"
+        : "Wipe data + reboot";
+    out property <string> arb-skip-xbl-hint: lang == "ru"
+        ? "⚠ Пропуск xbl/abl может сохранить ARB=0, но может привести к кирпичу!"
+        : "⚠ Skipping xbl/abl may preserve ARB=0, but may also brick your device!";
+    out property <string> preloader-skip-hint: lang == "ru"
+        ? "⚠ Пропуск preloader может помочь установить новую прошивку, если стандартный метод не срабатывает, но также может сделать устройство неработоспособным"
+        : "⚠ Skipping preloader may help flash new firmware when the standard method fails, but may also render the device unbootable";
 }

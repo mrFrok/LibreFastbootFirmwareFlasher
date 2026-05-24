@@ -1,0 +1,117 @@
+import { Palette } from "std-widgets.slint";
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Typography } from "../globals/typography.slint";
+import { Tr } from "../globals/tr.slint";
+import { NavCard, OutlinedCard } from "../components/cards.slint";
+
+export component HomePage {
+    in property <string> app-version;
+    in property <string> lang;
+
+    callback navigate-to(int);
+
+    VerticalLayout { spacing: 14px;
+
+        Rectangle {
+            border-radius: 12px;
+            background: Palette.color-scheme == ColorScheme.dark
+                ? MaterialPalette.error-container.with-alpha(0.35)
+                : MaterialPalette.error-container.with-alpha(0.25);
+            border-width: 1px;
+            border-color: MaterialPalette.error;
+            HorizontalLayout { padding-left: 14px; padding-right: 14px; padding-top: 12px; padding-bottom: 12px; spacing: 10px;
+                Text { text: "⚠"; font-size: 15px; width: 20px; vertical-alignment: center;
+                    color: MaterialPalette.error; }
+                VerticalLayout { spacing: 4px; horizontal-stretch: 1;
+                    Text { text: Tr.home-warning; font-size: 13px; wrap: word-wrap;
+                        color: MaterialPalette.on-error-container; }
+                    Text { text: Tr.supported-devices; font-size: 12px; wrap: word-wrap;
+                        color: MaterialPalette.on-error-container; }
+                }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout { alignment: center;
+            VerticalLayout { spacing: 10px; alignment: center;
+                HorizontalLayout { alignment: center;
+                    Image {
+                        source: @image-url("../icons/logo_icon.svg");
+                        width: 96px; height: 96px;
+                    }
+                }
+                Text {
+                    text: "LibreFastbootFirmwareFlasher";
+                    font-size: Typography.headline-small-size;
+                    font-weight: Typography.headline-small-weight-em;
+                    color: MaterialPalette.primary;
+                    horizontal-alignment: center;
+                    letter-spacing: 0.5px;
+                }
+                Text {
+                    text: root.app-version + "  •  " + (root.lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
+                    font-size: Typography.body-large-size;
+                    color: MaterialPalette.on-surface-variant;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+        Rectangle { vertical-stretch: 1; }
+
+        HorizontalLayout { spacing: 10px; height: 90px;
+            NavCard {
+                width: (parent.width - 30px) / 4;
+                label: Tr.home-goto-device;
+                icon: @image-url("../icons/smartphone.svg");
+                card-clicked => { root.navigate-to(1); }
+            }
+            NavCard {
+                width: (parent.width - 30px) / 4;
+                label: Tr.home-goto-download;
+                icon: @image-url("../icons/download.svg");
+                card-clicked => { root.navigate-to(2); }
+            }
+            NavCard {
+                width: (parent.width - 30px) / 4;
+                label: Tr.home-goto-flash;
+                icon: @image-url("../icons/flash.svg");
+                card-clicked => { root.navigate-to(3); }
+            }
+            NavCard {
+                width: (parent.width - 30px) / 4;
+                label: Tr.home-goto-part;
+                icon: @image-url("../icons/storage.svg");
+                card-clicked => { root.navigate-to(4); }
+            }
+        }
+
+        OutlinedCard {
+            VerticalLayout { padding: 16px; spacing: 8px;
+                Text {
+                    text: Tr.home-features-title;
+                    font-size: Typography.label-medium-size;
+                    font-weight: Typography.label-medium-weight;
+                    letter-spacing: 0.8px;
+                    color: MaterialPalette.primary;
+                }
+                for feat in [
+                    Tr.home-feat1, Tr.home-feat2,
+                    Tr.home-feat3, Tr.home-feat4, Tr.home-feat5,
+                ]: HorizontalLayout { spacing: 10px;
+                    Rectangle {
+                        width: 6px; height: 6px; border-radius: 3px;
+                        background: MaterialPalette.tertiary;
+                        y: (parent.height - 6px) / 2;
+                    }
+                    Text {
+                        text: feat;
+                        font-size: Typography.body-medium-size;
+                        color: MaterialPalette.on-surface-variant;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+        }
+    }
+}

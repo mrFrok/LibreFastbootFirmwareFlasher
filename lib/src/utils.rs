@@ -70,7 +70,9 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
         }
     }
     
-    // With timeout: spawn with piped stdout/stderr
+    // With timeout: spawn threads to drain stdout/stderr concurrently,
+    // then wait for the child with a timeout.  This prevents pipe-deadlock
+    // when the subprocess writes more than the OS pipe buffer (~64 KiB).
     let mut child = match Command::new(cmd[0])
         .args(&cmd[1..])
         .stdout(std::process::Stdio::piped())
@@ -91,17 +93,27 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
         }
     };
 
+    // Spawn background threads to read stdout/stderr so the pipe buffers
+    // never fill up and block the child process.
+    let stdout_handle = child.stdout.take().map(|mut out| {
+        std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = out.read_to_string(&mut buf);
+            buf
+        })
+    });
+    let stderr_handle = child.stderr.take().map(|mut err| {
+        std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = err.read_to_string(&mut buf);
+            buf
+        })
+    });
+
     match wait_timeout::ChildExt::wait_timeout(&mut child, Duration::from_secs(timeout_secs)) {
         Ok(Some(status)) => {
-            // Process exited within timeout — collect output
-            let mut stdout = String::new();
-            let mut stderr = String::new();
-            if let Some(mut out) = child.stdout.take() {
-                let _ = out.read_to_string(&mut stdout);
-            }
-            if let Some(mut err) = child.stderr.take() {
-                let _ = err.read_to_string(&mut stderr);
-            }
+            let stdout = stdout_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
+            let stderr = stderr_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
             CmdResult {
                 code: status.code().unwrap_or(-1),
                 stdout: stdout.trim().to_string(),
@@ -109,7 +121,6 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
             }
         }
         Ok(None) => {
-            // Timeout occurred, kill the process
             warn!("Command '{}' exceeded timeout of {}s, killing process", cmd[0], timeout_secs);
             let _ = child.kill();
             let _ = child.wait();

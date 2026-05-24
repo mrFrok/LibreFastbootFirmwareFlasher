@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use colored::Colorize;
 use lfff_lib::flasher::{collect_images, run_flash_single};
 
 pub fn run(
@@ -29,20 +30,21 @@ pub fn run(
                             Some(path) => path.clone(),
                             None => {
                                 let available: Vec<_> = images.keys().collect();
-                                println!(
-                                    "✗ Partition '{}' not found in {}",
-                                    part_name,
-                                    dir.display()
+                                eprintln!(
+                                    "{} {}",
+                                    "✗".red().bold(),
+                                    format!("Partition '{}' not found in {}", part_name, dir.display()).red()
                                 );
-                                println!("  Available: {:?}", available);
+                                eprintln!("  {} {}", "Available:".dimmed(), format!("{:?}", available).dimmed());
                                 return 1;
                             }
                         }
                     }
                     None => {
-                        println!(
-                            "✗ '{}' is not a .img file and --firmware-dir is not set.",
-                            img
+                        eprintln!(
+                            "{} {}",
+                            "✗".red().bold(),
+                            format!("'{}' is not a .img file and --firmware-dir is not set.", img).red()
                         );
                         return 1;
                     }

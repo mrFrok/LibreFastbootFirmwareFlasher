@@ -1,0 +1,141 @@
+import { Palette } from "std-widgets.slint";
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Typography } from "../globals/typography.slint";
+import { Tr } from "../globals/tr.slint";
+import { DeviceInfo, LogEntry } from "../structs.slint";
+import { FilledButton, OutlinedButton, HorizontalDivider, LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
+import { LogView } from "../components/log-view.slint";
+
+export component DownloadPage {
+    in property <DeviceInfo> device;
+    in property <string> output-dir;
+    in-out property <string> download-url;
+    in property <string> dl-speed: "";
+    in property <string> dl-eta: "";
+    in property <string> dl-downloaded: "";
+    in property <string> dl-total: "";
+    in property <float> dl-percent: 0;
+    in property <bool> is-downloading: false;
+    in property <string> firmware-path: "";
+    in property <[LogEntry]> download-log: [];
+    in property <string> download-export-status: "";
+
+    callback browse-output-dir();
+    callback paste-clipboard();
+    callback download-firmware(string);
+    callback cancel-download();
+    callback browse-firmware();
+    callback extract-firmware();
+    callback export-download-log();
+
+    VerticalLayout { spacing: 12px;
+
+        Text {
+            text: Tr.nav-download;
+            font-size: 20px; font-weight: 700;
+            color: MaterialPalette.on-surface;
+        }
+        DeviceBanner { device: root.device; }
+
+        Text { text: Tr.output-dir; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
+        HorizontalLayout { spacing: 8px; height: 44px;
+            PathField { path: root.output-dir; horizontal-stretch: 1; }
+            OutlinedButton {
+                width: 90px;
+                text: Tr.browse;
+                clicked => { root.browse-output-dir(); }
+            }
+        }
+
+        HorizontalLayout { spacing: 8px; height: 44px;
+            Rectangle {
+                horizontal-stretch: 1;
+                min-width: 0px;
+                clip: true;
+                border-radius: 12px;
+                background: MaterialPalette.surface-container;
+                border-width: 1px;
+                border-color: url-input.has-focus
+                    ? MaterialPalette.primary
+                    : MaterialPalette.outline-variant;
+                animate border-color { duration: 80ms; }
+
+                Text {
+                    x: 14px; y: 0px;
+                    width: parent.width - 28px; height: parent.height;
+                    visible: root.download-url == "" && !url-input.has-focus;
+                    opacity: root.download-url == "" && !url-input.has-focus ? 1.0 : 0.0;
+                    text: Tr.ota-url;
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface-variant;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                }
+
+                url-input := TextInput {
+                    x: 14px; y: 0px;
+                    width: parent.width - 28px; height: parent.height;
+                    text <=> root.download-url;
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface;
+                    vertical-alignment: center;
+                    single-line: true;
+                }
+            }
+
+            OutlinedButton {
+                width: 90px;
+                text: Tr.paste;
+                clicked => { root.paste-clipboard(); }
+            }
+
+            if !root.is-downloading: FilledButton {
+                width: 110px;
+                enabled: root.download-url != "";
+                text: Tr.dl-btn;
+                clicked => { root.download-firmware(root.download-url); }
+            }
+
+            if root.is-downloading: OutlinedButton {
+                width: 110px;
+                text: Tr.cancel;
+                clicked => { root.cancel-download(); }
+            }
+        }
+
+        if root.dl-percent > 0 || root.dl-total != "": VerticalLayout { spacing: 6px;
+            HorizontalLayout { spacing: 10px;
+                Text { text: Math.round(root.dl-percent) + "%"; font-size: 15px; font-weight: 700; color: MaterialPalette.primary; }
+                Text { text: root.dl-downloaded + " / " + root.dl-total; font-size: 14px; color: MaterialPalette.on-surface-variant; }
+                Rectangle { horizontal-stretch: 1; }
+                Text { text: "↓ " + root.dl-speed; font-size: 14px; font-weight: 500; color: #4caf50; }
+                Text { text: "ETA " + root.dl-eta; font-size: 14px; color: MaterialPalette.on-surface-variant; }
+            }
+            LinearProgressIndicator { progress: root.dl-percent / 100; }
+        }
+
+        HorizontalDivider { }
+
+        Text { text: Tr.local-lbl; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
+
+        HorizontalLayout { spacing: 8px; height: 44px;
+            PathField { path: root.firmware-path; horizontal-stretch: 1; }
+
+            OutlinedButton {
+                width: 110px;
+                text: Tr.select-zip;
+                clicked => { root.browse-firmware(); }
+            }
+
+            FilledButton {
+                width: 100px;
+                enabled: root.firmware-path != "";
+                text: Tr.extract;
+                clicked => { root.extract-firmware(); }
+            }
+        }
+
+        LogView { entries: root.download-log; vertical-stretch: 1; export-status: root.download-export-status; export-log => { root.export-download-log(); } }
+    }
+}

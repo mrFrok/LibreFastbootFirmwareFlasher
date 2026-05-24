@@ -1,0 +1,120 @@
+import { Palette } from "std-widgets.slint";
+import { MaterialPalette } from "../globals/material-palette.slint";
+
+export component TopBar inherits Rectangle {
+    in property <string> lang: "en";
+    in property <bool> is-dark: true;
+    in property <float> ui-scale: 1.0;
+
+    callback set-scale(float);
+    callback set-lang(string);
+    callback toggle-theme();
+
+    height: 44px;
+    background: MaterialPalette.surface-container;
+
+    Rectangle {
+        y: 43px; height: 1px; width: 100%;
+        background: MaterialPalette.outline-variant;
+    }
+
+    HorizontalLayout {
+        padding-left: 16px; padding-right: 12px;
+        alignment: end; spacing: 6px;
+
+        // Scale control
+        HorizontalLayout { spacing: 2px; y: (parent.height - 26px) / 2; height: 26px;
+            for item in [{ label: "S", val: 0.85 }, { label: "M", val: 1.0 }, { label: "L", val: 1.25 }, { label: "XL", val: 1.5 }]:
+            TouchArea {
+                width: 26px; height: 26px;
+                clicked => { root.set-scale(item.val); }
+                Rectangle {
+                    border-radius: 5px;
+                    background: root.ui-scale == item.val
+                        ? MaterialPalette.primary
+                        : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent);
+                    animate background { duration: 80ms; }
+                    Text {
+                        text: item.label; font-size: 10px; font-weight: 600;
+                        color: root.ui-scale == item.val ? MaterialPalette.on-primary : MaterialPalette.on-surface-variant;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Rectangle { width: 1px; height: 18px; background: MaterialPalette.outline-variant; y: 13px; }
+
+        // Language switcher
+        Rectangle {
+            width: 82px; height: 28px;
+            y: (parent.height - 28px) / 2;
+            border-radius: 8px;
+            background: MaterialPalette.surface-container-high;
+            border-width: 1px;
+            border-color: MaterialPalette.outline-variant;
+
+            Rectangle {
+                x: root.lang == "en" ? 2px : 42px;
+                y: 2px;
+                width: 38px; height: 24px;
+                border-radius: 5px;
+                background: MaterialPalette.primary;
+                animate x { duration: 180ms; easing: ease-in-out; }
+            }
+
+            TouchArea {
+                x: 0; y: 0; width: 42px; height: 28px;
+                clicked => { root.set-lang("en"); }
+                Text {
+                    text: "EN";
+                    font-size: 13px; font-weight: 600;
+                    color: root.lang == "en"
+                        ? MaterialPalette.on-primary
+                        : MaterialPalette.on-surface-variant;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    animate color { duration: 150ms; }
+                }
+            }
+
+            TouchArea {
+                x: 42px; y: 0; width: 40px; height: 28px;
+                clicked => { root.set-lang("ru"); }
+                Text {
+                    text: "RU";
+                    font-size: 13px; font-weight: 600;
+                    color: root.lang == "ru"
+                        ? MaterialPalette.on-primary
+                        : MaterialPalette.on-surface-variant;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    animate color { duration: 150ms; }
+                }
+            }
+        }
+
+        Rectangle { width: 1px; height: 20px; background: MaterialPalette.outline-variant; y: 12px; }
+
+        // Theme toggle
+        TouchArea {
+            width: 36px; height: 28px;
+            y: (parent.height - 28px) / 2;
+            clicked => { root.toggle-theme(); }
+            Rectangle {
+                border-radius: 8px;
+                background: parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent;
+                animate background { duration: 80ms; }
+                Image {
+                    source: root.is-dark
+                        ? @image-url("../icons/sun.svg")
+                        : @image-url("../icons/moon.svg");
+                    width: 18px; height: 18px;
+                    colorize: MaterialPalette.on-surface-variant;
+                    x: (parent.width - 18px) / 2;
+                    y: (parent.height - 18px) / 2;
+                }
+            }
+        }
+    }
+}

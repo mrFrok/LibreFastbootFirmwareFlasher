@@ -1,0 +1,133 @@
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Typography } from "../globals/typography.slint";
+import { Tr } from "../globals/tr.slint";
+import { DeviceInfo, LogEntry } from "../structs.slint";
+import { FilledButton, OutlinedButton, LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
+import { LogView } from "../components/log-view.slint";
+
+export component PartitionPage {
+    in property <DeviceInfo> device;
+    in property <string> single-image-path: "";
+    in-out property <string> partition-name: "";
+    in property <bool> is-flashing: false;
+    in property <float> flash-progress: 0;
+    in property <string> flash-status: "";
+    in property <[LogEntry]> partition-log: [];
+    in property <string> partition-export-status: "";
+    in property <string> lang: "en";
+
+    callback browse-single-image();
+    callback check-device();
+    callback show-partition-reboot-choice();
+    callback start-single-flash();
+    callback cancel-flash();
+    callback export-partition-log();
+
+    VerticalLayout { spacing: 12px;
+
+        Text {
+            text: Tr.nav-part;
+            font-size: 20px; font-weight: 700;
+            color: MaterialPalette.on-surface;
+        }
+        DeviceBanner { device: root.device; }
+
+        HorizontalLayout { spacing: 8px;
+            PathField { path: root.single-image-path; horizontal-stretch: 1; }
+            OutlinedButton { text: ".img";        clicked => { root.browse-single-image(); } }
+            OutlinedButton { text: Tr.find-phone; clicked => { root.check-device(); } }
+        }
+
+        HorizontalLayout { spacing: 8px; height: 20px;
+            Text { text: Tr.part-lbl; font-size: 15px; font-weight: 500;
+                color: MaterialPalette.on-surface-variant; vertical-alignment: center; }
+            Text {
+                text: root.partition-name != "" ? root.partition-name : "—";
+                font-size: 15px; font-weight: 600;
+                color: root.partition-name != "" ? MaterialPalette.primary : MaterialPalette.on-surface-variant;
+                vertical-alignment: center;
+            }
+        }
+
+        HorizontalLayout { spacing: 6px; height: 36px;
+            for p in ["recovery", "boot", "init_boot", "modem", "vendor_boot"]:
+            TouchArea {
+                horizontal-stretch: 1;
+                clicked => { root.partition-name = p; }
+                Rectangle {
+                    border-radius: 12px;
+                    background: root.partition-name == p
+                        ? MaterialPalette.primary-container
+                        : parent.has-hover
+                            ? MaterialPalette.surface-container-highest
+                            : MaterialPalette.surface-container-high;
+                    border-width: root.partition-name == p ? 2px : 1px;
+                    border-color: root.partition-name == p
+                        ? MaterialPalette.primary : MaterialPalette.outline-variant;
+                    animate background   { duration: 80ms; }
+                    animate border-color { duration: 80ms; }
+                    animate border-width { duration: 80ms; }
+                    Text {
+                        text: p; font-size: 13px;
+                        font-weight: root.partition-name == p ? 700 : 400;
+                        color: root.partition-name == p
+                            ? MaterialPalette.on-primary-container : MaterialPalette.on-surface;
+                        animate color { duration: 80ms; }
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout { spacing: 8px; height: 36px;
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 36px; border-radius: 12px;
+                background: MaterialPalette.surface-container;
+                border-width: 1px;
+                border-color: custom-part-input.has-focus
+                    ? MaterialPalette.primary
+                    : MaterialPalette.outline-variant;
+                animate border-color { duration: 80ms; }
+
+                custom-part-input := TextInput {
+                    x: 12px; y: 0;
+                    width: parent.width - 24px; height: parent.height;
+                    text <=> root.partition-name;
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface;
+                    vertical-alignment: center;
+                    single-line: true;
+                }
+
+                Text {
+                    x: 12px; y: 0;
+                    width: parent.width - 24px; height: parent.height;
+                    visible: custom-part-input.text == "";
+                    opacity: custom-part-input.text == "" ? 1.0 : 0.0;
+                    text: root.lang == "ru" ? "или введите свой раздел…" : "or type custom partition…";
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface-variant;
+                    vertical-alignment: center;
+                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                }
+            }
+        }
+
+        if root.is-flashing || root.flash-progress > 0: VerticalLayout { spacing: 6px;
+            if root.flash-status != "": Text { text: root.flash-status; font-size: 14px; color: MaterialPalette.primary; }
+            LinearProgressIndicator { progress: root.flash-progress; }
+        }
+
+        HorizontalLayout { spacing: 8px;
+            FilledButton {
+                text: root.is-flashing ? Tr.flashing : Tr.flash-part-btn;
+                enabled: !root.is-flashing && root.single-image-path != "" && root.device.connected && root.partition-name != "";
+                clicked => { root.show-partition-reboot-choice(); }
+            }
+            if root.is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
+        }
+
+        LogView { entries: root.partition-log; vertical-stretch: 1; export-status: root.partition-export-status; export-log => { root.export-partition-log(); } }
+    }
+}

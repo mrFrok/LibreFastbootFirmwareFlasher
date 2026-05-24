@@ -33,7 +33,10 @@ pub fn run(
         let (device_arb, method) = get_device_arb_version(serial);
         println!("  Device    : {}", device_arb);
         let result = compare_arb_versions(&firmware_arb, &device_arb);
-        arb_confirmation_gate(&result, &method.to_string());
+        if !arb_confirmation_gate(&result, &method.to_string()) {
+            println!("  ✗  Aborted by user.");
+            return 1;
+        }
     } else if firmware_arb.enforced() {
         println!("  ⚠  Hard ARB is ACTIVE on this firmware.");
     } else {

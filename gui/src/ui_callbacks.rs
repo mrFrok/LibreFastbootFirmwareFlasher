@@ -231,10 +231,11 @@ pub fn register_callbacks(
                 ui.set_firmware_path(dir_str.clone().into());
                 ui.set_source_dir(dir_str.clone().into());
                 ui.set_source_image_count(images.len() as i32);
+                ui.set_source_total_ops(images.len() as i32);
                 add_log_m(&fl, &ui, &LogLevel::Info, &format!(
                     "Source dir selected: {} ({} images)",
                     p.file_name().unwrap_or_default().to_string_lossy(),
-                    images.len()
+                    images.len(),
                 ));
                 let mut sorted: Vec<_> = images.iter().collect();
                 sorted.sort_by_key(|(k, _)| *k);

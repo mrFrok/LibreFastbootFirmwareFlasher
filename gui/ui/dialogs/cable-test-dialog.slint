@@ -1,0 +1,64 @@
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Tr } from "../globals/tr.slint";
+import { FilledButton, TextButton, LinearProgressIndicator } from "../components/buttons.slint";
+
+export component CableTestDialog {
+    in property <bool> show;
+    in property <string> lang: "en";
+    in property <float> cable-test-progress: 0;
+    in property <string> cable-test-status: "";
+    in property <bool> cable-test-passed: false;
+
+    callback cancel();
+    callback continue-flash();
+
+    Rectangle {
+        visible: show;
+        opacity: show ? 1.0 : 0.0;
+        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
+        animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+        z: 100; background: MaterialPalette.overlay-backdrop-heavy; width: 100%; height: 100%;
+
+        Rectangle {
+            x: (parent.width - 440px) / 2;
+            y: (parent.height - 260px) / 2;
+            width: 440px; height: 260px;
+            border-radius: 16px;
+            background: MaterialPalette.surface-container-high;
+            drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
+
+            VerticalLayout { padding: 24px; spacing: 14px;
+                HorizontalLayout { spacing: 10px;
+                    Text { text: "🔌"; font-size: 22px; vertical-alignment: center; }
+                    Text {
+                        text: Tr.cable-test-title;
+                        font-size: 17px; font-weight: 700;
+                        color: MaterialPalette.on-surface;
+                        vertical-alignment: center;
+                    }
+                }
+                Text {
+                    text: root.cable-test-status;
+                    font-size: 13px;
+                    color: root.cable-test-passed ? #4caf50 : MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
+                    min-height: 40px;
+                }
+                LinearProgressIndicator { progress: root.cable-test-progress; }
+                Rectangle { vertical-stretch: 1; }
+                HorizontalLayout { spacing: 8px; alignment: end;
+                    TextButton {
+                        text: Tr.cancel;
+                        enabled: !root.cable-test-passed;
+                        clicked => { root.cancel(); }
+                    }
+                    FilledButton {
+                        text: root.lang == "ru" ? "Продолжить →" : "Continue →";
+                        enabled: root.cable-test-passed;
+                        clicked => { root.continue-flash(); }
+                    }
+                }
+            }
+        }
+    }
+}

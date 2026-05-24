@@ -414,7 +414,7 @@ where
                 match stdout.read(&mut byte) {
                     Ok(0) => break,
                     Ok(_) => {
-                        let ch = byte[0] as char;
+                        let ch = char::from(byte[0]);
                         if ch == '\r' || ch == '\n' {
                             let trimmed = buf.trim().to_string();
                             if !trimmed.is_empty() {

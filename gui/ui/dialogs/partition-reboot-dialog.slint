@@ -1,0 +1,69 @@
+import { MaterialPalette } from "../globals/material-palette.slint";
+import { Tr } from "../globals/tr.slint";
+import { FilledButton, TextButton } from "../components/buttons.slint";
+
+export component PartitionRebootDialog {
+    in property <bool> show;
+    in property <string> lang: "en";
+    in-out property <int> reboot-choice: 0;
+
+    callback cancel();
+    callback next();
+
+    Rectangle {
+        visible: show;
+        opacity: show ? 1.0 : 0.0;
+        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
+        animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+        z: 100; background: MaterialPalette.overlay-backdrop-heavy; width: 100%; height: 100%;
+
+        Rectangle {
+            x: (parent.width - 440px) / 2;
+            y: (parent.height - 280px) / 2;
+            width: 440px; height: 280px;
+            border-radius: 16px;
+            background: MaterialPalette.surface-container-high;
+            drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
+
+            VerticalLayout { padding: 24px; spacing: 14px;
+                Text {
+                    text: Tr.part-reboot-title;
+                    font-size: 16px; font-weight: 600;
+                    color: MaterialPalette.on-surface; wrap: word-wrap;
+                }
+                VerticalLayout { spacing: 8px;
+                    for item in [
+                        { label: Tr.part-reboot-from-system,   val: 1 },
+                        { label: Tr.part-reboot-from-fastboot, val: 2 },
+                        { label: Tr.part-reboot-skip,          val: 3 },
+                    ]: TouchArea {
+                        height: 48px;
+                        clicked => { root.reboot-choice = item.val; }
+                        Rectangle {
+                            border-radius: 12px; border-width: 2px;
+                            border-color: root.reboot-choice == item.val ? MaterialPalette.primary : MaterialPalette.outline-variant;
+                            background: root.reboot-choice == item.val
+                                ? MaterialPalette.primary-container
+                                : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : MaterialPalette.surface-container);
+                            animate background { duration: 80ms; }
+                            animate border-color { duration: 80ms; }
+                            Text {
+                                text: item.label; font-size: 13px;
+                                color: root.reboot-choice == item.val ? MaterialPalette.on-primary-container : MaterialPalette.on-surface;
+                                horizontal-alignment: center; vertical-alignment: center; wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout { spacing: 8px; alignment: end;
+                    TextButton { text: Tr.cancel; clicked => { root.reboot-choice = 0; root.cancel(); } }
+                    FilledButton {
+                        text: Tr.continue-next;
+                        enabled: root.reboot-choice != 0;
+                        clicked => { root.next(); }
+                    }
+                }
+            }
+        }
+    }
+}

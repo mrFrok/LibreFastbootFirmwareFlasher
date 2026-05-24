@@ -419,10 +419,10 @@ pub fn run_pre_flash_checks(serial: Option<&str>) -> PreFlashCheck {
         let adb_s = list_adb_devices();
         if !adb_s.is_empty() {
             c.device_found = true;
-            c.communication_ok = true;
-            c.cable_ok = true;
-            c.battery_ok = true;
-            c.unlocked = true;
+            c.errors.push(
+                "Device found via ADB, but flashing requires fastboot/fastbootd mode. \
+                 Please reboot to bootloader (Vol Down + Power).".into(),
+            );
             return c;
         }
         c.errors.push(

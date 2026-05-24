@@ -5,6 +5,7 @@ export component NavItem inherits TouchArea {
     in property <string>  label;
     in property <bool>    selected;
     in property <image>   icon;
+    in property <image>   icon-active;
 
     height: 56px;
 
@@ -31,7 +32,7 @@ export component NavItem inherits TouchArea {
             padding-left: 16px; padding-right: 24px; spacing: 12px;
 
             Image {
-                source: icon;
+                source: selected ? root.icon-active : root.icon;
                 width: 22px; height: 22px;
                 y: (parent.height - 22px) / 2;
                 colorize: selected

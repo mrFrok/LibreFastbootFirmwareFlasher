@@ -167,7 +167,7 @@ export component ElevatedButton {
 // ── Text Button ────────────────────────────────────────────────────────────
 export component TextButton {
     in property <string> text;
-    in property <bool> enabled;
+    in property <bool> enabled <=> ta.enabled;
     callback clicked;
     height: 40px;
     Rectangle {
@@ -271,22 +271,12 @@ export component LinearProgressIndicator {
         border-radius: 4px;
         background: MaterialPalette.surface-container-highest;
         width: 100%; height: 100%;
-        // Active track
         Rectangle {
             border-radius: 4px;
             width: parent.width * root.progress;
             height: 100%;
             background: MaterialPalette.primary;
             animate width { duration: 300ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-        }
-        // Expressive accent tip (tertiary glow at the end)
-        if root.progress > 0.02: Rectangle {
-            x: parent.width * root.progress - 12px;
-            width: 12px; height: 100%;
-            border-radius: 4px;
-            background: MaterialPalette.tertiary.with-alpha(0.6);
-            animate x { duration: 300ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-            animate opacity { duration: 150ms; }
         }
     }
 }

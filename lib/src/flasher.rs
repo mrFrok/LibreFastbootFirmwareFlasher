@@ -16,6 +16,21 @@ use std::time::Instant;
 
 use tracing::{info, warn};
 
+/// Case-insensitive prefix check without allocating.
+fn starts_with_ignore_ascii_case(s: &str, prefix: &str) -> bool {
+    s.as_bytes().get(..prefix.len()).map_or(false, |b| {
+        b.eq_ignore_ascii_case(prefix.as_bytes())
+    })
+}
+
+/// Append `-s <serial>` to a fastboot argument list.
+fn push_serial_arg<'a>(args: &mut Vec<&'a str>, serial: Option<&'a str>) {
+    if let Some(s) = serial {
+        args.push("-s");
+        args.push(s);
+    }
+}
+
 use crate::arb::{
     ArbInfo, arb_confirmation_gate, compare_arb_versions, extract_arb_from_xbl, find_xbl_config,
 };
@@ -91,13 +106,35 @@ fn is_critical_partition(name: &str) -> bool {
 }
 
 pub fn is_xbl_abl(name: &str) -> bool {
-    let lower = name.to_lowercase();
-    lower.starts_with("xbl") || lower.starts_with("abl")
+    starts_with_ignore_ascii_case(name, "xbl") || starts_with_ignore_ascii_case(name, "abl")
 }
 
 pub fn is_preloader(name: &str) -> bool {
-    let lower = name.to_lowercase();
-    lower.starts_with("preloader")
+    starts_with_ignore_ascii_case(name, "preloader")
+}
+
+/// Estimate total flash operations from image list for UI display.
+/// Accounts for slot doubling (non-super ×2, super ×1) and bootloader stages.
+pub fn estimate_total_flash_ops(images: &HashMap<String, PathBuf>, as_mediatek: Option<bool>) -> usize {
+    let is_mtk = match as_mediatek {
+        Some(v) => v,
+        None => is_mediatek_build(images),
+    };
+
+    let (super_count, non_super_count, bl_count) = if is_mtk {
+        // Mediatek: everything in fastbootd, no bootloader partitions
+        let super_c = images.keys().filter(|k| is_super_partition(k)).count();
+        let non_super_c = images.keys().filter(|k| !is_super_partition(k)).count();
+        (super_c, non_super_c, 0usize)
+    } else {
+        // Qualcomm: modem goes to bootloader
+        let super_c = images.keys().filter(|k| is_super_partition(k)).count();
+        let fastbootd_c = images.keys().filter(|k| !is_super_partition(k) && !is_bootloader_partition(k)).count();
+        let bl_c = images.keys().filter(|k| is_bootloader_partition(k)).count();
+        (super_c, fastbootd_c, bl_c)
+    };
+
+    non_super_count * 2 + super_count + bl_count * 2
 }
 
 pub fn is_mediatek_build(images: &HashMap<String, PathBuf>) -> bool {
@@ -107,8 +144,8 @@ pub fn is_mediatek_build(images: &HashMap<String, PathBuf>) -> bool {
     }
     // Qualcomm always has xbl or xbl_config; MediaTek doesn't
     let has_xbl = images.keys().any(|k| {
-        let lower = k.to_lowercase();
-        lower == "xbl" || lower == "xbl.img" || lower.contains("xbl_config")
+        k.eq_ignore_ascii_case("xbl") || k.eq_ignore_ascii_case("xbl.img")
+            || k.as_bytes().windows(10).any(|w| w.eq_ignore_ascii_case(b"xbl_config"))
     });
     !has_xbl
 }
@@ -286,12 +323,7 @@ pub fn detect_mode(serial: Option<&str>) -> DeviceMode {
 /// Return current active slot ('a' or 'b'). Defaults to 'a'.
 pub fn get_active_slot(serial: Option<&str>) -> String {
     let mut args: Vec<&str> = Vec::new();
-    let serial_str;
-    if let Some(s) = serial {
-        serial_str = s.to_string();
-        args.push("-s");
-        args.push(&serial_str);
-    }
+    push_serial_arg(&mut args, serial);
     args.extend(&["getvar", "current-slot"]);
 
     let (_, out, err) = fastboot_cmd(&args, 10);
@@ -337,22 +369,19 @@ pub fn wait_for_fastbootd(serial: Option<&str>, timeout: u64) -> bool {
     false
 }
 
-/// Poll until any fastboot device appears.
+/// Poll until the specified fastboot device (or any device if serial is None) appears.
 fn wait_for_fastboot(serial: Option<&str>, timeout: u64) -> bool {
     let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
-    let mut args: Vec<&str> = Vec::new();
-    let serial_str;
-    if let Some(s) = serial {
-        serial_str = s.to_string();
-        args.push("-s");
-        args.push(&serial_str);
-    }
-    args.push("devices");
-
     while Instant::now() < deadline {
-        let (_, out, _) = fastboot_cmd(&args, 10);
+        let (_, out, _) = fastboot_cmd(&["devices"], 10);
         if !out.trim().is_empty() {
-            return true;
+            if let Some(s) = serial {
+                if out.lines().any(|line| line.starts_with(s)) {
+                    return true;
+                }
+            } else {
+                return true;
+            }
         }
         let remaining = (deadline - Instant::now()).as_secs();
         info!("Waiting for bootloader ... ({}s)", remaining);
@@ -365,12 +394,7 @@ fn wait_for_fastboot(serial: Option<&str>, timeout: u64) -> bool {
 pub fn enter_bootloader(serial: Option<&str>) -> bool {
     info!("Rebooting to bootloader ...");
     let mut args: Vec<&str> = Vec::new();
-    let serial_str;
-    if let Some(s) = serial {
-        serial_str = s.to_string();
-        args.push("-s");
-        args.push(&serial_str);
-    }
+    push_serial_arg(&mut args, serial);
     args.extend(&["reboot", "bootloader"]);
 
     let (rc, _, err) = fastboot_cmd(&args, 30);
@@ -399,8 +423,10 @@ pub fn flash_partition(
         args.push("-s".into());
         args.push(s.into());
     }
-    args.push("--slot".into());
-    args.push(slot.into());
+    if !slot.is_empty() {
+        args.push("--slot".into());
+        args.push(slot.into());
+    }
     args.push("flash".into());
     args.push(partition.into());
     args.push(image_path.to_string_lossy().into());
@@ -812,12 +838,7 @@ fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: Devic
                 println!();
                 println!("  Rebooting to {} ...", mode_label);
                 let mut args: Vec<&str> = Vec::new();
-                let serial_str;
-                if let Some(s) = serial {
-                    serial_str = s.to_string();
-                    args.push("-s");
-                    args.push(&serial_str);
-                }
+                push_serial_arg(&mut args, serial);
                 args.extend(reboot_args.iter());
                 let (rc, out, err) = fastboot_cmd(&args, 30);
                 if rc != 0 {
@@ -1007,12 +1028,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             "1" => {
                 println!();
                 let mut args: Vec<&str> = vec!["adb"];
-                let serial_str2;
-                if let Some(s) = serial_ref {
-                    serial_str2 = s.to_string();
-                    args.push("-s");
-                    args.push(&serial_str2);
-                }
+                push_serial_arg(&mut args, serial_ref);
                 args.extend(&["reboot", "fastboot"]);
                 let r = run_cmd(&args, 15);
                 if r.code != 0 {
@@ -1029,12 +1045,7 @@ pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run:
             "2" => {
                 println!();
                 let mut args: Vec<&str> = Vec::new();
-                let serial_str2;
-                if let Some(s) = serial_ref {
-                    serial_str2 = s.to_string();
-                    args.push("-s");
-                    args.push(&serial_str2);
-                }
+                push_serial_arg(&mut args, serial_ref);
                 args.extend(&["reboot", "fastboot"]);
                 let (rc, _, err) = fastboot_cmd(&args, 30);
                 if rc != 0 {
@@ -1379,12 +1390,7 @@ pub fn print_summary(session: &FlashSession) {
         // Reboot
         println!("\n  Rebooting to system ...");
         let mut args: Vec<&str> = Vec::new();
-        let serial_str;
-        if let Some(ref s) = session.serial {
-            serial_str = s.clone();
-            args.push("-s");
-            args.push(&serial_str);
-        }
+        push_serial_arg(&mut args, session.serial.as_deref());
         args.push("reboot");
         fastboot_cmd(&args, 30);
     } else if !session.critical_failed().is_empty() {
@@ -1424,12 +1430,7 @@ fn offer_wipe(session: &FlashSession) {
 
     println!("  Wiping userdata ...");
     let mut args: Vec<&str> = Vec::new();
-    let serial_str;
-    if let Some(ref s) = session.serial {
-        serial_str = s.clone();
-        args.push("-s");
-        args.push(&serial_str);
-    }
+    push_serial_arg(&mut args, session.serial.as_deref());
     args.push("-w");
     let (rc, out, err) = fastboot_cmd(&args, 120);
     if rc == 0 {
@@ -1712,7 +1713,6 @@ pub fn run_flash_session_with_log(
 
         let mut sorted_bl: Vec<_> = bootloader_images.iter().collect();
         sorted_bl.sort_by_key(|(k, _)| *k);
-
         for &slot in SLOTS {
             for (partition, image_path) in &sorted_bl {
                 if cancel.load(std::sync::atomic::Ordering::Relaxed) {
