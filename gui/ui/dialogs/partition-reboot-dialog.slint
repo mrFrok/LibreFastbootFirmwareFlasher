@@ -15,7 +15,7 @@ export component PartitionRebootDialog {
         opacity: show ? 1.0 : 0.0;
         animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
         animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 100; background: MaterialPalette.overlay-backdrop-heavy; width: 100%; height: 100%;
+        z: 100; background: transparent; width: 100%; height: 100%; TouchArea { }
 
         Rectangle {
             x: (parent.width - 440px) / 2;

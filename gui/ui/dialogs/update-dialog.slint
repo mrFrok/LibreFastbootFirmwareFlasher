@@ -17,8 +17,8 @@ export component UpdateDialog {
         opacity: show ? 1.0 : 0.0;
         animate opacity { duration: 200ms; easing: ease-in-out; }
         width: 100%; height: 100%;
-        background: MaterialPalette.overlay-backdrop-heavy;
-        TouchArea { clicked => { } }
+        background: transparent;
+        TouchArea { }
 
         VerticalLayout { alignment: center;
             Rectangle {
