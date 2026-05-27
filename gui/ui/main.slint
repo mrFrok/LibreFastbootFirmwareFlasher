@@ -26,7 +26,6 @@ import { FlashFailureDialog } from "dialogs/flash-failure-dialog.slint";
 import { ArbWarningDialog } from "dialogs/arb-warning-dialog.slint";
 import { ArbDeviceWarningDialog } from "dialogs/arb-device-warning-dialog.slint";
 import { PreloaderWarningDialog } from "dialogs/preloader-warning-dialog.slint";
-import { FlashErrorDialog } from "dialogs/flash-error-dialog.slint";
 import { UpdateDialog } from "dialogs/update-dialog.slint";
 
 export component MainWindow inherits Window {
@@ -34,8 +33,8 @@ export component MainWindow inherits Window {
     icon: @image-url("icons/logo_icon.svg");
     preferred-width: 1000px;
     preferred-height: 660px;
-    min-width: 760px;
-    min-height: 520px;
+    min-width: 700px;
+    min-height: 500px;
 
     // Pages: 0=Home 1=Device 2=Download 3=Flash 4=Partition 5=History 6=About
     in-out property <int>  page: 0;
@@ -128,7 +127,7 @@ export component MainWindow inherits Window {
     in-out property <bool>    show-skip-partitions: false;
     in-out property <bool>    show-confirm: false;
     in-out property <int>     confirm-action: 0;
-    // confirm-action: 3=reboot-choice 4=flash-all-final 5=part-reboot 6=part-final 7=success 8=source-final 9=cable-test 10=flash-failure
+    // confirm-action: 3=reboot-choice 4=flash-all-final 5=part-reboot 6=part-final 7=success 8=source-final 9=cable-test 10=flash-failure 11=session-error
     in-out property <int>     reboot-choice: 0;
     in-out property <bool>    show-arb-warning: false;
     in-out property <int>     arb-warning-version: 0;
@@ -141,9 +140,6 @@ export component MainWindow inherits Window {
     in-out property <int>     arb-device-version: 0;
     in-out property <bool>    arb-device-is-source: false;
     in-out property <bool>    pending-source-flash: false;
-    in-out property <bool>    show-flash-error: false;
-    in-out property <string>  flash-error-message: "";
-    in-out property <bool>    flash-error-is-source: false;
     in-out property <string>  app-version: "dev";
     in-out property <bool>    show-update-dialog: false;
     in-out property <string>  update-version: "";
@@ -189,6 +185,7 @@ export component MainWindow inherits Window {
     callback post-flash-wipe();
     callback flash-fail-skip();
     callback flash-fail-abort();
+    callback flash-fail-retry();
     callback export-flash-log();
     callback export-partition-log();
     callback export-device-log();
@@ -417,13 +414,16 @@ export component MainWindow inherits Window {
     }
 
     FlashFailureDialog {
-        show: root.show-confirm && root.confirm-action == 10;
+        show: root.show-confirm && (root.confirm-action == 10 || root.confirm-action == 11);
         lang: root.lang;
+        is-session-error: root.confirm-action == 11;
         flash-fail-partition: root.flash-fail-partition;
         flash-fail-slot: root.flash-fail-slot;
         flash-fail-error: root.flash-fail-error;
+        retry => { root.show-confirm = false; root.flash-fail-retry(); }
         abort => { root.show-confirm = false; root.flash-fail-abort(); }
         skip => { root.show-confirm = false; root.flash-fail-skip(); }
+        close => { root.show-confirm = false; }
     }
 
     ArbWarningDialog {
@@ -451,15 +451,6 @@ export component MainWindow inherits Window {
         skip-preloader <=> root.skip-preloader;
         cancel => { root.show-preloader-warning = false; }
         confirm => { root.show-preloader-warning = false; root.confirm-preloader-flash(); }
-    }
-
-    FlashErrorDialog {
-        show: root.show-flash-error;
-        flash-error-message: root.flash-error-message;
-        retry => { root.show-flash-error = false; root.retry-flash(); }
-        skip => { root.show-flash-error = false; }
-        reboot => { root.show-flash-error = false; root.reboot-device(); }
-        cancel => { root.show-flash-error = false; }
     }
 
     UpdateDialog {

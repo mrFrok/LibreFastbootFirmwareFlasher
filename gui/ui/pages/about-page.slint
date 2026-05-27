@@ -39,8 +39,9 @@ export component AboutPage {
         HorizontalDivider { }
         Rectangle { height: 20px; }
 
-        HorizontalLayout { alignment: center;
-            VerticalLayout { spacing: 10px; width: 520px;
+        HorizontalLayout {
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout { spacing: 10px; min-width: 320px; max-width: 520px; horizontal-stretch: 1;
                 AboutLink {
                     icon: @image-url("../icons/github.svg");
                     label: "GitHub — LibreFastbootFirmwareFlasher";
@@ -66,6 +67,7 @@ export component AboutPage {
                     open(u) => { root.open-url(u); }
                 }
             }
+            Rectangle { horizontal-stretch: 1; }
         }
 
         Rectangle { height: 16px; }

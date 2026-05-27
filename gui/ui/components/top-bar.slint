@@ -10,11 +10,11 @@ export component TopBar inherits Rectangle {
     callback set-lang(string);
     callback toggle-theme();
 
-    height: 44px;
+    height: 48px;
     background: MaterialPalette.surface-container;
 
     Rectangle {
-        y: 43px; height: 1px; width: 100%;
+        y: parent.height - 1px; height: 1px; width: 100%;
         background: MaterialPalette.outline-variant;
     }
 
@@ -23,10 +23,10 @@ export component TopBar inherits Rectangle {
         alignment: end; spacing: 6px;
 
         // Scale control
-        HorizontalLayout { spacing: 2px; y: (parent.height - 26px) / 2; height: 26px;
+        HorizontalLayout { spacing: 2px; y: (parent.height - 30px) / 2; height: 30px;
             for item in [{ label: "S", val: 0.85 }, { label: "M", val: 1.0 }, { label: "L", val: 1.25 }, { label: "XL", val: 1.5 }]:
             TouchArea {
-                width: 26px; height: 26px;
+                width: 30px; height: 30px;
                 clicked => { root.set-scale(item.val); }
                 Rectangle {
                     border-radius: 5px;
@@ -35,7 +35,7 @@ export component TopBar inherits Rectangle {
                         : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent);
                     animate background { duration: 80ms; }
                     Text {
-                        text: item.label; font-size: 10px; font-weight: 600;
+                        text: item.label; font-size: 11px; font-weight: 600;
                         color: root.ui-scale == item.val ? MaterialPalette.on-primary : MaterialPalette.on-surface-variant;
                         horizontal-alignment: center; vertical-alignment: center;
                     }
@@ -43,28 +43,28 @@ export component TopBar inherits Rectangle {
             }
         }
 
-        Rectangle { width: 1px; height: 18px; background: MaterialPalette.outline-variant; y: 13px; }
+        Rectangle { width: 1px; height: 22px; background: MaterialPalette.outline-variant; y: 13px; }
 
         // Language switcher
         Rectangle {
-            width: 82px; height: 28px;
-            y: (parent.height - 28px) / 2;
+            width: 90px; height: 32px;
+            y: (parent.height - 32px) / 2;
             border-radius: 8px;
             background: MaterialPalette.surface-container-high;
             border-width: 1px;
             border-color: MaterialPalette.outline-variant;
 
             Rectangle {
-                x: root.lang == "en" ? 2px : 42px;
+                x: root.lang == "en" ? 2px : 46px;
                 y: 2px;
-                width: 38px; height: 24px;
+                width: 42px; height: 28px;
                 border-radius: 5px;
                 background: MaterialPalette.primary;
                 animate x { duration: 180ms; easing: ease-in-out; }
             }
 
             TouchArea {
-                x: 0; y: 0; width: 42px; height: 28px;
+                x: 0; y: 0; width: 46px; height: 32px;
                 clicked => { root.set-lang("en"); }
                 Text {
                     text: "EN";
@@ -79,7 +79,7 @@ export component TopBar inherits Rectangle {
             }
 
             TouchArea {
-                x: 42px; y: 0; width: 40px; height: 28px;
+                x: 46px; y: 0; width: 44px; height: 32px;
                 clicked => { root.set-lang("ru"); }
                 Text {
                     text: "RU";
@@ -94,12 +94,12 @@ export component TopBar inherits Rectangle {
             }
         }
 
-        Rectangle { width: 1px; height: 20px; background: MaterialPalette.outline-variant; y: 12px; }
+        Rectangle { width: 1px; height: 22px; background: MaterialPalette.outline-variant; y: 13px; }
 
         // Theme toggle
         TouchArea {
-            width: 36px; height: 28px;
-            y: (parent.height - 28px) / 2;
+            width: 40px; height: 32px;
+            y: (parent.height - 32px) / 2;
             clicked => { root.toggle-theme(); }
             Rectangle {
                 border-radius: 8px;

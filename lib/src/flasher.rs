@@ -418,6 +418,26 @@ pub fn flash_partition(
     slot: &str,
     serial: Option<&str>,
 ) -> FlashResult {
+    flash_partition_inner(image_path, partition, slot, serial, None)
+}
+
+pub fn flash_partition_cancellable(
+    image_path: &Path,
+    partition: &str,
+    slot: &str,
+    serial: Option<&str>,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> FlashResult {
+    flash_partition_inner(image_path, partition, slot, serial, Some(cancel))
+}
+
+fn flash_partition_inner(
+    image_path: &Path,
+    partition: &str,
+    slot: &str,
+    serial: Option<&str>,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> FlashResult {
     let mut args: Vec<String> = Vec::new();
     if let Some(s) = serial {
         args.push("-s".into());
@@ -432,9 +452,26 @@ pub fn flash_partition(
     args.push(image_path.to_string_lossy().into());
 
     let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let mut cmd: Vec<&str> = vec!["fastboot"];
+    cmd.extend(&refs);
     let start = Instant::now();
-    let (rc, out, err) = fastboot_cmd(&refs, 300);
+    let result = match cancel {
+        Some(c) => crate::utils::run_cmd_with_cancel(&cmd, 300, c),
+        None => crate::utils::run_cmd(&cmd, 300),
+    };
     let duration = start.elapsed().as_secs_f64();
+
+    let (rc, out, err) = (result.code, result.stdout, result.stderr);
+
+    if rc == -125 {
+        return FlashResult {
+            partition: partition.into(),
+            slot: slot.into(),
+            success: false,
+            error: "Cancelled by user".into(),
+            duration_s: duration,
+        };
+    }
 
     if rc == 0 {
         FlashResult {
@@ -1464,6 +1501,8 @@ pub struct FlashProgress {
 /// Action to take when a partition flash fails.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FailureAction {
+    /// Retry flashing this partition.
+    Retry,
     /// Skip this partition and continue flashing.
     Skip,
     /// Abort the entire flash session.
@@ -1477,9 +1516,13 @@ fn flash_partition_with_log(
     slot: &str,
     serial: Option<&str>,
     on_log: &dyn Fn(String),
+    cancel: Option<&std::sync::atomic::AtomicBool>,
 ) -> FlashResult {
     on_log(format!("Flashing {}_{} ...", partition, slot));
-    let result = flash_partition(image_path, partition, slot, serial);
+    let result = match cancel {
+        Some(c) => flash_partition_cancellable(image_path, partition, slot, serial, c),
+        None => flash_partition(image_path, partition, slot, serial),
+    };
     if result.success {
         on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
     } else {
@@ -1613,11 +1656,26 @@ pub fn run_flash_session_with_log(
                     total: total_ops,
                 });
                 done_ops += 1;
-                let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log);
+                let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log, Some(&cancel));
+                if result.error == "Cancelled by user" {
+                    session.results.push(result);
+                    on_log("Flash cancelled by user".into());
+                    session.aborted = true;
+                    session.end_reason = Some("Cancelled".into());
+                    return session;
+                }
                 if !result.success {
                     let err = result.error.clone();
                     session.results.push(result);
                     match on_failure(partition, slot, &err) {
+                        FailureAction::Retry => {
+                            on_log(format!("Retrying {}_{} …", partition, slot));
+                            let retry = flash_partition_with_log(image_path, partition, slot, serial, &on_log, Some(&cancel));
+                            session.results.push(retry.clone());
+                            if !retry.success {
+                                on_log(format!("Retry of {}_{} also failed", partition, slot));
+                            }
+                        }
                         FailureAction::Skip => {
                             on_log(format!("Skipping {}_{} — continuing", partition, slot));
                             continue;
@@ -1661,11 +1719,26 @@ pub fn run_flash_session_with_log(
                     total: total_ops,
                 });
                 done_ops += 1;
-                let result = flash_partition_with_log(image_path, partition, &active_slot, serial, &on_log);
+                let result = flash_partition_with_log(image_path, partition, &active_slot, serial, &on_log, Some(&cancel));
+                if result.error == "Cancelled by user" {
+                    session.results.push(result);
+                    on_log("Flash cancelled by user".into());
+                    session.aborted = true;
+                    session.end_reason = Some("Cancelled".into());
+                    return session;
+                }
                 if !result.success {
                     let err = result.error.clone();
                     session.results.push(result);
                     match on_failure(partition, &active_slot, &err) {
+                        FailureAction::Retry => {
+                            on_log(format!("Retrying {}_{} …", partition, &active_slot));
+                            let retry = flash_partition_with_log(image_path, partition, &active_slot, serial, &on_log, Some(&cancel));
+                            session.results.push(retry.clone());
+                            if !retry.success {
+                                on_log(format!("Retry of {}_{} also failed", partition, &active_slot));
+                            }
+                        }
                         FailureAction::Skip => {
                             on_log(format!("Skipping {}_{} — continuing", partition, &active_slot));
                             continue;
@@ -1728,11 +1801,26 @@ pub fn run_flash_session_with_log(
                     total: total_ops2,
                 });
                 done_ops2 += 1;
-                let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log);
+                let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log, Some(&cancel));
+                if result.error == "Cancelled by user" {
+                    session.results.push(result);
+                    on_log("Flash cancelled by user".into());
+                    session.aborted = true;
+                    session.end_reason = Some("Cancelled".into());
+                    return session;
+                }
                 if !result.success {
                     let err = result.error.clone();
                     session.results.push(result);
                     match on_failure(partition, slot, &err) {
+                        FailureAction::Retry => {
+                            on_log(format!("Retrying {}_{} …", partition, slot));
+                            let retry = flash_partition_with_log(image_path, partition, slot, serial, &on_log, Some(&cancel));
+                            session.results.push(retry.clone());
+                            if !retry.success {
+                                on_log(format!("Retry of {}_{} also failed", partition, slot));
+                            }
+                        }
                         FailureAction::Skip => {
                             on_log(format!("Skipping {}_{} — continuing", partition, slot));
                             continue;

@@ -98,9 +98,12 @@ pub fn poll(
                     ui.set_confirm_action(7);
                     ui.set_show_confirm(true);
                 } else if !is_cancel {
-                    ui.set_flash_error_message(message.into());
+                    ui.set_flash_fail_partition("".into());
+                    ui.set_flash_fail_slot("".into());
+                    ui.set_flash_fail_error(message.into());
                     ui.set_flash_failed_partitions(failed_partitions.join(",").into());
-                    ui.set_show_flash_error(true);
+                    ui.set_confirm_action(11);
+                    ui.set_show_confirm(true);
                 }
             }
             WMsg::FlashFailure { partition, slot, error, response } => {
@@ -274,10 +277,7 @@ pub fn register_callbacks(
     let w = ui.as_weak();
     ui.on_start_flash(move || {
         if let Some(ui) = w.upgrade() {
-            ui.set_show_flash_error(false);
-            ui.set_flash_error_message("".into());
             ui.set_pending_source_flash(false);
-            ui.set_flash_error_is_source(false);
             ui.set_is_flashing(true);
             ui.set_flash_progress(0.0);
             ui.set_flash_status("Starting...".into());
@@ -317,7 +317,6 @@ pub fn register_callbacks(
                 return;
             }
             ui.set_pending_source_flash(false);
-            ui.set_flash_error_is_source(true);
             ui.set_is_flashing(true);
             ui.set_flash_progress(0.0);
             ui.set_flash_status("Starting flash from source...".into());
@@ -339,8 +338,7 @@ pub fn register_callbacks(
                 add_log_m(&fl, &ui, &LogLevel::Error, "No failed partitions to retry");
                 return;
             }
-            ui.set_show_flash_error(false);
-            ui.set_flash_error_message("".into());
+            ui.set_show_confirm(false);
             ui.set_is_flashing(true);
             ui.set_flash_progress(0.0);
             ui.set_flash_status(format!("Retrying {} partition(s)...", failed.len()).into());
@@ -479,6 +477,11 @@ pub fn register_callbacks(
     let fr = fail_resp.clone();
     ui.on_flash_fail_abort(move || {
         if let Some(tx) = fr.borrow_mut().take() { tx.send(lfff_lib::flasher::FailureAction::Abort).ok(); }
+    });
+
+    let fr = fail_resp.clone();
+    ui.on_flash_fail_retry(move || {
+        if let Some(tx) = fr.borrow_mut().take() { tx.send(lfff_lib::flasher::FailureAction::Retry).ok(); }
     });
 
     let t = ctx.clone();

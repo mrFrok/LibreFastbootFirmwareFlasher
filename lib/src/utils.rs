@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -146,6 +147,96 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
 pub fn run_cmd_owned(cmd: &[String], timeout_secs: u64) -> CmdResult {
     let refs: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
     run_cmd(&refs, timeout_secs)
+}
+
+/// Like [`run_cmd`] but monitors a cancel flag.  When the flag becomes true
+/// the child process is killed immediately and a "cancelled" result is returned.
+pub fn run_cmd_with_cancel(cmd: &[&str], timeout_secs: u64, cancel: &AtomicBool) -> CmdResult {
+    if cmd.is_empty() {
+        return CmdResult { code: -1, stdout: String::new(), stderr: "Empty command".into() };
+    }
+
+    let mut child = match Command::new(cmd[0])
+        .args(&cmd[1..])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return CmdResult {
+                code: -1,
+                stdout: String::new(),
+                stderr: if e.kind() == std::io::ErrorKind::NotFound {
+                    format!("Binary not found: {}", cmd[0])
+                } else {
+                    format!("Failed to execute {}: {}", cmd[0], e)
+                },
+            };
+        }
+    };
+
+    let stdout_handle = child.stdout.take().map(|mut out| {
+        std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = out.read_to_string(&mut buf);
+            buf
+        })
+    });
+    let stderr_handle = child.stderr.take().map(|mut err| {
+        std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = err.read_to_string(&mut buf);
+            buf
+        })
+    });
+
+    let poll = Duration::from_millis(500);
+    let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
+    loop {
+        match wait_timeout::ChildExt::wait_timeout(&mut child, poll) {
+            Ok(Some(status)) => {
+                let stdout = stdout_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
+                let stderr = stderr_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
+                return CmdResult {
+                    code: status.code().unwrap_or(-1),
+                    stdout: stdout.trim().to_string(),
+                    stderr: stderr.trim().to_string(),
+                };
+            }
+            Ok(None) => {
+                if cancel.load(Ordering::Relaxed) {
+                    warn!("Cancel requested — killing '{}'", cmd[0]);
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return CmdResult {
+                        code: -125,
+                        stdout: String::new(),
+                        stderr: format!("Cancelled: {}", cmd[0]),
+                    };
+                }
+                if std::time::Instant::now() >= deadline {
+                    warn!("Command '{}' exceeded timeout of {}s, killing process", cmd[0], timeout_secs);
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return CmdResult {
+                        code: -124,
+                        stdout: String::new(),
+                        stderr: format!("Command '{}' exceeded timeout of {}s", cmd[0], timeout_secs),
+                    };
+                }
+            }
+            Err(e) => {
+                warn!("Error waiting for command {}: {}", cmd[0], e);
+                let _ = child.kill();
+                return CmdResult {
+                    code: -1,
+                    stdout: String::new(),
+                    stderr: format!("Error waiting for command: {}", e),
+                };
+            }
+        }
+    }
 }
 
 /// Thin wrapper for fastboot invocations.

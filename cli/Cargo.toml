@@ -1,6 +1,6 @@
 [package]
 name = "lfff-cli"
-version = "2.2.0"
+version = "2.3.0"
 edition = "2024"
 description = "CLI frontend for LibreFastbootFirmwareFlasher"
 license = "GPL-3.0"
