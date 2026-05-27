@@ -42,7 +42,7 @@
 
         commonRustArgs = {
           pname = "lfff";
-          version = "2.1.0";
+          version = "2.3.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           nativeBuildInputs = with pkgs; [ pkg-config cmake makeWrapper installShellFiles python3 gn ninja ];
@@ -54,16 +54,16 @@
         # Binary package — downloads prebuilt release from GitHub
         lfff-bin = pkgs.stdenv.mkDerivation rec {
           pname = "lfff-bin";
-          version = "2.1.0";
+          version = "2.3.0";
 
           arch = if system == "aarch64-linux" then "aarch64" else "x86_64";
 
           src = pkgs.fetchurl {
             url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
             sha256 = if arch == "aarch64" then
-              "a1c8f415e938d0559e97f50d6b439ac7b23ffc2595ebf76edfd78b518f3d80d3"
+              "sha256-6K6K12Gdip2F_IAeieTAM8h45_djKK1BQO94Z3aUmYA="
             else
-              "88d5ff97bba7157cdfc7395429d3696cd81e34acc972410ce5a8fe5e2c874a85";
+              "sha256-wIPdT5UJ4RqjOexk17HiKtf-76klkRWE-u51tFFkIEw=";
           };
 
           nativeBuildInputs = with pkgs; [ makeWrapper ];
