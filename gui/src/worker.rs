@@ -111,6 +111,7 @@ fn do_flash(
     tx: &mpsc::Sender<WMsg>,
     source: &lfff_lib::flasher::FirmwareSource,
     serial: &Option<String>,
+    device_product: &str,
     skip_xbl_abl: bool,
     skip_preloader: bool,
     as_mediatek: Option<bool>,
@@ -166,12 +167,23 @@ fn do_flash(
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".into());
+    let resolved_device_product = if !device_product.is_empty() {
+        device_product.to_string()
+    } else if let Some(ser) = serial.as_deref() {
+        lfff_lib::device::get_device_info(Some(ser))
+            .map(|i| i.product)
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| "unknown".to_string())
+    } else {
+        "unknown".to_string()
+    };
+
     let entry = lfff_lib::flash_history::FlashHistoryEntry {
         timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         firmware_name: fw_name,
         firmware_path: source.path().display().to_string(),
         device_serial: serial.as_deref().unwrap_or("unknown").to_string(),
-        device_product: "unknown".to_string(),
+        device_product: resolved_device_product,
         total_partitions: session.results.len(),
         succeeded: session.succeeded().len(),
         failed,
@@ -219,6 +231,7 @@ pub fn worker(
     #[allow(unused_assignments)]
     let mut skip_preloader: bool = false;
     let mut as_mediatek: Option<bool> = None;
+    let mut current_device_product = String::new();
     let mut current_source: Option<lfff_lib::flasher::FirmwareSource> = None;
     let dl_cancel_token: std::sync::Arc<std::sync::Mutex<Option<lfff_lib::downloader::CancelToken>>> =
         std::sync::Arc::new(std::sync::Mutex::new(None));
@@ -260,6 +273,7 @@ pub fn worker(
                             .unwrap_or(-1);
 
                         let name = if !model.is_empty() { model.clone() } else { product.clone() };
+                        current_device_product = if !product.is_empty() { product.clone() } else { name.clone() };
                         let slot_clean = slot.trim_start_matches('_').to_string();
 
                         tx.send(WMsg::DeviceDetected {
@@ -281,6 +295,7 @@ pub fn worker(
                         log(&tx, LogLevel::Error, 0, "No device found via ADB or fastboot");
                         tx.send(WMsg::DeviceDisconnected).ok();
                         serial = None;
+                        current_device_product.clear();
                         continue;
                     }
                     let ser = &s[0];
@@ -288,6 +303,7 @@ pub fn worker(
                     match lfff_lib::device::get_device_info(Some(ser)) {
                         Some(i) => {
                             let name = if i.product.is_empty() { ser.clone() } else { i.product.clone() };
+                            current_device_product = name.clone();
                             let slot = if i.current_slot.is_empty() { "\u{2014}".into() } else { i.current_slot.clone() };
                             tx.send(WMsg::DeviceDetected { name: name.clone(), serial: ser.clone(), slot, is_fastboot_mode: true }).ok();
                             let mut d = format!("Fastboot device: {}", name);
@@ -394,7 +410,7 @@ pub fn worker(
                     }
 
                     do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()),
-                        &serial, skip_xbl_abl, skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
+                        &serial, &current_device_product, skip_xbl_abl, skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
                     current_source = Some(lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()));
                 }
 
@@ -413,7 +429,7 @@ pub fn worker(
 
                     log(&tx, LogLevel::Info, 2, "ARB warning confirmed by user, proceeding...");
                     let src = lfff_lib::flasher::FirmwareSource::Extracted(dir.clone());
-                    do_flash(&tx, &src, &serial, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
+                    do_flash(&tx, &src, &serial, &current_device_product, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
                     current_source = Some(src);
                 }
 
@@ -424,7 +440,7 @@ pub fn worker(
                     if is_source {
                         log(&tx, LogLevel::Info, 2, "Device ARB warning confirmed by user, flashing from source...");
                         let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&path));
-                        do_flash(&tx, &d, &serial, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
+                        do_flash(&tx, &d, &serial, &current_device_product, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
                         current_source = Some(d);
                     } else {
                         log(&tx, LogLevel::Info, 2, "Device ARB warning confirmed by user, proceeding...");
@@ -437,7 +453,7 @@ pub fn worker(
                             Path::new(&path).to_path_buf()
                         };
                         let src = lfff_lib::flasher::FirmwareSource::Extracted(dir);
-                        do_flash(&tx, &src, &serial, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
+                        do_flash(&tx, &src, &serial, &current_device_product, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
                         current_source = Some(src);
                     }
                 }
@@ -449,7 +465,7 @@ pub fn worker(
 
                     if is_source {
                         let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&path));
-                        do_flash(&tx, &d, &serial, true, cmd_skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
+                        do_flash(&tx, &d, &serial, &current_device_product, true, cmd_skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
                         current_source = Some(d);
                     } else {
                         let dir = if path.ends_with(".zip") {
@@ -461,7 +477,7 @@ pub fn worker(
                             Path::new(&path).to_path_buf()
                         };
                         let src = lfff_lib::flasher::FirmwareSource::Extracted(dir);
-                        do_flash(&tx, &src, &serial, true, cmd_skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
+                        do_flash(&tx, &src, &serial, &current_device_product, true, cmd_skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
                         current_source = Some(src);
                     }
                 }
@@ -508,7 +524,7 @@ pub fn worker(
                         log(&tx, LogLevel::Info, 2, "Platform detection inconclusive — proceeding with default logic");
                     }
 
-                    do_flash(&tx, &d, &serial, skip_xbl_abl, skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
+                    do_flash(&tx, &d, &serial, &current_device_product, skip_xbl_abl, skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
                 }
 
         Cmd::FlashSingle { path, partition, reboot_choice } => {
@@ -665,7 +681,7 @@ pub fn worker(
                             Ok(o) if o.status.success() => {
                                 // Device is in fastboot mode, proceed with slot switch
                                 log(&tx, LogLevel::Info, 0, format!("Setting active slot to {}...", slot.to_uppercase()));
-                                let args = vec!["fastboot", "-s", ser, "set_active", &slot];
+                                let args = vec!["-s", ser, "set_active", &slot];
                                 let out = std::process::Command::new("fastboot").args(&args)
                                     .output();
                                 match out {
@@ -775,17 +791,22 @@ pub fn worker(
                             tx.send(WMsg::Progress { fraction: done as f32 / total as f32, partition: lbl.clone() }).ok();
 
                             let fw_dir = source.path();
-                            let mut img_path = None;
-                            for entry in std::fs::read_dir(fw_dir).into_iter().flatten().flatten() {
-                                let p = entry.path();
-                                if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
-                                    let lower = name.to_lowercase();
-                                    if lower.starts_with(&partition.to_lowercase()) && lower.ends_with(".img") {
-                                        img_path = Some(p);
-                                        break;
-                                    }
-                                }
-                            }
+                            let images = if source.is_source() {
+                                lfff_lib::flasher::collect_images_from_source(fw_dir)
+                            } else {
+                                lfff_lib::flasher::collect_images(fw_dir)
+                            };
+
+                            let part_lc = partition.to_lowercase();
+                            let img_path = images
+                                .get(&part_lc)
+                                .cloned()
+                                .or_else(|| {
+                                    images
+                                        .iter()
+                                        .find(|(name, _)| name.to_lowercase().starts_with(&part_lc))
+                                        .map(|(_, path)| path.clone())
+                                });
 
                             if let Some(img) = img_path {
                                 log(&tx, LogLevel::Info, 2, format!("Retrying {} from {}...", lbl, img.display()));
@@ -987,6 +1008,7 @@ pub fn worker(
 
                     if let Some(ref ser) = serial
                         && let Some(info) = lfff_lib::device::get_device_info(Some(ser)) {
+                            current_device_product = info.product.clone();
                             tx.send(WMsg::DeviceDetected {
                                 name: info.product.clone(), serial: ser.clone(),
                                 slot: info.current_slot.clone(),

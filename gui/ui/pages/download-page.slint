@@ -41,7 +41,7 @@ export component DownloadPage {
         HorizontalLayout { spacing: 8px; height: 44px;
             PathField { path: root.output-dir; horizontal-stretch: 1; }
             OutlinedButton {
-                width: 90px;
+                min-width: 90px;
                 text: Tr.browse;
                 clicked => { root.browse-output-dir(); }
             }
@@ -85,20 +85,20 @@ export component DownloadPage {
             }
 
             OutlinedButton {
-                width: 90px;
+                min-width: 90px;
                 text: Tr.paste;
                 clicked => { root.paste-clipboard(); }
             }
 
             if !root.is-downloading: FilledButton {
-                width: 110px;
+                min-width: 110px;
                 enabled: root.download-url != "";
                 text: Tr.dl-btn;
                 clicked => { root.download-firmware(root.download-url); }
             }
 
             if root.is-downloading: OutlinedButton {
-                width: 110px;
+                min-width: 110px;
                 text: Tr.cancel;
                 clicked => { root.cancel-download(); }
             }
@@ -123,13 +123,13 @@ export component DownloadPage {
             PathField { path: root.firmware-path; horizontal-stretch: 1; }
 
             OutlinedButton {
-                width: 110px;
+                min-width: 110px;
                 text: Tr.select-zip;
                 clicked => { root.browse-firmware(); }
             }
 
             FilledButton {
-                width: 100px;
+                min-width: 100px;
                 enabled: root.firmware-path != "";
                 text: Tr.extract;
                 clicked => { root.extract-firmware(); }

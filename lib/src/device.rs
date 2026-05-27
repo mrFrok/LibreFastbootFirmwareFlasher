@@ -90,7 +90,11 @@ impl PreFlashCheck {
     }
     /// True only when all hard requirements pass.
     pub fn ready(&self) -> bool {
-        self.device_found && self.communication_ok && self.cable_ok && self.unlocked
+        self.device_found
+            && self.communication_ok
+            && self.cable_ok
+            && self.battery_ok
+            && self.unlocked
     }
 }
 
@@ -547,8 +551,12 @@ mod tests {
         c.device_found = true;
         c.communication_ok = true;
         c.cable_ok = true;
+        c.battery_ok = true;
         c.unlocked = true;
         assert!(c.ready());
+        c.battery_ok = false;
+        assert!(!c.ready());
+        c.battery_ok = true;
         c.unlocked = false;
         assert!(!c.ready());
     }

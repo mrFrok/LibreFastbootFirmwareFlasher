@@ -112,11 +112,14 @@ pub fn run(
 
     print_summary(&session);
 
-    if session.critical_failed().is_empty() {
+    if !session.aborted && session.failed().is_empty() {
         println!("\n{}", "✓ Flash completed successfully".green().bold());
         0
+    } else if session.aborted {
+        eprintln!("\n{}", "✗ Flash aborted by user".red().bold());
+        1
     } else {
-        eprintln!("\n{}", "✗ Flash failed — see critical errors above".red().bold());
+        eprintln!("\n{}", "✗ Flash completed with errors — see failed partitions above".red().bold());
         1
     }
 }
