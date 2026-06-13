@@ -109,7 +109,7 @@ export component DownloadPage {
                 Text { text: Math.round(root.dl-percent) + "%"; font-size: 15px; font-weight: 700; color: MaterialPalette.primary; }
                 Text { text: root.dl-downloaded + " / " + root.dl-total; font-size: 14px; color: MaterialPalette.on-surface-variant; }
                 Rectangle { horizontal-stretch: 1; }
-                Text { text: "↓ " + root.dl-speed; font-size: 14px; font-weight: 500; color: #4caf50; }
+                Text { text: "↓ " + root.dl-speed; font-size: 14px; font-weight: 500; color: MaterialPalette.success; }
                 Text { text: "ETA " + root.dl-eta; font-size: 14px; color: MaterialPalette.on-surface-variant; }
             }
             LinearProgressIndicator { progress: root.dl-percent / 100; }

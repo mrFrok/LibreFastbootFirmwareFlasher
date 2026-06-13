@@ -3,15 +3,17 @@ import { MaterialPalette } from "../globals/material-palette.slint";
 import { Typography } from "../globals/typography.slint";
 
 // ── Nav Card (Home page quick links) ───────────────────────────────────────
+// Expressive: large 28px radius, springy hover lift, squircle morph on press.
 export component NavCard inherits TouchArea {
     in property <string> label;
     in property <image> icon;
     callback card-clicked();
-    height: 90px;
+    height: 92px;
 
     Rectangle {
         width: 100%; height: 100%;
-        border-radius: 20px;
+        y: root.pressed ? 2px : (root.has-hover ? -2px : 0px);
+        border-radius: root.pressed ? 18px : 28px;
         border-width: 1px;
         border-color: root.has-hover
             ? MaterialPalette.primary
@@ -19,21 +21,23 @@ export component NavCard inherits TouchArea {
         background: root.has-hover
             ? MaterialPalette.primary-container
             : MaterialPalette.surface-container;
-        drop-shadow-blur: root.has-hover ? 8px : 2px;
+        drop-shadow-blur: root.has-hover ? 14px : 2px;
         drop-shadow-color: MaterialPalette.drop-shadow;
-        drop-shadow-offset-y: root.has-hover ? 4px : 1px;
-        animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-        animate border-color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-        animate drop-shadow-blur { duration: 200ms; }
-        animate drop-shadow-offset-y { duration: 200ms; }
+        drop-shadow-offset-y: root.has-hover ? 6px : 1px;
+        animate y, border-radius, drop-shadow-blur, drop-shadow-offset-y {
+            duration: 400ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        animate background, border-color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
 
         VerticalLayout { alignment: center; spacing: 6px;
             HorizontalLayout { alignment: center;
                 Rectangle {
-                    width: 36px; height: 36px; border-radius: 18px;
+                    width: 40px; height: 40px;
+                    border-radius: root.has-hover ? 14px : 20px;
                     background: root.has-hover
                         ? MaterialPalette.primary
                         : MaterialPalette.surface-container-high;
+                    animate border-radius { duration: 400ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
                     animate background { duration: 200ms; }
                     Image {
                         source: icon;
@@ -50,7 +54,7 @@ export component NavCard inherits TouchArea {
             Text {
                 text: label;
                 font-size: Typography.label-large-size;
-                font-weight: Typography.label-large-weight;
+                font-weight: root.has-hover ? Typography.label-large-weight-em : Typography.label-large-weight;
                 color: root.has-hover
                     ? MaterialPalette.on-primary-container
                     : MaterialPalette.on-surface;
@@ -65,7 +69,7 @@ export component NavCard inherits TouchArea {
 // ── Outlined Card (sections, forms) ────────────────────────────────────────
 export component OutlinedCard inherits Rectangle {
     in property <bool> has-hover: false;
-    border-radius: 16px;
+    border-radius: 20px;
     border-width: 1px;
     border-color: has-hover ? MaterialPalette.primary : MaterialPalette.outline-variant;
     background: has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container-low;
@@ -75,30 +79,34 @@ export component OutlinedCard inherits Rectangle {
 
 // ── Elevated Card (dialogs, floating panels) ───────────────────────────────
 export component ElevatedCard inherits Rectangle {
-    border-radius: 20px;
+    border-radius: 28px;
     background: MaterialPalette.surface-container-high;
-    drop-shadow-blur: 12px;
+    drop-shadow-blur: 16px;
     drop-shadow-color: MaterialPalette.drop-shadow;
-    drop-shadow-offset-y: 4px;
+    drop-shadow-offset-y: 6px;
 }
 
 // ── Chip (compact action button) ───────────────────────────────────────────
 export component Chip inherits TouchArea {
     in property <string> text;
     callback chip-clicked();
-    height: 32px;
+    height: 36px;
 
     Rectangle {
         width: 100%; height: 100%;
-        border-radius: 8px;
+        y: root.pressed ? 1px : 0px;
+        border-radius: root.pressed ? 10px : 18px;
         border-width: 1px;
         border-color: root.has-hover
             ? MaterialPalette.primary
             : MaterialPalette.outline-variant;
-        background: root.has-hover
-            ? MaterialPalette.primary.with-alpha(0.08)
-            : MaterialPalette.surface-container;
-        animate background { duration: 150ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+        background: root.pressed
+            ? MaterialPalette.primary.with-alpha(0.14)
+            : root.has-hover
+                ? MaterialPalette.primary.with-alpha(0.08)
+                : MaterialPalette.surface-container;
+        animate border-radius, y { duration: 350ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+        animate background { duration: 120ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
         animate border-color { duration: 150ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
 
         Text {

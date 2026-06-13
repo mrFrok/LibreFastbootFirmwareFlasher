@@ -17,13 +17,16 @@ export component UpdateDialog {
         opacity: show ? 1.0 : 0.0;
         animate opacity { duration: 200ms; easing: ease-in-out; }
         width: 100%; height: 100%;
-        background: transparent;
+        background: MaterialPalette.scrim;
         TouchArea { }
 
         VerticalLayout { alignment: center;
             Rectangle {
                 background: MaterialPalette.surface-container-high;
                 border-radius: 16px;
+                border-width: 1px;
+                border-color: MaterialPalette.outline-variant;
+                clip: true;
 
                 VerticalLayout { spacing: 12px; padding: 20px;
                     Text {

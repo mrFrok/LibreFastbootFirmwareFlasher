@@ -31,7 +31,6 @@ export global Tr {
     out property <string> src-images:    lang == "ru" ? "образов"           : "images";
     out property <string> src-ops:       lang == "ru" ? "операций"          : "ops";
     out property <string> find-phone:   lang == "ru" ? "Найти телефон"  : "Find phone";
-    out property <string> skip-arb:     lang == "ru" ? "Пропустить проверку ARB" : "Skip ARB check";
     out property <string> flash-all-btn:lang == "ru" ? "Прошить всё"   : "Flash all";
     out property <string> flashing:     lang == "ru" ? "Прошивается…"   : "Flashing…";
     out property <string> cancel:       lang == "ru" ? "Отмена"         : "Cancel";
@@ -55,6 +54,24 @@ export global Tr {
     out property <string> reboot-bootloader: lang == "ru" ? "Bootloader" : "Bootloader";
     out property <string> reboot-fastbootd: lang == "ru" ? "Fastbootd"   : "Fastbootd";
     out property <string> reboot-system:   lang == "ru" ? "Перезагрузить" : "Reboot";
+
+    // Flash All step 0 — mandatory flash-method choice
+    out property <string> flash-method-title: lang == "ru" ? "Выберите метод прошивки" : "Select flash method";
+    out property <string> flash-method-body: lang == "ru"
+        ? "Автоматическое определение платформы отключено. Укажите чипсет вашего устройства — от этого зависит порядок прошивки разделов. Прошивка не начнётся без выбора."
+        : "Platform auto-detection is disabled. Choose your device's chipset — it determines how partitions are flashed. Flashing will not start without a choice.";
+    out property <string> flash-method-snapdragon: lang == "ru" ? "Snapdragon (Qualcomm)" : "Snapdragon (Qualcomm)";
+    out property <string> flash-method-snapdragon-desc: lang == "ru"
+        ? "modem прошивается в bootloader, остальное в fastbootd; проверка ARB"
+        : "modem flashed in bootloader mode, the rest in fastbootd; ARB check";
+    out property <string> flash-method-mtk: lang == "ru" ? "MediaTek" : "MediaTek";
+    out property <string> flash-method-mtk-desc: lang == "ru"
+        ? "все разделы прошиваются в fastbootd; xbl/abl пропускаются"
+        : "all partitions flashed in fastbootd; xbl/abl skipped";
+    out property <string> flash-method-hint: lang == "ru"
+        ? "⚠ Неверный метод может привести к неудачной прошивке или кирпичу. Уточните чипсет в характеристиках устройства."
+        : "⚠ A wrong method can fail the flash or brick the device. Check your device's specifications for the chipset.";
+    out property <string> back-btn: lang == "ru" ? "← Назад" : "← Back";
 
     // Flash All step 1 — reboot source dialog
     out property <string> flash-reboot-title: lang == "ru" ? "Откуда перезагрузиться в Fastbootd?" : "How to reboot into Fastbootd?";
@@ -101,21 +118,6 @@ export global Tr {
     out property <string> home-goto-flash:    lang == "ru" ? "Прошить всё"           : "Flash All";
     out property <string> home-goto-part:     lang == "ru" ? "Прошить раздел"        : "Flash Partition";
 
-    out property <string> arb-device-title: lang == "ru"
-        ? "Предупреждение ARB устройства"
-        : "Device ARB Warning";
-    out property <string> arb-device-body-fw: lang == "ru"
-        ? "Прошивка имеет ARB=0, но ваше устройство имеет ARB="
-        : "Firmware has ARB=0, but your device has ARB=";
-    out property <string> arb-device-body-src: lang == "ru"
-        ? "Версия ARB исходной сборки неизвестна, а ваше устройство имеет ARB="
-        : "Source build ARB is unknown, but your device has ARB=";
-    out property <string> arb-device-body-suffix: lang == "ru"
-        ? ".\n\nПрошивка с ARB ниже, чем у устройства, может привести к неработоспособности устройства (кирпич)!\n\nПродолжайте только если уверены, что не хотите делать даунгрейд."
-        : ".\n\nFlashing firmware with ARB lower than the device's ARB can brick your device!\n\nOnly continue if you are sure you will never need to downgrade.";
-    out property <string> arb-device-continue: lang == "ru"
-        ? "Я понимаю риск, продолжить"
-        : "I understand the risk, continue";
     out property <string> flash-error-title: lang == "ru"
         ? "Ошибка прошивки"
         : "Flash Error";

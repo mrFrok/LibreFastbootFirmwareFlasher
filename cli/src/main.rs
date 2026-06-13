@@ -58,19 +58,13 @@ fn main() {
         Some(Commands::Arb {
             ref xbl,
             ref firmware_dir,
-            device,
-            ref serial,
-        }) => handlers::arb::run(
-            xbl.as_ref(),
-            firmware_dir.as_ref(),
-            device,
-            serial.as_deref(),
-        ),
+        }) => handlers::arb::run(xbl.as_ref(), firmware_dir.as_ref()),
 
         Some(Commands::Flash {
             ref firmware_dir,
             ref source,
             ref serial,
+            ref method,
             dry_run,
             skip_xbl_abl,
             skip_preloader,
@@ -79,6 +73,7 @@ fn main() {
                 handlers::flash::run(
                     &FirmwareSource::Extracted(dir.clone()),
                     serial.as_deref(),
+                    method.as_deref(),
                     dry_run,
                     skip_xbl_abl,
                     skip_preloader,
@@ -87,6 +82,7 @@ fn main() {
                 handlers::flash::run(
                     &FirmwareSource::SourceBuild(dir.clone()),
                     serial.as_deref(),
+                    method.as_deref(),
                     dry_run,
                     skip_xbl_abl,
                     skip_preloader,

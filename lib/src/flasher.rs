@@ -1,16 +1,18 @@
 //! Core flash orchestrator for LibreFastbootFirmwareFlasher.
 //!
 //! Public API:
-//!   - `run_flash_session()` — full firmware flash with A/B slot management
+//!   - `run_flash_session_with_log()` — full firmware flash with A/B slot management
 //!   - `run_flash_single()` — flash a single partition image
 //!   - `flash_partition()` — low-level single flash primitive
 //!   - `FlashSession`, `FlashResult`
+//!
+//! The flash platform (Snapdragon vs MediaTek) is always chosen explicitly by
+//! the user via `FlashOptions::as_mediatek` — there is no device auto-detection.
 
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
 
@@ -18,9 +20,9 @@ use tracing::{info, warn};
 
 /// Case-insensitive prefix check without allocating.
 fn starts_with_ignore_ascii_case(s: &str, prefix: &str) -> bool {
-    s.as_bytes().get(..prefix.len()).map_or(false, |b| {
-        b.eq_ignore_ascii_case(prefix.as_bytes())
-    })
+    s.as_bytes()
+        .get(..prefix.len())
+        .is_some_and(|b| b.eq_ignore_ascii_case(prefix.as_bytes()))
 }
 
 /// Append `-s <serial>` to a fastboot argument list.
@@ -31,10 +33,6 @@ fn push_serial_arg<'a>(args: &mut Vec<&'a str>, serial: Option<&'a str>) {
     }
 }
 
-use crate::arb::{
-    ArbInfo, arb_confirmation_gate, compare_arb_versions, extract_arb_from_xbl, find_xbl_config,
-};
-use crate::device::{run_pre_flash_checks, is_device_mediatek};
 use crate::utils::run_cmd;
 
 // ---------------------------------------------------------------------------
@@ -89,15 +87,20 @@ const CRITICAL_PARTITIONS: &[&str] = &[
 ];
 
 const SLOTS: &[&str] = &["a", "b"];
-const REBOOT_SETTLE_SECS: u64 = 2;
 const REBOOT_TIMEOUT_SECS: u64 = 90;
-const POLL_INTERVAL_SECS: u64 = 3;
+/// Device-presence polling interval. `fastboot devices` is a cheap local USB
+/// enumeration (no device round-trip), so a short interval keeps detection
+/// latency low without meaningful overhead.
+const POLL_INTERVAL_MS: u64 = 500;
+/// How long to wait for a rebooting device to drop off the USB bus before
+/// looking for it again (prevents matching the stale pre-reboot enumeration).
+const DISAPPEAR_TIMEOUT_SECS: u64 = 5;
 
 fn is_bootloader_partition(name: &str) -> bool {
     BOOTLOADER_MODE_PARTITIONS.contains(&name)
 }
 
-fn is_super_partition(name: &str) -> bool {
+pub fn is_super_partition(name: &str) -> bool {
     SUPER_PARTITIONS.contains(&name)
 }
 
@@ -113,30 +116,6 @@ pub fn is_preloader(name: &str) -> bool {
     starts_with_ignore_ascii_case(name, "preloader")
 }
 
-/// Estimate total flash operations from image list for UI display.
-/// Accounts for slot doubling (non-super ×2, super ×1) and bootloader stages.
-pub fn estimate_total_flash_ops(images: &HashMap<String, PathBuf>, as_mediatek: Option<bool>) -> usize {
-    let is_mtk = match as_mediatek {
-        Some(v) => v,
-        None => is_mediatek_build(images),
-    };
-
-    let (super_count, non_super_count, bl_count) = if is_mtk {
-        // Mediatek: everything in fastbootd, no bootloader partitions
-        let super_c = images.keys().filter(|k| is_super_partition(k)).count();
-        let non_super_c = images.keys().filter(|k| !is_super_partition(k)).count();
-        (super_c, non_super_c, 0usize)
-    } else {
-        // Qualcomm: modem goes to bootloader
-        let super_c = images.keys().filter(|k| is_super_partition(k)).count();
-        let fastbootd_c = images.keys().filter(|k| !is_super_partition(k) && !is_bootloader_partition(k)).count();
-        let bl_c = images.keys().filter(|k| is_bootloader_partition(k)).count();
-        (super_c, fastbootd_c, bl_c)
-    };
-
-    non_super_count * 2 + super_count + bl_count * 2
-}
-
 pub fn is_mediatek_build(images: &HashMap<String, PathBuf>) -> bool {
     let has_preloader = images.keys().any(|k| is_preloader(k));
     if !has_preloader {
@@ -148,25 +127,6 @@ pub fn is_mediatek_build(images: &HashMap<String, PathBuf>) -> bool {
             || k.as_bytes().windows(10).any(|w| w.eq_ignore_ascii_case(b"xbl_config"))
     });
     !has_xbl
-}
-
-/// Detect MediaTek device by combining multiple methods:
-/// 1. Check for preloader.img in firmware (offline check)
-/// 2. Check fastboot getvar for occt/ocdt variables (online check)
-pub fn detect_device_type(serial: Option<&str>, images: &HashMap<String, PathBuf>) -> Option<bool> {
-    // First, try fastboot getvar check (online — actual device)
-    if let Some(is_mtk) = is_device_mediatek(serial) {
-        return Some(is_mtk);
-    }
-
-    // Fallback: check if firmware contains preloader.img (offline)
-    if is_mediatek_build(images) {
-        info!("Detected MediaTek device from firmware (preloader.img present)");
-        return Some(true);
-    }
-
-    // If both checks fail, we can't determine
-    None
 }
 
 // ---------------------------------------------------------------------------
@@ -320,8 +280,10 @@ pub fn detect_mode(serial: Option<&str>) -> DeviceMode {
     DeviceMode::Unknown
 }
 
-/// Return current active slot ('a' or 'b'). Defaults to 'a'.
-pub fn get_active_slot(serial: Option<&str>) -> String {
+/// Return current active slot ('a' or 'b'), or `None` when it cannot be
+/// determined. Callers MUST abort instead of guessing: flashing dynamic
+/// (super) partitions to the wrong slot leaves the device unbootable.
+pub fn get_active_slot(serial: Option<&str>) -> Option<String> {
     let mut args: Vec<&str> = Vec::new();
     push_serial_arg(&mut args, serial);
     args.extend(&["getvar", "current-slot"]);
@@ -332,62 +294,124 @@ pub fn get_active_slot(serial: Option<&str>) -> String {
         if line.contains("current-slot:") {
             let slot = line.split("current-slot:").last().unwrap_or("").trim();
             if slot == "a" || slot == "b" {
-                return slot.to_string();
+                return Some(slot.to_string());
             }
         }
     }
-    warn!("Could not detect active slot — defaulting to 'a'");
-    "a".to_string()
+    warn!("Could not detect active slot");
+    None
 }
 
 // ---------------------------------------------------------------------------
 // Reboot helpers
 // ---------------------------------------------------------------------------
 
-/// Poll until device reports 'fastbootd' mode.
-pub fn wait_for_fastbootd(serial: Option<&str>, timeout: u64) -> bool {
-    let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
-    while Instant::now() < deadline {
-        let (_, out, _) = fastboot_cmd(&["devices"], 10);
-        for line in out.lines() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() < 2 {
-                continue;
-            }
-            if let Some(s) = serial
-                && parts[0] != s {
-                    continue;
-                }
-            if parts[1] == "fastbootd" {
-                return true;
-            }
-        }
-        let remaining = (deadline - Instant::now()).as_secs();
-        info!("Waiting for fastbootd ... ({}s)", remaining);
-        thread::sleep(std::time::Duration::from_secs(POLL_INTERVAL_SECS));
+/// Parse `fastboot devices` into (serial, mode) pairs.
+/// Mode is "fastboot" (bootloader) or "fastbootd" (userspace).
+fn fastboot_device_list() -> Vec<(String, String)> {
+    let (rc, out, _) = fastboot_cmd(&["devices"], 5);
+    if rc != 0 {
+        return Vec::new();
     }
-    false
+    out.lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                Some((parts[0].to_string(), parts[1].to_string()))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
-/// Poll until the specified fastboot device (or any device if serial is None) appears.
-fn wait_for_fastboot(serial: Option<&str>, timeout: u64) -> bool {
-    let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
-    while Instant::now() < deadline {
-        let (_, out, _) = fastboot_cmd(&["devices"], 10);
-        if !out.trim().is_empty() {
-            if let Some(s) = serial {
-                if out.lines().any(|line| line.starts_with(s)) {
-                    return true;
-                }
-            } else {
+/// True when a device in the target mode is present.
+///
+/// When a serial is given but not found, a single device in the target mode is
+/// still accepted: some devices report different serials in adb vs fastboot,
+/// and rejecting them made the UI sit out the full timeout with the device
+/// already connected.
+fn device_in_mode(serial: Option<&str>, mode_pred: &dyn Fn(&str) -> bool) -> bool {
+    let devices = fastboot_device_list();
+    let in_mode: Vec<&(String, String)> = devices.iter().filter(|(_, m)| mode_pred(m)).collect();
+    match serial {
+        None => !in_mode.is_empty(),
+        Some(s) => {
+            if in_mode.iter().any(|(ser, _)| ser == s) {
                 return true;
             }
+            if in_mode.len() == 1 {
+                warn!(
+                    "Expected serial {} but found single device {} — accepting (serial can change between adb and fastboot)",
+                    s, in_mode[0].0
+                );
+                return true;
+            }
+            false
         }
-        let remaining = (deadline - Instant::now()).as_secs();
-        info!("Waiting for bootloader ... ({}s)", remaining);
-        thread::sleep(std::time::Duration::from_secs(POLL_INTERVAL_SECS));
     }
-    false
+}
+
+/// Actively poll until a device in the target mode appears, with a short
+/// interval so detection reacts as soon as the device is up.
+fn wait_for_mode(
+    serial: Option<&str>,
+    timeout: u64,
+    mode_pred: &dyn Fn(&str) -> bool,
+    label: &str,
+) -> bool {
+    let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
+    let mut last_log = Instant::now();
+    loop {
+        if device_in_mode(serial, mode_pred) {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        if last_log.elapsed().as_secs() >= 5 {
+            let remaining = (deadline - Instant::now()).as_secs();
+            info!("Waiting for {} ... ({}s left)", label, remaining);
+            last_log = Instant::now();
+        }
+        thread::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS));
+    }
+}
+
+/// Poll until device reports 'fastbootd' mode.
+pub fn wait_for_fastbootd(serial: Option<&str>, timeout: u64) -> bool {
+    wait_for_mode(serial, timeout, &|m| m == "fastbootd", "fastbootd")
+}
+
+/// Poll until device reports 'fastboot' (bootloader) mode.
+fn wait_for_fastboot(serial: Option<&str>, timeout: u64) -> bool {
+    wait_for_mode(serial, timeout, &|m| m == "fastboot", "bootloader")
+}
+
+/// Poll until a device appears in either bootloader or fastbootd mode.
+pub fn wait_for_any_fastboot(serial: Option<&str>, timeout: u64) -> bool {
+    wait_for_mode(serial, timeout, &|m| m == "fastboot" || m == "fastbootd", "fastboot/fastbootd")
+}
+
+/// Wait until the device disappears from `fastboot devices` (i.e. it actually
+/// started rebooting). Returning false is not fatal — the caller proceeds to
+/// wait for the device to come back either way.
+pub fn wait_for_device_gone(serial: Option<&str>, timeout: u64) -> bool {
+    let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
+    loop {
+        let devices = fastboot_device_list();
+        let present = match serial {
+            Some(s) => devices.iter().any(|(ser, _)| ser == s),
+            None => !devices.is_empty(),
+        };
+        if !present {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS));
+    }
 }
 
 /// Reboot from fastbootd into bootloader.
@@ -402,7 +426,9 @@ pub fn enter_bootloader(serial: Option<&str>) -> bool {
         tracing::error!("fastboot reboot bootloader failed: {}", err);
         return false;
     }
-    thread::sleep(std::time::Duration::from_secs(REBOOT_SETTLE_SECS));
+    // Active wait instead of a fixed settle sleep: first let the stale
+    // pre-reboot enumeration drop off the bus, then wait for the bootloader.
+    wait_for_device_gone(serial, DISAPPEAR_TIMEOUT_SECS);
     wait_for_fastboot(serial, REBOOT_TIMEOUT_SECS)
 }
 
@@ -493,167 +519,8 @@ fn flash_partition_inner(
 }
 
 // ---------------------------------------------------------------------------
-// Progress bar
-// ---------------------------------------------------------------------------
-
-fn print_progress(done: usize, total: usize, partition: &str, slot: &str, elapsed: f64) {
-    let pct = done.checked_mul(100).and_then(|x| x.checked_div(total)).unwrap_or(0);
-    let bar_w: usize = 24;
-    let filled = bar_w.checked_mul(done).and_then(|x| x.checked_div(total)).unwrap_or(0);
-    let bar: String = "█".repeat(filled) + &"░".repeat(bar_w - filled);
-    let mins = elapsed as u64 / 60;
-    let secs = elapsed as u64 % 60;
-    let time_s = if mins > 0 {
-        format!("{}m{:02}s", mins, secs)
-    } else {
-        format!("{}s", secs)
-    };
-    let label = if slot.is_empty() {
-        partition.to_string()
-    } else {
-        format!("{}_{}", partition, slot)
-    };
-    print!(
-        "\r  [{}] {:>3}%  {}/{}  {}  {:<28}",
-        bar, pct, done, total, time_s, label
-    );
-    io::stdout().flush().ok();
-}
-
-/// Flash a batch of partitions with retry logic and progress tracking.
-/// Returns (aborted, new_done_ops) — session may have aborted flag set.
-fn flash_partition_batch(
-    images: &[(&str, &PathBuf)],
-    serial: Option<&str>,
-    slot: &str,
-    total_ops: usize,
-    done_ops: usize,
-    flash_start: Instant,
-    mode: DeviceMode,
-    session: &mut FlashSession,
-) -> (bool, usize) {
-    // (aborted, new_done_ops)
-    let mut current_done = done_ops;
-    
-    for (partition, image_path) in images {
-        let result = flash_with_progress(
-            image_path,
-            partition,
-            slot,
-            serial,
-            current_done,
-            total_ops,
-            flash_start,
-        );
-        session.results.push(result.clone());
-        current_done += 1;
-        
-        if !result.success {
-            println!();
-            match on_flash_error(&result, serial, mode) {
-                ErrorAction::Skip => continue,
-                ErrorAction::Abort => {
-                    session.aborted = true;
-                    return (true, current_done);
-                }
-                ErrorAction::Retry => {}
-            }
-            
-            let retry = flash_with_progress(
-                image_path,
-                partition,
-                slot,
-                serial,
-                current_done - 1,
-                total_ops,
-                flash_start,
-            );
-            if let Some(last) = session.results.last_mut() {
-                *last = retry.clone();
-            } else {
-                session.results.push(retry.clone());
-            }
-            if !retry.success {
-                println!("\n✗ Retry failed. Aborting.");
-                session.aborted = true;
-                return (true, current_done);
-            }
-        }
-    }
-    
-    (false, current_done)
-}
-fn flash_with_progress(
-    image_path: &Path,
-    partition: &str,
-    slot: &str,
-    serial: Option<&str>,
-    done: usize,
-    total: usize,
-    flash_start: Instant,
-) -> FlashResult {
-    let img = image_path.to_path_buf();
-    let part = partition.to_string();
-    let sl = slot.to_string();
-    let ser = serial.map(|s| s.to_string());
-
-    let result: Arc<Mutex<Option<FlashResult>>> = Arc::new(Mutex::new(None));
-    let result_clone = result.clone();
-
-    let handle = thread::spawn(move || {
-        let r = flash_partition(&img, &part, &sl, ser.as_deref());
-        if let Ok(mut guard) = result_clone.lock() {
-            *guard = Some(r);
-        }
-    });
-
-    while !handle.is_finished() {
-        print_progress(
-            done,
-            total,
-            partition,
-            slot,
-            flash_start.elapsed().as_secs_f64(),
-        );
-        thread::sleep(std::time::Duration::from_millis(150));
-    }
-    if let Err(e) = handle.join() {
-        eprintln!("Flash thread panicked: {:?}", e);
-        return FlashResult {
-            partition: partition.to_string(),
-            slot: slot.to_string(),
-            success: false,
-            error: "Flash thread panicked".into(),
-            duration_s: flash_start.elapsed().as_secs_f64(),
-        };
-    }
-
-    print_progress(
-        done + 1,
-        total,
-        partition,
-        slot,
-        flash_start.elapsed().as_secs_f64(),
-    );
-
-    result.lock().ok().and_then(|mut g| g.take()).unwrap_or_else(|| FlashResult {
-        partition: partition.to_string(),
-        slot: slot.to_string(),
-        success: false,
-        error: "Flash thread did not set result".into(),
-        duration_s: flash_start.elapsed().as_secs_f64(),
-    })
-}
-
-// ---------------------------------------------------------------------------
 // Super partition wipe
 // ---------------------------------------------------------------------------
-
-/// For each dynamic partition: delete old entries and COW snapshots,
-/// then recreate with size=0.
-pub fn wipe_super(serial: Option<&str>, super_names: &[String]) {
-    wipe_super_with_log(serial, super_names, &|msg| println!("{}", msg));
-}
 
 pub fn wipe_super_with_log(serial: Option<&str>, super_names: &[String], on_log: &dyn Fn(String)) {
     let mut base_args: Vec<String> = vec!["fastboot".into()];
@@ -845,418 +712,6 @@ fn report_failure(result: &FlashResult) {
     }
     println!("{}", "━".repeat(60));
     println!();
-}
-
-#[derive(Debug, Clone)]
-enum ErrorAction { Retry, Skip, Abort }
-
-/// Ask user what to do after a flash failure.
-fn on_flash_error(result: &FlashResult, serial: Option<&str>, target_mode: DeviceMode) -> ErrorAction {
-    report_failure(result);
-
-    let (mode_label, reboot_args) = match target_mode {
-        DeviceMode::Bootloader => ("bootloader", vec!["reboot", "bootloader"]),
-        _ => ("fastbootd", vec!["reboot", "fastboot"]),
-    };
-
-    println!("  What do you want to do?");
-    println!("  [1] Retry this partition now");
-    println!("  [2] Reboot to {} first, then retry", mode_label);
-    println!("  [3] Skip this partition and continue");
-    println!("  [4] Abort flashing");
-
-    loop {
-        let choice = crate::utils::prompt("\n  Choice", "");
-        match choice.as_str() {
-            "3" => return ErrorAction::Skip,
-            "4" => return ErrorAction::Abort,
-            "1" => return ErrorAction::Retry,
-            "2" => {
-                println!();
-                println!("  Rebooting to {} ...", mode_label);
-                let mut args: Vec<&str> = Vec::new();
-                push_serial_arg(&mut args, serial);
-                args.extend(reboot_args.iter());
-                let (rc, out, err) = fastboot_cmd(&args, 30);
-                if rc != 0 {
-                    println!(
-                        "  ✗ Reboot command failed: {}",
-                        if err.is_empty() { &out } else { &err }
-                    );
-                    println!("  Reboot manually, then press [1] to retry.");
-                    continue;
-                }
-                println!("  Waiting for {} ...", mode_label);
-                let ok = match target_mode {
-                    DeviceMode::Bootloader => wait_for_fastboot(serial, REBOOT_TIMEOUT_SECS),
-                    _ => wait_for_fastbootd(serial, REBOOT_TIMEOUT_SECS),
-                };
-                if ok {
-                    println!("  ✓ Device is in {} — retrying ...", mode_label);
-                    return ErrorAction::Retry;
-                } else {
-                    println!("  ✗ Device did not enter {}.", mode_label);
-                    println!("  Try rebooting manually, then press [1] to retry.");
-                }
-            }
-            _ => println!("  Enter 1, 2, 3 or 4"),
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Full flash session
-// ---------------------------------------------------------------------------
-
-/// Reason why a flash session ended, for the caller to decide what to do.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SessionEnd {
-    /// Flash completed (may have failures).
-    Completed,
-    /// Pre-flash checks failed.
-    PreFlashFailed,
-    /// No images found.
-    NoImagesFound,
-    /// User aborted at ARB check.
-    ArbAborted,
-    /// User aborted at reboot choice.
-    RebootAborted,
-    /// Reboot to fastbootd failed.
-    RebootFailed,
-}
-
-/// Full firmware flash orchestrator.
-///
-/// Stages:
-///   1. Pre-flash checks
-///   2. Collect images
-///   3. ARB check
-///   4. Ask user how to reach fastbootd
-///   5. Stage 1: fastbootd — non-super (both slots) + super (active slot)
-///   6. Stage 2: bootloader — modem (both slots)
-///   7. Summary, wipe offer, reboot
-///
-/// Returns `(FlashSession, SessionEnd)` so the caller decides whether to exit.
-pub fn run_flash_session(source: &FirmwareSource, serial: Option<&str>, dry_run: bool) -> (FlashSession, SessionEnd) {
-    let firmware_dir = source.path();
-    let mut session = FlashSession::new(source, serial, dry_run);
-
-    // -- Pre-flash checks --
-    info!("==> Running pre-flash checks ...");
-    let check = run_pre_flash_checks(serial);
-    if !check.ready() {
-        println!("\n✗ Pre-flash checks failed. Aborting.\n");
-        for err in &check.errors {
-            println!("  ✗ {}", err);
-        }
-        return (session, SessionEnd::PreFlashFailed);
-    }
-
-    let serial = serial.map(|s| s.to_string()).or_else(|| {
-        if !check.device_info.serial.is_empty() {
-            Some(check.device_info.serial.clone())
-        } else {
-            None
-        }
-    });
-    session.serial = serial.clone();
-
-    // -- Collect images --
-    let images = if source.is_source() {
-        collect_images_from_source(firmware_dir)
-    } else {
-        collect_images(firmware_dir)
-    };
-    if images.is_empty() {
-        if source.is_source() {
-            println!("✗ No flashable .img files found in source build directory: {}", firmware_dir.display());
-        } else {
-            println!("✗ No .img files found in {}", firmware_dir.display());
-        }
-        return (session, SessionEnd::NoImagesFound);
-    }
-
-    // ALL partitions go to fastbootd except modem (Qualcomm) or all partitions (MediaTek)
-    // modem.img is the ONLY partition that goes to bootloader mode on Qualcomm
-    let fastbootd_images: HashMap<&str, &PathBuf> = images
-        .iter()
-        .filter(|(k, _)| !is_bootloader_partition(k))
-        .map(|(k, v)| (k.as_str(), v))
-        .collect();
-    let bootloader_images: HashMap<&str, &PathBuf> = images
-        .iter()
-        .filter(|(k, _)| is_bootloader_partition(k))
-        .map(|(k, v)| (k.as_str(), v))
-        .collect();
-
-    println!("\nFound {} image(s) to flash:", images.len());
-    let mut sorted: Vec<_> = images.iter().collect();
-    sorted.sort_by_key(|(k, _)| *k);
-    for (name, path) in &sorted {
-        let mode_tag = if is_bootloader_partition(name) {
-            "bootloader"
-        } else {
-            "fastbootd"
-        };
-        let crit_tag = if is_critical_partition(name) {
-            " [CRITICAL]"
-        } else {
-            ""
-        };
-        let size_mb = fs::metadata(path)
-            .map(|m| m.len() as f64 / 1024.0 / 1024.0)
-            .unwrap_or(0.0);
-        println!(
-            "  {:<30} {:>7.1} MB  ({}){}",
-            name, size_mb, mode_tag, crit_tag
-        );
-    }
-
-    // -- ARB check (firmware only, skip for source builds) --
-    if !source.is_source() {
-        if let Some(xbl_path) = find_xbl_config(firmware_dir) {
-            let firmware_arb = extract_arb_from_xbl(&xbl_path);
-            let device_arb = ArbInfo {
-                version: None,
-                source: "not checked".into(),
-                oem_major: None,
-                oem_minor: None,
-            };
-            let arb_result = compare_arb_versions(&firmware_arb, &device_arb);
-            if !arb_confirmation_gate(&arb_result, "none") {
-                println!("Aborted by user (ARB check).");
-                return (session, SessionEnd::ArbAborted);
-            }
-        } else {
-            warn!("xbl_config.img not found in firmware — ARB check skipped");
-        }
-    }
-
-    if dry_run {
-        println!("\n[dry-run] No partitions were flashed.");
-        return (session, SessionEnd::Completed);
-    }
-
-    // -- Ask user how to reach fastbootd --
-    let serial_ref = serial.as_deref();
-    if !fastbootd_images.is_empty() {
-        println!();
-        println!("── Reboot to fastbootd ──────────────────────────────────");
-        println!("  Where is the device right now?");
-        println!();
-        println!("  [1] In system (Android running)  → adb reboot fastboot");
-        println!("  [2] In bootloader                → fastboot reboot fastboot");
-        println!("  [3] Already in fastbootd          → skip reboot");
-        println!("  [q] Abort");
-
-        let choice = loop {
-            let c = crate::utils::prompt("\n  Choice", "");
-            if c == "q" {
-                println!("Aborted.");
-                return (session, SessionEnd::RebootAborted);
-            }
-            if ["1", "2", "3"].contains(&c.as_str()) {
-                break c;
-            }
-            println!("  Enter 1, 2, 3 or q");
-        };
-
-        match choice.as_str() {
-            "1" => {
-                println!();
-                let mut args: Vec<&str> = vec!["adb"];
-                push_serial_arg(&mut args, serial_ref);
-                args.extend(&["reboot", "fastboot"]);
-                let r = run_cmd(&args, 15);
-                if r.code != 0 {
-                    println!("✗ adb reboot fastboot failed: {}", r.stderr);
-                    return (session, SessionEnd::RebootFailed);
-                }
-                println!("  Waiting for fastbootd ...");
-                if !wait_for_fastbootd(serial_ref, REBOOT_TIMEOUT_SECS) {
-                    println!("✗ Device did not enter fastbootd. Aborting.");
-                    return (session, SessionEnd::RebootFailed);
-                }
-                println!("  ✓ Device is in fastbootd");
-            }
-            "2" => {
-                println!();
-                let mut args: Vec<&str> = Vec::new();
-                push_serial_arg(&mut args, serial_ref);
-                args.extend(&["reboot", "fastboot"]);
-                let (rc, _, err) = fastboot_cmd(&args, 30);
-                if rc != 0 {
-                    println!("✗ fastboot reboot fastboot failed: {}", err);
-                    return (session, SessionEnd::RebootFailed);
-                }
-                println!("  Waiting for fastbootd ...");
-                if !wait_for_fastbootd(serial_ref, REBOOT_TIMEOUT_SECS) {
-                    println!("✗ Device did not enter fastbootd. Aborting.");
-                    return (session, SessionEnd::RebootFailed);
-                }
-                println!("  ✓ Device is in fastbootd");
-            }
-            _ => {} // "3" — already in fastbootd
-        }
-
-        println!("────────────────────────────────────────────────────────");
-    }
-
-    println!();
-    let _ = crate::utils::prompt(
-        "Device is in fastbootd. Press Enter to begin flashing, or Ctrl+C to abort",
-        "",
-    );
-
-    // -- Stage 1: fastbootd --
-    if !fastbootd_images.is_empty() {
-        let active_slot = get_active_slot(serial_ref);
-        let super_imgs: HashMap<&&str, &&PathBuf> = fastbootd_images
-            .iter()
-            .filter(|(k, _)| is_super_partition(k))
-            .collect();
-        let non_super_imgs: HashMap<&&str, &&PathBuf> = fastbootd_images
-            .iter()
-            .filter(|(k, _)| !is_super_partition(k))
-            .collect();
-
-        let total_ops = non_super_imgs.len() * 2 + super_imgs.len();
-        let flash_start = Instant::now();
-        let mut done_ops = 0;
-
-        println!("\n── Stage 1/2: fastbootd ──────────────────────────────");
-        println!("  Active slot    : {}", active_slot.to_uppercase());
-        println!(
-            "  Non-super      : {} partitions × 2 slots",
-            non_super_imgs.len()
-        );
-        println!(
-            "  Super (dynamic): {} partitions × 1 slot (active only)",
-            super_imgs.len()
-        );
-        println!("  Total          : {} flash operations", total_ops);
-        println!();
-
-        // Non-super → both slots
-        let mut sorted_non_super: Vec<(&str, &PathBuf)> = non_super_imgs
-            .iter()
-            .map(|(k, v)| (**k, **v))
-            .collect();
-        sorted_non_super.sort_by_key(|(k, _)| *k);
-
-        for slot in SLOTS {
-            let (aborted, new_done) = flash_partition_batch(
-                &sorted_non_super,
-                serial_ref,
-                slot,
-                total_ops,
-                done_ops,
-                flash_start,
-                DeviceMode::Fastbootd,
-                &mut session,
-            );
-            done_ops = new_done;
-            if aborted {
-                return (session, SessionEnd::Completed);
-            }
-        }
-
-        // Super → active slot only
-        if !super_imgs.is_empty() {
-            println!("\n\n── Clearing super partition ─────────────────────────────");
-            let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
-            wipe_super(serial_ref, &super_names);
-            println!();
-
-            let mut sorted_super: Vec<(&str, &PathBuf)> = super_imgs
-                .iter()
-                .map(|(k, v)| (**k, **v))
-                .collect();
-            sorted_super.sort_by_key(|(k, _)| *k);
-
-            let (aborted, _new_done) = flash_partition_batch(
-                &sorted_super,
-                serial_ref,
-                &active_slot,
-                total_ops,
-                done_ops,
-                flash_start,
-                DeviceMode::Fastbootd,
-                &mut session,
-            );
-            if aborted {
-                return (session, SessionEnd::Completed);
-            }
-        }
-
-        let elapsed = flash_start.elapsed().as_secs();
-        println!(
-            "\n  ✓ Stage 1 complete in {}m{:02}s",
-            elapsed / 60,
-            elapsed % 60
-        );
-    }
-
-    // -- Stage 2: bootloader (modem) --
-    if !bootloader_images.is_empty() {
-        info!("==> Rebooting to bootloader for modem flash ...");
-        if !enter_bootloader(serial_ref) {
-            println!("✗ Could not reach bootloader. Modem was not flashed.");
-            for &partition in bootloader_images.keys() {
-                for &slot in SLOTS {
-                    session.results.push(FlashResult {
-                        partition: partition.to_string(),
-                        slot: slot.to_string(),
-                        success: false,
-                        error: "Could not enter bootloader mode".into(),
-                        duration_s: 0.0,
-                    });
-                }
-            }
-            return (session, SessionEnd::Completed);
-        }
-
-        let total_ops2 = bootloader_images.len() * 2;
-        let mut done_ops2 = 0;
-        let flash_start2 = Instant::now();
-        println!(
-            "\n── Stage 2/2: bootloader ({} partitions × 2 slots) ──",
-            bootloader_images.len()
-        );
-        println!();
-
-        let mut sorted_bl: Vec<(&str, &PathBuf)> = bootloader_images
-            .iter()
-            .map(|(k, v)| (*k, *v))
-            .collect();
-        sorted_bl.sort_by_key(|(k, _)| *k);
-
-        for &slot in SLOTS {
-            let (aborted, new_done) = flash_partition_batch(
-                &sorted_bl,
-                serial_ref,
-                slot,
-                total_ops2,
-                done_ops2,
-                flash_start2,
-                DeviceMode::Bootloader,
-                &mut session,
-            );
-            done_ops2 = new_done;
-            if aborted {
-                return (session, SessionEnd::Completed);
-            }
-        }
-
-        let elapsed2 = flash_start2.elapsed().as_secs();
-        println!(
-            "\n  ✓ Stage 2 complete in {}m{:02}s",
-            elapsed2 / 60,
-            elapsed2 % 60
-        );
-    }
-
-    (session, SessionEnd::Completed)
 }
 
 // ---------------------------------------------------------------------------
@@ -1531,19 +986,104 @@ fn flash_partition_with_log(
     result
 }
 
+/// Flags controlling a flash session. Bundled into a struct so call sites use
+/// named fields instead of a string of positional `bool` arguments.
+#[derive(Debug, Clone, Default)]
+pub struct FlashOptions {
+    pub dry_run: bool,
+    pub skip_xbl_abl: bool,
+    pub skip_preloader: bool,
+    /// `Some(true/false)` to force the platform, `None` to auto-detect.
+    pub as_mediatek: Option<bool>,
+    /// Comma-separated partition names the user explicitly wants to skip.
+    pub skip_partitions: String,
+}
+
+/// Outcome of flashing a batch of partitions.
+enum BatchOutcome {
+    Done,
+    Cancelled,
+    Aborted,
+}
+
+/// Flash a list of partitions to one slot, with cancel support and a retry
+/// loop: a failed partition re-asks `on_failure` until it succeeds or the
+/// user chooses Skip/Abort. Critical partitions are never silently skipped.
+#[allow(clippy::too_many_arguments)]
+fn flash_batch_with_log(
+    items: &[(&str, &PathBuf)],
+    slot: &str,
+    serial: Option<&str>,
+    total_ops: usize,
+    done_ops: &mut usize,
+    cancel: &std::sync::atomic::AtomicBool,
+    session: &mut FlashSession,
+    on_log: &dyn Fn(String),
+    on_progress: &dyn Fn(FlashProgress),
+    on_failure: &dyn Fn(&str, &str, &str) -> FailureAction,
+) -> BatchOutcome {
+    for (partition, image_path) in items {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            on_log("Flash cancelled by user".into());
+            return BatchOutcome::Cancelled;
+        }
+        on_progress(FlashProgress {
+            partition: partition.to_string(),
+            slot: slot.to_string(),
+            done: *done_ops,
+            total: total_ops,
+        });
+        *done_ops += 1;
+
+        loop {
+            let result =
+                flash_partition_with_log(image_path, partition, slot, serial, on_log, Some(cancel));
+            let cancelled = result.error == "Cancelled by user";
+            let success = result.success;
+            let error = result.error.clone();
+            session.results.push(result);
+
+            if cancelled {
+                on_log("Flash cancelled by user".into());
+                return BatchOutcome::Cancelled;
+            }
+            if success {
+                break;
+            }
+            match on_failure(partition, slot, &error) {
+                FailureAction::Retry => {
+                    on_log(format!("Retrying {}_{} …", partition, slot));
+                }
+                FailureAction::Skip => {
+                    on_log(format!("Skipping {}_{} — continuing", partition, slot));
+                    break;
+                }
+                FailureAction::Abort => {
+                    on_log(format!("Flash aborted due to {}_{} failure", partition, slot));
+                    return BatchOutcome::Aborted;
+                }
+            }
+        }
+    }
+    BatchOutcome::Done
+}
+
 pub fn run_flash_session_with_log(
     source: &FirmwareSource,
     serial: Option<&str>,
-    dry_run: bool,
-    skip_xbl_abl: bool,
-    skip_preloader: bool,
-    as_mediatek: Option<bool>,
+    options: &FlashOptions,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    skip_partitions: String,
     on_log: &dyn Fn(String),
     on_progress: &dyn Fn(FlashProgress),
     on_failure: &dyn Fn(&str, &str, &str) -> FailureAction,
 ) -> FlashSession {
+    let FlashOptions {
+        dry_run,
+        skip_xbl_abl,
+        skip_preloader,
+        as_mediatek,
+        skip_partitions,
+    } = options.clone();
     let firmware_dir = source.path();
     let mut session = FlashSession::new(source, serial, dry_run);
 
@@ -1588,15 +1128,24 @@ pub fn run_flash_session_with_log(
         return session;
     }
 
+    // Platform is an explicit user choice; the firmware heuristic is only a
+    // legacy fallback for callers that did not ask the user.
     let is_mediatek = match as_mediatek {
         Some(v) => v,
-        None => is_mediatek_build(&filtered),
+        None => {
+            let guess = is_mediatek_build(&filtered);
+            on_log(format!(
+                "Warning: no flash method specified — falling back to firmware heuristic ({})",
+                if guess { "MediaTek" } else { "Snapdragon" }
+            ));
+            guess
+        }
     };
 
     if is_mediatek {
-        on_log("Mediatek device — all partitions will be flashed in fastbootd mode".into());
+        on_log("MediaTek method — all partitions will be flashed in fastbootd mode".into());
     } else {
-        on_log("Qualcomm device — bootloader partitions go through bootloader mode".into());
+        on_log("Snapdragon method — modem goes through bootloader mode".into());
     }
 
     let fastbootd_images: HashMap<&str, &PathBuf> = filtered
@@ -1614,18 +1163,46 @@ pub fn run_flash_session_with_log(
             .collect()
     };
 
-    // -- Stage 1: fastbootd (all partitions on Mediatek, non-bootloader on Qualcomm) --
+    if dry_run {
+        let mut sorted: Vec<&&str> = fastbootd_images.keys().collect();
+        sorted.sort();
+        for name in sorted {
+            let mode = if is_super_partition(name) { "fastbootd, active slot" } else { "fastbootd, both slots" };
+            on_log(format!("[dry-run] would flash: {} ({})", name, mode));
+        }
+        let mut sorted_bl: Vec<&&str> = bootloader_images.keys().collect();
+        sorted_bl.sort();
+        for name in sorted_bl {
+            on_log(format!("[dry-run] would flash: {} (bootloader, both slots)", name));
+        }
+        on_log("[dry-run] No partitions were flashed".into());
+        session.end_reason = Some("DryRun".into());
+        return session;
+    }
+
+    // -- Stage 1: fastbootd (all partitions on MediaTek, non-bootloader on Snapdragon) --
     if !fastbootd_images.is_empty() {
-        let active_slot = get_active_slot(serial);
+        let active_slot = match get_active_slot(serial) {
+            Some(s) => s,
+            None => {
+                on_log("Could not detect the active slot (fastboot getvar current-slot failed).".into());
+                on_log("Refusing to flash: dynamic partitions written to the wrong slot make the device unbootable. Check that the device is in fastbootd and try again.".into());
+                session.aborted = true;
+                session.end_reason = Some("SlotDetectFailed".into());
+                return session;
+            }
+        };
         on_log(format!("Active slot: {}", active_slot.to_uppercase()));
 
-        let super_imgs: HashMap<&&str, &&PathBuf> = fastbootd_images
+        let super_imgs: HashMap<&str, &PathBuf> = fastbootd_images
             .iter()
             .filter(|(k, _)| is_super_partition(k))
+            .map(|(k, v)| (*k, *v))
             .collect();
-        let non_super_imgs: HashMap<&&str, &&PathBuf> = fastbootd_images
+        let non_super_imgs: HashMap<&str, &PathBuf> = fastbootd_images
             .iter()
             .filter(|(k, _)| !is_super_partition(k))
+            .map(|(k, v)| (*k, *v))
             .collect();
 
         let total_ops = non_super_imgs.len() * 2 + super_imgs.len();
@@ -1638,56 +1215,24 @@ pub fn run_flash_session_with_log(
         ));
 
         // Non-super → both slots
-        let mut sorted_non_super: Vec<_> = non_super_imgs.iter().collect();
+        let mut sorted_non_super: Vec<(&str, &PathBuf)> = non_super_imgs.into_iter().collect();
         sorted_non_super.sort_by_key(|(k, _)| *k);
 
         for slot in SLOTS {
-            for (partition, image_path) in &sorted_non_super {
-                if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                    on_log("Flash cancelled by user".into());
+            match flash_batch_with_log(
+                &sorted_non_super, slot, serial, total_ops, &mut done_ops,
+                &cancel, &mut session, on_log, on_progress, on_failure,
+            ) {
+                BatchOutcome::Done => {}
+                BatchOutcome::Cancelled => {
                     session.aborted = true;
                     session.end_reason = Some("Cancelled".into());
                     return session;
                 }
-                on_progress(FlashProgress {
-                    partition: partition.to_string(),
-                    slot: slot.to_string(),
-                    done: done_ops,
-                    total: total_ops,
-                });
-                done_ops += 1;
-                let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log, Some(&cancel));
-                if result.error == "Cancelled by user" {
-                    session.results.push(result);
-                    on_log("Flash cancelled by user".into());
+                BatchOutcome::Aborted => {
                     session.aborted = true;
-                    session.end_reason = Some("Cancelled".into());
+                    session.end_reason = Some("UserAborted".into());
                     return session;
-                }
-                if !result.success {
-                    let err = result.error.clone();
-                    session.results.push(result);
-                    match on_failure(partition, slot, &err) {
-                        FailureAction::Retry => {
-                            on_log(format!("Retrying {}_{} …", partition, slot));
-                            let retry = flash_partition_with_log(image_path, partition, slot, serial, &on_log, Some(&cancel));
-                            session.results.push(retry.clone());
-                            if !retry.success {
-                                on_log(format!("Retry of {}_{} also failed", partition, slot));
-                            }
-                        }
-                        FailureAction::Skip => {
-                            on_log(format!("Skipping {}_{} — continuing", partition, slot));
-                            continue;
-                        }
-                        FailureAction::Abort => {
-                            on_log(format!("Flash aborted due to {}_{} failure", partition, slot));
-                            session.end_reason = Some("UserAborted".into());
-                            return session;
-                        }
-                    }
-                } else {
-                    session.results.push(result);
                 }
             }
         }
@@ -1695,62 +1240,26 @@ pub fn run_flash_session_with_log(
         // Super → active slot only
         if !super_imgs.is_empty() {
             on_log("Clearing super partition...".into());
-            let super_names: Vec<String> = super_imgs.keys()
-                .map(|k| k.to_string())
-                .collect();
-            if !super_names.is_empty() {
-                wipe_super_with_log(serial, &super_names, &|msg| on_log(msg));
-            }
+            let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
+            wipe_super_with_log(serial, &super_names, &|msg| on_log(msg));
 
-            let mut sorted_super: Vec<_> = super_imgs.iter().collect();
+            let mut sorted_super: Vec<(&str, &PathBuf)> = super_imgs.into_iter().collect();
             sorted_super.sort_by_key(|(k, _)| *k);
 
-            for (partition, image_path) in &sorted_super {
-                if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                    on_log("Flash cancelled by user".into());
+            match flash_batch_with_log(
+                &sorted_super, &active_slot, serial, total_ops, &mut done_ops,
+                &cancel, &mut session, on_log, on_progress, on_failure,
+            ) {
+                BatchOutcome::Done => {}
+                BatchOutcome::Cancelled => {
                     session.aborted = true;
                     session.end_reason = Some("Cancelled".into());
                     return session;
                 }
-                on_progress(FlashProgress {
-                    partition: partition.to_string(),
-                    slot: active_slot.clone(),
-                    done: done_ops,
-                    total: total_ops,
-                });
-                done_ops += 1;
-                let result = flash_partition_with_log(image_path, partition, &active_slot, serial, &on_log, Some(&cancel));
-                if result.error == "Cancelled by user" {
-                    session.results.push(result);
-                    on_log("Flash cancelled by user".into());
+                BatchOutcome::Aborted => {
                     session.aborted = true;
-                    session.end_reason = Some("Cancelled".into());
+                    session.end_reason = Some("UserAborted".into());
                     return session;
-                }
-                if !result.success {
-                    let err = result.error.clone();
-                    session.results.push(result);
-                    match on_failure(partition, &active_slot, &err) {
-                        FailureAction::Retry => {
-                            on_log(format!("Retrying {}_{} …", partition, &active_slot));
-                            let retry = flash_partition_with_log(image_path, partition, &active_slot, serial, &on_log, Some(&cancel));
-                            session.results.push(retry.clone());
-                            if !retry.success {
-                                on_log(format!("Retry of {}_{} also failed", partition, &active_slot));
-                            }
-                        }
-                        FailureAction::Skip => {
-                            on_log(format!("Skipping {}_{} — continuing", partition, &active_slot));
-                            continue;
-                        }
-                        FailureAction::Abort => {
-                            on_log(format!("Flash aborted due to {}_{} failure", partition, &active_slot));
-                            session.end_reason = Some("UserAborted".into());
-                            return session;
-                        }
-                    }
-                } else {
-                    session.results.push(result);
                 }
             }
         }
@@ -1759,7 +1268,7 @@ pub fn run_flash_session_with_log(
         on_log(format!("fastbootd stage complete in {}m{:02}s", elapsed / 60, elapsed % 60));
     }
 
-    // -- Stage 2: bootloader (Qualcomm only) --
+    // -- Stage 2: bootloader (Snapdragon only) --
     if !bootloader_images.is_empty() {
         on_log("Rebooting to bootloader for modem/bootloader flash...".into());
         if !enter_bootloader(serial) {
@@ -1784,55 +1293,23 @@ pub fn run_flash_session_with_log(
         let flash_start2 = std::time::Instant::now();
         on_log(format!("Stage 2/2: bootloader — {} partitions × 2 slots", bootloader_images.len()));
 
-        let mut sorted_bl: Vec<_> = bootloader_images.iter().collect();
+        let mut sorted_bl: Vec<(&str, &PathBuf)> = bootloader_images.into_iter().collect();
         sorted_bl.sort_by_key(|(k, _)| *k);
-        for &slot in SLOTS {
-            for (partition, image_path) in &sorted_bl {
-                if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                    on_log("Flash cancelled by user".into());
+        for slot in SLOTS {
+            match flash_batch_with_log(
+                &sorted_bl, slot, serial, total_ops2, &mut done_ops2,
+                &cancel, &mut session, on_log, on_progress, on_failure,
+            ) {
+                BatchOutcome::Done => {}
+                BatchOutcome::Cancelled => {
                     session.aborted = true;
                     session.end_reason = Some("Cancelled".into());
                     return session;
                 }
-                on_progress(FlashProgress {
-                    partition: partition.to_string(),
-                    slot: slot.to_string(),
-                    done: done_ops2,
-                    total: total_ops2,
-                });
-                done_ops2 += 1;
-                let result = flash_partition_with_log(image_path, partition, slot, serial, &on_log, Some(&cancel));
-                if result.error == "Cancelled by user" {
-                    session.results.push(result);
-                    on_log("Flash cancelled by user".into());
+                BatchOutcome::Aborted => {
                     session.aborted = true;
-                    session.end_reason = Some("Cancelled".into());
+                    session.end_reason = Some("UserAborted".into());
                     return session;
-                }
-                if !result.success {
-                    let err = result.error.clone();
-                    session.results.push(result);
-                    match on_failure(partition, slot, &err) {
-                        FailureAction::Retry => {
-                            on_log(format!("Retrying {}_{} …", partition, slot));
-                            let retry = flash_partition_with_log(image_path, partition, slot, serial, &on_log, Some(&cancel));
-                            session.results.push(retry.clone());
-                            if !retry.success {
-                                on_log(format!("Retry of {}_{} also failed", partition, slot));
-                            }
-                        }
-                        FailureAction::Skip => {
-                            on_log(format!("Skipping {}_{} — continuing", partition, slot));
-                            continue;
-                        }
-                        FailureAction::Abort => {
-                            on_log(format!("Flash aborted due to {}_{} failure", partition, slot));
-                            session.end_reason = Some("UserAborted".into());
-                            return session;
-                        }
-                    }
-                } else {
-                    session.results.push(result);
                 }
             }
         }

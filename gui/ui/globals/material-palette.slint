@@ -63,6 +63,10 @@ export global MaterialPalette {
     // ── Overlay & Shadow ───────────────────────────────────────────────────
     in-out property <color> overlay-backdrop:       Palette.color-scheme == ColorScheme.dark ? #000000BB : #00000077;
     in-out property <color> overlay-backdrop-heavy: Palette.color-scheme == ColorScheme.dark ? #000000DD : #00000099;
+    // MD3 scrim: 32% black for light theme (spec value).
+    // In dark theme the surface is already near-black so any black scrim renders
+    // as solid black — use transparent and let the dialog border do the work.
+    in-out property <color> scrim:                  Palette.color-scheme == ColorScheme.dark ? #00000000 : #00000052;
     in-out property <color> drop-shadow:            Palette.color-scheme == ColorScheme.dark ? #00000060 : #00000030;
     in-out property <color> drop-shadow-heavy:      Palette.color-scheme == ColorScheme.dark ? #00000080 : #00000050;
 }

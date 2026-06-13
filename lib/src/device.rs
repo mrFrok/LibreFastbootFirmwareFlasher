@@ -14,7 +14,9 @@ use crate::utils::run_cmd;
 
 const CABLE_SPEED_THRESHOLD_MB: f64 = 1.0;
 const CABLE_TEST_PAYLOAD_MB: usize = 8;
-const POLL_INTERVAL: u64 = 3;
+/// Device polling interval in milliseconds. `fastboot devices` is a cheap
+/// local USB enumeration, so polling twice a second keeps detection snappy.
+const POLL_INTERVAL_MS: u64 = 500;
 const BATTERY_MIN_LEVEL: i32 = 30;
 
 // ---------------------------------------------------------------------------
@@ -104,7 +106,7 @@ impl PreFlashCheck {
 
 /// Return serial numbers of devices in fastboot/fastbootd mode.
 pub fn list_fastboot_devices() -> Vec<String> {
-    let r = run_cmd(&["fastboot", "devices"], 10);
+    let r = run_cmd(&["fastboot", "devices"], 5);
     if r.code != 0 || r.stdout.is_empty() {
         return Vec::new();
     }
@@ -123,7 +125,7 @@ pub fn list_fastboot_devices() -> Vec<String> {
 
 /// Return serial numbers of devices in fastbootd mode only.
 pub fn list_fastbootd_devices() -> Vec<String> {
-    let r = run_cmd(&["fastboot", "devices"], 10);
+    let r = run_cmd(&["fastboot", "devices"], 5);
     if r.code != 0 || r.stdout.is_empty() {
         return Vec::new();
     }
@@ -142,7 +144,7 @@ pub fn list_fastbootd_devices() -> Vec<String> {
 
 /// Return serial numbers of devices reachable via adb.
 pub fn list_adb_devices() -> Vec<String> {
-    let r = run_cmd(&["adb", "devices"], 10);
+    let r = run_cmd(&["adb", "devices"], 5);
     if r.code != 0 {
         return Vec::new();
     }
@@ -182,14 +184,18 @@ pub fn reboot_to_fastbootd(serial: Option<&str>) -> bool {
 /// Poll fastboot devices until one appears or timeout expires.
 pub fn wait_for_device(timeout: u64) -> Option<String> {
     let deadline = Instant::now() + Duration::from_secs(timeout);
+    let mut last_log = Instant::now();
     while Instant::now() < deadline {
         let serials = list_fastboot_devices();
         if !serials.is_empty() {
             return serials.into_iter().next();
         }
-        let remaining = (deadline - Instant::now()).as_secs();
-        info!("No device found — retrying … ({}s remaining)", remaining);
-        thread::sleep(Duration::from_secs(POLL_INTERVAL));
+        if last_log.elapsed().as_secs() >= 5 {
+            let remaining = (deadline - Instant::now()).as_secs();
+            info!("No device found — retrying … ({}s remaining)", remaining);
+            last_log = Instant::now();
+        }
+        thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
     }
     None
 }
@@ -267,87 +273,6 @@ pub fn get_device_info(serial: Option<&str>) -> Option<DeviceInfo> {
     })
 }
 
-/// Detect if device is MediaTek-based via fastboot getvar.
-/// 
-/// Checks `has-slot:occt` (MediaTek) vs `has-slot:ocdt` (Qualcomm).
-/// These are partition slot variables that indicate SoC type.
-/// Returns true if occt is present (MediaTek), false if ocdt (Qualcomm).
-pub fn is_device_mediatek(serial: Option<&str>) -> Option<bool> {
-    let getvar = |var: &str| -> Option<String> {
-        let mut cmd: Vec<&str> = vec!["fastboot"];
-        let s;
-        if let Some(ser) = serial {
-            s = ser.to_string();
-            cmd.push("-s");
-            cmd.push(&s);
-        }
-        cmd.extend(&["getvar", var]);
-        let r = run_cmd(&cmd, 3);
-        let output = if r.stderr.is_empty() { &r.stdout } else { &r.stderr };
-        if output.is_empty() { return None; }
-        for line in output.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.contains("Finished") || trimmed.contains("total time") {
-                continue;
-            }
-            // (bootloader) has-slot:ocdt: yes  → value after last ": "
-            if let Some((_, val)) = trimmed.rsplit_once(": ") {
-                let v = val.trim();
-                if !v.is_empty() {
-                    return Some(v.to_string());
-                }
-            }
-            // getvar:has-slot:ocdt yes  → value after last space
-            if let Some((_, val)) = trimmed.rsplit_once(' ') {
-                let v = val.trim();
-                if !v.is_empty() && !v.contains(':') {
-                    return Some(v.to_string());
-                }
-            }
-        }
-        None
-    };
-
-    // Check has-slot:occt (MediaTek partition)
-    if let Some(val) = getvar("has-slot:occt")
-        && (val.to_lowercase() == "yes" || val == "true" || val == "1") {
-            info!("Detected MediaTek device (has-slot:occt = {})", val);
-            return Some(true);
-        }
-    
-    // Check has-slot:ocdt (Qualcomm partition)
-    if let Some(val) = getvar("has-slot:ocdt")
-        && (val.to_lowercase() == "yes" || val == "true" || val == "1") {
-            info!("Detected Qualcomm device (has-slot:ocdt = {})", val);
-            return Some(false);
-        }
-    
-    // Fallback: check partition-type:occt/ocdt
-    if getvar("partition-type:occt").is_some() {
-        info!("Detected MediaTek device (partition-type:occt present)");
-        return Some(true);
-    }
-    if getvar("partition-type:ocdt").is_some() {
-        info!("Detected Qualcomm device (partition-type:ocdt present)");
-        return Some(false);
-    }
-    
-    // Last resort: full getvar all with longer timeout
-    if let Some(device_info) = get_device_info(serial) {
-        for (key, value) in &device_info.raw {
-            let combined = format!("{}:{}", key, value).to_lowercase();
-            if combined.contains("mtk") || combined.contains("mediatek") {
-                info!("Detected MediaTek device (variable '{}' contains 'mtk')", key);
-                return Some(true);
-            }
-        }
-    }
-    
-    // Cannot determine — assume Qualcomm (more common in supported devices)
-    info!("Cannot determine device type from fastboot getvar (assuming Qualcomm)");
-    Some(false)
-}
-
 // ---------------------------------------------------------------------------
 // Cable speed test
 // ---------------------------------------------------------------------------
@@ -380,10 +305,22 @@ pub fn test_cable_speed(serial: Option<&str>) -> CableTestResult {
     let _ = fs::remove_file(&tmp);
 
     if r.code != 0 {
+        let stderr_lower = r.stderr.to_lowercase();
+        let is_unsupported = stderr_lower.contains("unknown command")
+            || stderr_lower.contains("not supported")
+            || stderr_lower.contains("not implemented")
+            || stderr_lower.contains("no such command");
+        if is_unsupported {
+            return CableTestResult {
+                passed: true,
+                speed_mbs: 0.0,
+                error: "fastboot stage not supported on this device (speed test skipped)".into(),
+            };
+        }
         return CableTestResult {
-            passed: true,
+            passed: false,
             speed_mbs: 0.0,
-            error: "fastboot stage not supported on this device (speed test skipped)".into(),
+            error: format!("Cable speed test failed: {}", r.stderr),
         };
     }
     if elapsed <= 0.0 {
@@ -462,10 +399,16 @@ pub fn run_pre_flash_checks(serial: Option<&str>) -> PreFlashCheck {
     let cable = test_cable_speed(Some(&ser));
     c.cable_ok = cable.passed;
     if !cable.passed {
-        c.warnings.push(format!(
-            "Slow cable ({:.2} MB/s). Use USB 3.0.",
-            cable.speed_mbs
-        ));
+        // ready() treats a failed cable test as a hard error, so report it in
+        // errors — otherwise the user sees "checks failed" with no reason listed.
+        if cable.error.is_empty() {
+            c.errors.push(format!(
+                "Cable too slow ({:.2} MB/s, need ≥{:.1} MB/s). Use a different cable or a USB 3.0 port.",
+                cable.speed_mbs, CABLE_SPEED_THRESHOLD_MB
+            ));
+        } else {
+            c.errors.push(cable.error.clone());
+        }
     }
     c.cable_result = cable;
 

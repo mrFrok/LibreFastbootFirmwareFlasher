@@ -213,8 +213,9 @@ fn parse_aria2c_progress(line: &str, expires_ts: u64) -> Option<DownloadProgress
         (0, String::new())
     };
 
+    let percent = percent?;
     Some(DownloadProgress {
-        percent: percent.unwrap_or(0.0),
+        percent,
         speed,
         eta,
         downloaded,

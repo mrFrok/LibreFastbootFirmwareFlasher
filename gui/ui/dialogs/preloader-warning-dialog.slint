@@ -14,7 +14,7 @@ export component PreloaderWarningDialog {
         visible: show;
         opacity: show ? 1.0 : 0.0;
         animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 110; background: transparent; width: 100%; height: 100%; TouchArea { }
+        z: 110; background: MaterialPalette.scrim; width: 100%; height: 100%; TouchArea { }
 
         VerticalLayout { alignment: center;
         HorizontalLayout { alignment: center;
@@ -24,15 +24,15 @@ export component PreloaderWarningDialog {
             background: MaterialPalette.surface-container-high;
             animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
             animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            drop-shadow-blur: 24px; drop-shadow-color: #00000050; drop-shadow-offset-y: 8px;
+            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
 
             VerticalLayout { padding: 28px; spacing: 12px;
                 HorizontalLayout { spacing: 12px;
-                    Text { text: "⚠"; font-size: 24px; color: #f0b800; vertical-alignment: center; }
+                    Text { text: "⚠"; font-size: 24px; color: MaterialPalette.warning; vertical-alignment: center; }
                     Text {
                         text: Tr.preloader-warning-title;
                         font-size: 18px; font-weight: 700;
-                        color: #f0b800; vertical-alignment: center;
+                        color: MaterialPalette.warning; vertical-alignment: center;
                     }
                 }
                 Text {
@@ -47,7 +47,7 @@ export component PreloaderWarningDialog {
                 VerticalLayout { spacing: 6px;
                     Text {
                         text: Tr.preloader-skip-hint;
-                        font-size: 12px; color: #f0b800; wrap: word-wrap;
+                        font-size: 12px; color: MaterialPalette.warning; wrap: word-wrap;
                     }
                     TouchArea {
                         height: 24px;

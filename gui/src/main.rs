@@ -16,6 +16,10 @@ slint::include_modules!();
 #[derive(Debug, Clone)]
 enum LogLevel { Info, Warn, Error, Success }
 
+/// Flash method — always an explicit user choice, never auto-detected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FlashMethod { Snapdragon, Mtk }
+
 #[derive(Debug, Clone)]
 enum WMsg {
     Log { level: LogLevel, message: String, tab: u8 },
@@ -29,9 +33,9 @@ enum WMsg {
     DlProgress { percent: f32, speed: String, eta: String, downloaded: String, total: String, raw_line: String },
     Downloading(bool),
     TestStep { step: i32, status: String },
-    ArbWarning { version: u32, as_mediatek: Option<bool> },
-    ArbDeviceWarning { path: String, is_source: bool, device_arb: u32 },
-    PreloaderWarning { path: String, is_source: bool },
+    /// Firmware is extracted/validated; GUI must now run the warning dialogs
+    /// (ARB for Snapdragon, preloader for MediaTek) before the final confirm.
+    FlashPrepared { dir: String, is_source: bool, arb_version: i32, has_preloader: bool },
     ReadyToFlash,
     CableTestProgress { step: u8, total: u8, status: String },
     FlashFailure { partition: String, slot: String, error: String, response: std::sync::mpsc::Sender<lfff_lib::flasher::FailureAction> },
@@ -40,17 +44,18 @@ enum WMsg {
 
 #[derive(Debug)]
 enum Cmd {
-    CheckDevice, Flash { path: String, skip_arb: bool, skip_partitions: String },
+    CheckDevice,
+    /// Extract (if needed) and validate firmware; reply with FlashPrepared.
+    PrepareFlash { path: String, is_source: bool, method: FlashMethod },
+    /// Run the actual flash after all confirmations. `dir` is the prepared
+    /// (already extracted) firmware directory.
+    StartFlash { dir: String, is_source: bool, method: FlashMethod, skip_xbl_abl: bool, skip_preloader: bool, skip_partitions: String },
     FlashSingle { path: String, partition: Option<String>, reboot_choice: u8 },
     CancelFlash, CheckDeps, InstallDeps, Download { url: String }, Extract { path: String },
     DriverTest, RebootTo(String), CancelDownload,
     PostFlashReboot, PostFlashWipe,
     SetActiveSlot { slot: String },
-    ConfirmArbAndFlash { path: String, skip_xbl_abl: bool, skip_partitions: String },
-    ConfirmArbDeviceFlash { path: String, is_source: bool, skip_xbl_abl: bool, skip_partitions: String },
-    ConfirmPreloaderFlash { path: String, is_source: bool, skip_preloader: bool, skip_partitions: String },
     RebootForFlash { reboot_choice: u8 },
-    FlashFromSource { dir: String, skip_partitions: String },
     CableTest,
     RetryFlash { failed_partitions: Vec<String> },
     CheckForUpdates,
@@ -97,7 +102,13 @@ fn with_captured_stdout<F: FnOnce()>(tx: &mpsc::Sender<WMsg>, tab: u8, f: F) {
             f();
             return;
         }
-        libc::dup2(wr_fd, libc::STDOUT_FILENO);
+        if libc::dup2(wr_fd, libc::STDOUT_FILENO) < 0 {
+            libc::close(rd_fd);
+            libc::close(wr_fd);
+            libc::close(saved);
+            f();
+            return;
+        }
         libc::close(wr_fd);
 
         struct StdoutGuard { saved: libc::c_int }

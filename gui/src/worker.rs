@@ -3,7 +3,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use super::{Cmd, WMsg, LogLevel};
+use super::{Cmd, WMsg, LogLevel, FlashMethod};
 
 fn log(tx: &mpsc::Sender<WMsg>, l: LogLevel, tab: u8, m: impl Into<String>) {
     tx.send(WMsg::Log { level: l, message: m.into(), tab }).ok();
@@ -83,28 +83,17 @@ fn extract_and_watch(
     Some(r.output_dir)
 }
 
-fn wait_for_fastboot(tx: &mpsc::Sender<WMsg>, tab: u8, timeout_secs: u64) -> bool {
+/// Wait for a device in fastboot/fastbootd mode. Checks immediately and then
+/// polls at a short interval (500ms, inside the lib helper) — no fixed sleeps.
+fn wait_for_fastboot(tx: &mpsc::Sender<WMsg>, tab: u8, timeout_secs: u64, serial: Option<&str>) -> bool {
     log(tx, LogLevel::Info, tab, "Waiting for device in fastboot...");
-    for i in 1..=timeout_secs {
-        std::thread::sleep(Duration::from_secs(1));
-        let found = std::process::Command::new("fastboot")
-            .args(["devices"])
-            .output()
-            .map(|o| {
-                let s = String::from_utf8_lossy(&o.stdout);
-                s.lines().any(|l| !l.trim().is_empty() && !l.starts_with("List"))
-            })
-            .unwrap_or(false);
-        if found {
-            log(tx, LogLevel::Success, tab, "Device found in fastboot!");
-            return true;
-        }
-        if i % 5 == 0 {
-            log(tx, LogLevel::Info, tab, format!("Still waiting... ({}/{}s)", i, timeout_secs));
-        }
+    if lfff_lib::flasher::wait_for_any_fastboot(serial, timeout_secs) {
+        log(tx, LogLevel::Success, tab, "Device found in fastboot!");
+        true
+    } else {
+        log(tx, LogLevel::Error, tab, "Timeout waiting for device in fastboot");
+        false
     }
-    log(tx, LogLevel::Error, tab, "Timeout waiting for device in fastboot");
-    false
 }
 
 fn do_flash(
@@ -112,10 +101,7 @@ fn do_flash(
     source: &lfff_lib::flasher::FirmwareSource,
     serial: &Option<String>,
     device_product: &str,
-    skip_xbl_abl: bool,
-    skip_preloader: bool,
-    as_mediatek: Option<bool>,
-    skip_partitions: String,
+    options: lfff_lib::flasher::FlashOptions,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     let sref = serial.as_deref();
@@ -124,8 +110,7 @@ fn do_flash(
     let tx_fail = tx.clone();
 
     let session = lfff_lib::flasher::run_flash_session_with_log(
-        source, sref, false, skip_xbl_abl, skip_preloader, as_mediatek,
-        cancel, skip_partitions,
+        source, sref, &options, cancel,
         &|msg| { tx_log.send(WMsg::Log { level: LogLevel::Info, message: msg, tab: 2 }).ok(); },
         &|p| {
             let fraction = if p.total > 0 { p.done as f32 / p.total as f32 } else { 0.0 };
@@ -151,7 +136,7 @@ fn do_flash(
         } else {
             LogLevel::Warn
         };
-        log(tx, level, 2, &format!("{}_{}: {}", r.partition, r.slot, r.error));
+        log(tx, level, 2, format!("{}_{}: {}", r.partition, r.slot, r.error));
     }
 
     // Write flash history BEFORE sending FlashComplete
@@ -200,7 +185,13 @@ fn do_flash(
     let detail_lines: Vec<String> = session.failed().iter()
         .map(|r| format!("{}_{}: {}", r.partition, r.slot, r.error))
         .collect();
-    let msg = if failed > 0 {
+    // A user-initiated cancel always reports as cancelled, even though the
+    // killed fastboot process leaves a failed result behind — otherwise the
+    // user gets an error dialog for an action they asked for.
+    let was_cancelled = session.end_reason.as_deref() == Some("Cancelled");
+    let msg = if was_cancelled {
+        "Flash cancelled by user".into()
+    } else if failed > 0 {
         let crit = if crit_failed > 0 { format!("\n⚠ {} critical partition(s) failed!", crit_failed) } else { String::new() };
         format!("{}/{} failed:{}\n{}", failed, total, crit, detail_lines.join("\n"))
     } else if session.aborted {
@@ -209,7 +200,9 @@ fn do_flash(
         format!("Done! {}/{} OK", total, total)
     };
     let failed_partitions: Vec<String> = session.failed().iter().map(|r| r.partition.clone()).collect();
-    let log_msg = if failed > 0 {
+    let log_msg = if was_cancelled {
+        "Flash cancelled".into()
+    } else if failed > 0 {
         format!("{}/{} partitions failed", failed, total)
     } else if session.aborted {
         "Flash aborted".into()
@@ -226,11 +219,6 @@ pub fn worker(
     flash_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     let mut serial: Option<String> = None;
-    #[allow(unused_assignments)]
-    let mut skip_xbl_abl: bool = false;
-    #[allow(unused_assignments)]
-    let mut skip_preloader: bool = false;
-    let mut as_mediatek: Option<bool> = None;
     let mut current_device_product = String::new();
     let mut current_source: Option<lfff_lib::flasher::FirmwareSource> = None;
     let dl_cancel_token: std::sync::Arc<std::sync::Mutex<Option<lfff_lib::downloader::CancelToken>>> =
@@ -241,13 +229,15 @@ pub fn worker(
         Cmd::CheckDevice => {
                     log(&tx, LogLevel::Info, 0, "Searching for device...");
 
-                    let adb_out = std::process::Command::new("adb").args(["devices"]).output();
+                    // run_cmd enforces a timeout — a hung adb daemon must not
+                    // freeze the worker thread forever.
+                    let r = lfff_lib::utils::run_cmd(&["adb", "devices"], 5);
                     let mut adb_device = None;
-                    if let Ok(o) = &adb_out {
-                        let out = String::from_utf8_lossy(&o.stdout);
-                        for line in out.lines().skip(1) {
-                            if line.contains("\tdevice") {
-                                adb_device = Some(line.split('\t').next().unwrap_or("").to_string());
+                    if r.code == 0 {
+                        for line in r.stdout.lines().skip(1) {
+                            let parts: Vec<&str> = line.split_whitespace().collect();
+                            if parts.len() >= 2 && parts[1] == "device" {
+                                adb_device = Some(parts[0].to_string());
                                 break;
                             }
                         }
@@ -257,20 +247,30 @@ pub fn worker(
                         log(&tx, LogLevel::Success, 0, format!("ADB device: {}", ser));
                         serial = Some(ser.clone());
 
-                        let getprop = |prop: &str| -> String {
-                            std::process::Command::new("adb").args(["shell", "getprop", prop]).output()
-                                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                                .unwrap_or_default()
+                        // One adb round-trip for all properties instead of six
+                        // separate `adb shell` invocations (each costs a process
+                        // spawn + USB round-trip). `-s` keeps it working with
+                        // multiple devices connected.
+                        let script = "echo model=$(getprop ro.product.model); \
+                                      echo device=$(getprop ro.product.device); \
+                                      echo build=$(getprop ro.build.display.id); \
+                                      echo android=$(getprop ro.build.version.release); \
+                                      echo slot=$(getprop ro.boot.slot_suffix); \
+                                      echo battery=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)";
+                        let r = lfff_lib::utils::run_cmd(&["adb", "-s", ser, "shell", script], 5);
+                        let get = |key: &str| -> String {
+                            r.stdout.lines()
+                                .find_map(|l| l.trim().strip_prefix(&format!("{}=", key)))
+                                .unwrap_or("")
+                                .trim()
+                                .to_string()
                         };
-                        let model = getprop("ro.product.model");
-                        let product = getprop("ro.product.device");
-                        let build = getprop("ro.build.display.id");
-                        let android = getprop("ro.build.version.release");
-                        let slot = getprop("ro.boot.slot_suffix");
-                        let battery = std::process::Command::new("adb")
-                            .args(["shell", "cat", "/sys/class/power_supply/battery/capacity"]).output()
-                            .map(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<i32>().unwrap_or(-1))
-                            .unwrap_or(-1);
+                        let model = get("model");
+                        let product = get("device");
+                        let build = get("build");
+                        let android = get("android");
+                        let slot = get("slot");
+                        let battery = get("battery").parse::<i32>().unwrap_or(-1);
 
                         let name = if !model.is_empty() { model.clone() } else { product.clone() };
                         current_device_product = if !product.is_empty() { product.clone() } else { name.clone() };
@@ -318,17 +318,31 @@ pub fn worker(
         Cmd::RebootForFlash { reboot_choice } => {
                     let ready = match reboot_choice {
                         1 => {
+                            // Active wait, no fixed sleep: the device leaves adb
+                            // immediately, and `fastboot devices` won't list it
+                            // until fastbootd is actually up — polling right away
+                            // is safe and detects the device as soon as it boots.
                             log(&tx, LogLevel::Info, 2, "Rebooting to fastbootd via ADB...");
-                            let _ = std::process::Command::new("adb").args(["reboot", "fastboot"]).status();
+                            let mut args: Vec<&str> = Vec::new();
+                            let ser_s;
+                            if let Some(s) = &serial { ser_s = s.clone(); args.extend(["-s", ser_s.as_str()]); }
+                            args.extend(["reboot", "fastboot"]);
+                            let _ = std::process::Command::new("adb").args(&args).status();
                             log(&tx, LogLevel::Info, 2, "Waiting for device to enter fastbootd...");
-                            std::thread::sleep(Duration::from_secs(5));
                             lfff_lib::flasher::wait_for_fastbootd(serial.as_deref(), 90)
                         }
                         2 => {
+                            // No fixed sleep: the device is currently in
+                            // bootloader ("fastboot"), and we wait specifically
+                            // for "fastbootd" — the stale enumeration can't
+                            // produce a false positive.
                             log(&tx, LogLevel::Info, 2, "Rebooting to fastbootd via fastboot...");
-                            let _ = std::process::Command::new("fastboot").args(["reboot", "fastboot"]).status();
+                            let mut args: Vec<&str> = Vec::new();
+                            let ser_s;
+                            if let Some(s) = &serial { ser_s = s.clone(); args.extend(["-s", ser_s.as_str()]); }
+                            args.extend(["reboot", "fastboot"]);
+                            let _ = std::process::Command::new("fastboot").args(&args).status();
                             log(&tx, LogLevel::Info, 2, "Waiting for device to enter fastbootd...");
-                            std::thread::sleep(Duration::from_secs(4));
                             lfff_lib::flasher::wait_for_fastbootd(serial.as_deref(), 90)
                         }
                         3 => {
@@ -355,12 +369,17 @@ pub fn worker(
                     }
                 }
 
-        Cmd::Flash { path, skip_arb, skip_partitions } => {
+        Cmd::PrepareFlash { path, is_source, method } => {
                     flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                     tx.send(WMsg::Flashing(true)).ok();
-                    log(&tx, LogLevel::Info, 2, "Starting flash...");
+                    let method_name = match method {
+                        FlashMethod::Snapdragon => "Snapdragon",
+                        FlashMethod::Mtk => "MediaTek",
+                    };
+                    log(&tx, LogLevel::Info, 2, format!("Flash method: {} (selected by user)", method_name));
+                    log(&tx, LogLevel::Info, 2, "Preparing firmware...");
 
-                    let dir = if path.ends_with(".zip") {
+                    let dir = if !is_source && path.ends_with(".zip") {
                         match extract_and_watch(&path, &tx, 2) {
                             Some(d) => d,
                             None => continue,
@@ -369,131 +388,13 @@ pub fn worker(
                         Path::new(&path).to_path_buf()
                     };
 
-                    skip_xbl_abl = false;
-                    skip_preloader = false;
-                    let images = lfff_lib::flasher::collect_images(&dir);
-                    as_mediatek = lfff_lib::flasher::detect_device_type(serial.as_deref(), &images);
-
-                    if as_mediatek == Some(true) && lfff_lib::flasher::is_mediatek_build(&images) {
-                        log(&tx, LogLevel::Info, 2, "Mediatek platform detected (preloader found)");
-                        skip_xbl_abl = true;
-                    } else if as_mediatek == Some(true) {
-                        log(&tx, LogLevel::Info, 2, "Mediatek platform detected (no preloader in firmware)");
-                        skip_xbl_abl = true;
-                    } else if as_mediatek == Some(false) {
-                        log(&tx, LogLevel::Info, 2, "Qualcomm platform detected");
+                    let images = if is_source {
+                        lfff_lib::flasher::collect_images_from_source(&dir)
                     } else {
-                        log(&tx, LogLevel::Info, 2, "Platform detection inconclusive — proceeding with default logic");
-                    }
-
-                    if !skip_arb && as_mediatek != Some(true)
-                        && let Some(xbl) = lfff_lib::arb::find_xbl_config(&dir) {
-                            let a = lfff_lib::arb::extract_arb_from_xbl(&xbl);
-                            let ver = a.version.unwrap_or(0);
-                            if ver > 0 {
-                                tx.send(WMsg::Flashing(false)).ok();
-                                tx.send(WMsg::ArbWarning { version: ver, as_mediatek }).ok();
-                                log(&tx, LogLevel::Warn, 2, format!("ARB={} — anti-rollback will be raised, waiting for confirmation...", ver));
-                                continue;
-                            }
-                            tx.send(WMsg::Flashing(false)).ok();
-                            tx.send(WMsg::ArbDeviceWarning { path: path.clone(), is_source: false, device_arb: 0 }).ok();
-                            log(&tx, LogLevel::Warn, 2, "Firmware ARB=0 — device ARB unknown, may be unsafe to flash");
-                            continue;
-                        }
-
-                    if as_mediatek == Some(true) && lfff_lib::flasher::is_mediatek_build(&images) {
-                        tx.send(WMsg::Flashing(false)).ok();
-                        tx.send(WMsg::PreloaderWarning { path: path.clone(), is_source: false }).ok();
-                        log(&tx, LogLevel::Warn, 2, "preloader detected — Mediatek firmware, waiting for confirmation...");
-                        continue;
-                    }
-
-                    do_flash(&tx, &lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()),
-                        &serial, &current_device_product, skip_xbl_abl, skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
-                    current_source = Some(lfff_lib::flasher::FirmwareSource::Extracted(dir.clone()));
-                }
-
-        Cmd::ConfirmArbAndFlash { path, skip_xbl_abl: cmd_skip_xbl_abl, skip_partitions } => {
-                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
-                    tx.send(WMsg::Flashing(true)).ok();
-
-                    let dir = if path.ends_with(".zip") {
-                        match extract_and_watch(&path, &tx, 2) {
-                            Some(d) => d,
-                            None => continue,
-                        }
-                    } else {
-                        Path::new(&path).to_path_buf()
+                        lfff_lib::flasher::collect_images(&dir)
                     };
-
-                    log(&tx, LogLevel::Info, 2, "ARB warning confirmed by user, proceeding...");
-                    let src = lfff_lib::flasher::FirmwareSource::Extracted(dir.clone());
-                    do_flash(&tx, &src, &serial, &current_device_product, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
-                    current_source = Some(src);
-                }
-
-        Cmd::ConfirmArbDeviceFlash { path, is_source, skip_xbl_abl: cmd_skip_xbl_abl, skip_partitions } => {
-                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
-                    tx.send(WMsg::Flashing(true)).ok();
-
-                    if is_source {
-                        log(&tx, LogLevel::Info, 2, "Device ARB warning confirmed by user, flashing from source...");
-                        let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&path));
-                        do_flash(&tx, &d, &serial, &current_device_product, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
-                        current_source = Some(d);
-                    } else {
-                        log(&tx, LogLevel::Info, 2, "Device ARB warning confirmed by user, proceeding...");
-                        let dir = if path.ends_with(".zip") {
-                            match extract_and_watch(&path, &tx, 2) {
-                                Some(d) => d,
-                                None => continue,
-                            }
-                        } else {
-                            Path::new(&path).to_path_buf()
-                        };
-                        let src = lfff_lib::flasher::FirmwareSource::Extracted(dir);
-                        do_flash(&tx, &src, &serial, &current_device_product, cmd_skip_xbl_abl, false, as_mediatek, skip_partitions, flash_cancel.clone());
-                        current_source = Some(src);
-                    }
-                }
-
-        Cmd::ConfirmPreloaderFlash { path, is_source, skip_preloader: cmd_skip_preloader, skip_partitions } => {
-                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
-                    tx.send(WMsg::Flashing(true)).ok();
-                    log(&tx, LogLevel::Info, 2, "Preloader warning confirmed by user, proceeding...");
-
-                    if is_source {
-                        let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&path));
-                        do_flash(&tx, &d, &serial, &current_device_product, true, cmd_skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
-                        current_source = Some(d);
-                    } else {
-                        let dir = if path.ends_with(".zip") {
-                            match extract_and_watch(&path, &tx, 2) {
-                                Some(d) => d,
-                                None => continue,
-                            }
-                        } else {
-                            Path::new(&path).to_path_buf()
-                        };
-                        let src = lfff_lib::flasher::FirmwareSource::Extracted(dir);
-                        do_flash(&tx, &src, &serial, &current_device_product, true, cmd_skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
-                        current_source = Some(src);
-                    }
-                }
-
-        Cmd::FlashFromSource { dir, skip_partitions } => {
-                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
-                    skip_xbl_abl = false;
-                    skip_preloader = false;
-                    tx.send(WMsg::Flashing(true)).ok();
-                    log(&tx, LogLevel::Info, 2, format!("Flashing from source dir: {}", dir));
-                    let d = lfff_lib::flasher::FirmwareSource::SourceBuild(std::path::PathBuf::from(&dir));
-                    current_source = Some(d.clone());
-
-                    let images = lfff_lib::flasher::collect_images_from_source(d.path());
                     if images.is_empty() {
-                        log(&tx, LogLevel::Error, 2, "No flashable .img files found in the selected source directory");
+                        log(&tx, LogLevel::Error, 2, "No flashable .img files found");
                         tx.send(WMsg::FlashComplete {
                             success: false, message: "No flashable images found".into(),
                             log_summary: "No images found".into(), failed_partitions: vec![],
@@ -502,51 +403,137 @@ pub fn worker(
                         continue;
                     }
                     log(&tx, LogLevel::Info, 2, format!("Found {} images to flash", images.len()));
-                    for (name, path) in &images {
-                        let size_mb = std::fs::metadata(path).map(|m| m.len() as f64 / 1024.0 / 1024.0).unwrap_or(0.0);
+                    let mut sorted: Vec<_> = images.iter().collect();
+                    sorted.sort_by_key(|(k, _)| (*k).clone());
+                    for (name, img_path) in &sorted {
+                        let size_mb = std::fs::metadata(img_path).map(|m| m.len() as f64 / 1024.0 / 1024.0).unwrap_or(0.0);
                         log(&tx, LogLevel::Info, 2, format!("  {} ({:.1} MB)", name, size_mb));
                     }
 
-                    let is_mtk = lfff_lib::flasher::detect_device_type(serial.as_deref(), &images);
-                    as_mediatek = is_mtk;
-
-                    if as_mediatek == Some(true) && lfff_lib::flasher::is_mediatek_build(&images) {
-                        log(&tx, LogLevel::Info, 2, "Mediatek platform detected");
-                        tx.send(WMsg::Flashing(false)).ok();
-                        tx.send(WMsg::PreloaderWarning { path: dir.clone(), is_source: true }).ok();
-                        log(&tx, LogLevel::Warn, 2, "preloader detected — Mediatek firmware, waiting for confirmation...");
-                        continue;
-                    } else if as_mediatek == Some(true) {
-                        log(&tx, LogLevel::Info, 2, "Mediatek platform detected (no preloader in firmware)");
-                    } else if as_mediatek == Some(false) {
-                        log(&tx, LogLevel::Info, 2, "Qualcomm platform detected");
-                    } else {
-                        log(&tx, LogLevel::Info, 2, "Platform detection inconclusive — proceeding with default logic");
+                    // Warn on apparent method/firmware mismatch — the user's
+                    // explicit choice still wins, but they should know.
+                    let has_preloader = images.keys().any(|k| lfff_lib::flasher::is_preloader(k));
+                    let has_xbl = images.keys().any(|k| lfff_lib::flasher::is_xbl_abl(k));
+                    if method == FlashMethod::Snapdragon && has_preloader {
+                        log(&tx, LogLevel::Warn, 2, "⚠ preloader.img found — this firmware looks like MediaTek, but the Snapdragon method is selected. Double-check your choice!");
+                    }
+                    if method == FlashMethod::Mtk && has_xbl {
+                        log(&tx, LogLevel::Warn, 2, "⚠ xbl/abl images found — this firmware looks like Qualcomm, but the MediaTek method is selected. Double-check your choice!");
                     }
 
-                    do_flash(&tx, &d, &serial, &current_device_product, skip_xbl_abl, skip_preloader, as_mediatek, skip_partitions, flash_cancel.clone());
+                    // Snapdragon firmware: read the ARB version so the GUI can
+                    // show the mandatory ARB warning before the final confirm.
+                    let arb_version: i32 = if method == FlashMethod::Snapdragon && !is_source {
+                        match lfff_lib::arb::find_xbl_config(&dir) {
+                            Some(xbl) => {
+                                let a = lfff_lib::arb::extract_arb_from_xbl(&xbl);
+                                let v = a.version.map(|v| v as i32).unwrap_or(0);
+                                log(&tx, LogLevel::Warn, 2, format!("Firmware ARB={} — waiting for user confirmation...", v));
+                                v
+                            }
+                            None => {
+                                log(&tx, LogLevel::Warn, 2, "xbl_config.img not found — firmware ARB version unknown, waiting for user confirmation...");
+                                0
+                            }
+                        }
+                    } else {
+                        0
+                    };
+
+                    tx.send(WMsg::Flashing(false)).ok();
+                    tx.send(WMsg::FlashPrepared {
+                        dir: dir.display().to_string(),
+                        is_source,
+                        arb_version,
+                        has_preloader,
+                    }).ok();
+                }
+
+        Cmd::StartFlash { dir, is_source, method, skip_xbl_abl, skip_preloader, skip_partitions } => {
+                    flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+                    tx.send(WMsg::Flashing(true)).ok();
+
+                    // Pre-flash safety gate: refuse to flash a locked bootloader
+                    // or a near-empty battery. Also verifies the device is still
+                    // reachable after the (possibly long) extraction step.
+                    log(&tx, LogLevel::Info, 2, "Running pre-flash safety checks...");
+                    let abort = |msg: &str| {
+                        log(&tx, LogLevel::Error, 2, msg);
+                        tx.send(WMsg::FlashComplete {
+                            success: false, message: msg.into(),
+                            log_summary: "Pre-flash check failed".into(), failed_partitions: vec![],
+                        }).ok();
+                        tx.send(WMsg::Flashing(false)).ok();
+                    };
+                    match lfff_lib::device::get_device_info(serial.as_deref()) {
+                        None => {
+                            abort("Cannot communicate with the device (fastboot getvar failed). Check the cable and that the device is in fastbootd.");
+                            continue;
+                        }
+                        Some(info) => {
+                            let ul = info.unlocked.to_lowercase();
+                            if ul == "no" || ul == "false" || ul == "0" {
+                                abort("Bootloader is LOCKED — flashing would fail or brick the device. Unlock it first: fastboot flashing unlock");
+                                continue;
+                            }
+                            if info.battery_level >= 0 && info.battery_level < 30 {
+                                abort(&format!("Battery too low ({}%). Charge to at least 30% before flashing.", info.battery_level));
+                                continue;
+                            }
+                            let batt = if info.battery_level >= 0 { format!("{}%", info.battery_level) } else { "n/a".into() };
+                            log(&tx, LogLevel::Success, 2, format!("Pre-flash checks OK (unlocked: {}, battery: {})", if ul.is_empty() { "unknown" } else { ul.as_str() }, batt));
+                        }
+                    }
+
+                    let src = if is_source {
+                        lfff_lib::flasher::FirmwareSource::SourceBuild(PathBuf::from(&dir))
+                    } else {
+                        lfff_lib::flasher::FirmwareSource::Extracted(PathBuf::from(&dir))
+                    };
+                    current_source = Some(src.clone());
+
+                    let opts = lfff_lib::flasher::FlashOptions {
+                        // On MediaTek devices xbl/abl partitions do not exist.
+                        skip_xbl_abl: skip_xbl_abl || method == FlashMethod::Mtk,
+                        skip_preloader,
+                        as_mediatek: Some(method == FlashMethod::Mtk),
+                        skip_partitions,
+                        ..Default::default()
+                    };
+                    do_flash(&tx, &src, &serial, &current_device_product, opts, flash_cancel.clone());
                 }
 
         Cmd::FlashSingle { path, partition, reboot_choice } => {
                     tx.send(WMsg::Flashing(true)).ok();
                     let ready = match reboot_choice {
                         1 => {
+                            // Device leaves adb right away and only shows up in
+                            // `fastboot devices` once the bootloader is up —
+                            // start polling immediately, no fixed sleep needed.
                             log(&tx, LogLevel::Info, 3, "Rebooting to bootloader via ADB...");
-                            let _ = std::process::Command::new("adb").args(["reboot", "bootloader"]).status();
-                            log(&tx, LogLevel::Info, 3, "Waiting for device to reboot...");
-                            std::thread::sleep(Duration::from_secs(5));
-                            wait_for_fastboot(&tx, 3, 90)
+                            let mut args: Vec<&str> = Vec::new();
+                            let ser_s;
+                            if let Some(s) = &serial { ser_s = s.clone(); args.extend(["-s", ser_s.as_str()]); }
+                            args.extend(["reboot", "bootloader"]);
+                            let _ = std::process::Command::new("adb").args(&args).status();
+                            wait_for_fastboot(&tx, 3, 90, serial.as_deref())
                         }
                         2 => {
+                            // The device is already visible to fastboot, so wait
+                            // for it to drop off the bus first — otherwise the
+                            // stale pre-reboot enumeration would match instantly.
                             log(&tx, LogLevel::Info, 3, "Rebooting to bootloader via fastboot...");
-                            let _ = std::process::Command::new("fastboot").args(["reboot-bootloader"]).status();
-                            log(&tx, LogLevel::Info, 3, "Waiting for device to reboot...");
-                            std::thread::sleep(Duration::from_secs(4));
-                            wait_for_fastboot(&tx, 3, 90)
+                            let mut args: Vec<&str> = Vec::new();
+                            let ser_s;
+                            if let Some(s) = &serial { ser_s = s.clone(); args.extend(["-s", ser_s.as_str()]); }
+                            args.push("reboot-bootloader");
+                            let _ = std::process::Command::new("fastboot").args(&args).status();
+                            lfff_lib::flasher::wait_for_device_gone(serial.as_deref(), 5);
+                            wait_for_fastboot(&tx, 3, 90, serial.as_deref())
                         }
                         _ => {
                             log(&tx, LogLevel::Info, 3, "Checking device is in fastboot...");
-                            wait_for_fastboot(&tx, 3, 10)
+                            wait_for_fastboot(&tx, 3, 10, serial.as_deref())
                         }
                     };
                     if !ready {
@@ -712,8 +699,8 @@ pub fn worker(
 
         Cmd::CableTest => {
                     let total_steps = 10u8;
-                    let mut success_count = 0u8;
                     let mut total_latency_ms = 0u64;
+                    let mut failed = false;
                     let mut args: Vec<&str> = vec!["fastboot"];
                     if let Some(ref s) = serial { args.extend(&["-s", s]); }
                     args.extend(&["getvar", "product"]);
@@ -728,20 +715,24 @@ pub fn worker(
                         let elapsed_ms = start.elapsed().as_millis() as u64;
                         match output {
                             Ok(o) if o.status.success() => {
-                                success_count += 1;
                                 total_latency_ms += elapsed_ms;
                             }
                             _ => {
+                                // Report the failing step (NOT total_steps —
+                                // step >= total marks the test as passed in the
+                                // GUI and would let the user continue with a
+                                // broken cable).
                                 tx.send(WMsg::CableTestProgress {
-                                    step: total_steps, total: total_steps,
-                                    status: format!("✗ {} failed — check cable/USB port", total_steps - success_count),
+                                    step, total: total_steps,
+                                    status: format!("✗ Test {}/{} failed — check cable/USB port and retry", step + 1, total_steps),
                                 }).ok();
-                                tx.send(WMsg::Flashing(false)).ok();
-                                return;
+                                failed = true;
+                                break;
                             }
                         }
                         std::thread::sleep(Duration::from_millis(200));
                     }
+                    if failed { continue; }
 
                     let avg_ms = total_latency_ms / total_steps as u64;
                     let speed_label = if avg_ms < 50 { "excellent" } else if avg_ms < 150 { "good" } else if avg_ms < 500 { "fair" } else { "poor" };
@@ -769,14 +760,54 @@ pub fn worker(
                         }
                     };
 
-                    let total = failed_partitions.len() * 2;
+                    let sref = serial.as_deref();
+
+                    // Collect images once — not on every slot iteration.
+                    let fw_dir = source.path();
+                    let images = if source.is_source() {
+                        lfff_lib::flasher::collect_images_from_source(fw_dir)
+                    } else {
+                        lfff_lib::flasher::collect_images(fw_dir)
+                    };
+
+                    // Dynamic (super) partitions must only be flashed to the
+                    // active slot — writing them to the inactive slot can fail
+                    // or corrupt the super layout.
+                    let needs_active_slot = failed_partitions.iter()
+                        .any(|p| lfff_lib::flasher::is_super_partition(&p.to_lowercase()));
+                    let active_slot = if needs_active_slot {
+                        match lfff_lib::flasher::get_active_slot(sref) {
+                            Some(s) => Some(s),
+                            None => {
+                                log(&tx, LogLevel::Error, 2, "Could not detect active slot — cannot safely retry dynamic partitions");
+                                tx.send(WMsg::FlashComplete {
+                                    success: false, message: "Could not detect active slot".into(),
+                                    log_summary: "Retry failed".into(), failed_partitions: failed_partitions.clone(),
+                                }).ok();
+                                tx.send(WMsg::Flashing(false)).ok();
+                                continue;
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    let plan: Vec<(String, Vec<String>)> = failed_partitions.iter().map(|p| {
+                        let slots = if lfff_lib::flasher::is_super_partition(&p.to_lowercase()) {
+                            vec![active_slot.clone().unwrap_or_else(|| "a".into())]
+                        } else {
+                            vec!["a".to_string(), "b".to_string()]
+                        };
+                        (p.clone(), slots)
+                    }).collect();
+                    let total: usize = plan.iter().map(|(_, s)| s.len()).sum();
                     let mut done = 0;
                     let mut fail_count = 0;
                     let mut failed_list = Vec::new();
-                    let sref = serial.as_deref();
+                    let mut cancelled = false;
 
-                    for partition in &failed_partitions {
-                        for slot in &["a", "b"] {
+                    'retry: for (partition, slots) in &plan {
+                        for slot in slots {
                             if flash_cancel.load(std::sync::atomic::Ordering::Relaxed) {
                                 log(&tx, LogLevel::Warn, 2, "Retry cancelled by user");
                                 tx.send(WMsg::FlashComplete {
@@ -784,18 +815,12 @@ pub fn worker(
                                     log_summary: "Retry cancelled".into(), failed_partitions: failed_list.clone(),
                                 }).ok();
                                 tx.send(WMsg::Flashing(false)).ok();
-                                return;
+                                cancelled = true;
+                                break 'retry;
                             }
 
                             let lbl = format!("{}_{}", partition, slot);
                             tx.send(WMsg::Progress { fraction: done as f32 / total as f32, partition: lbl.clone() }).ok();
-
-                            let fw_dir = source.path();
-                            let images = if source.is_source() {
-                                lfff_lib::flasher::collect_images_from_source(fw_dir)
-                            } else {
-                                lfff_lib::flasher::collect_images(fw_dir)
-                            };
 
                             let part_lc = partition.to_lowercase();
                             let img_path = images
@@ -816,7 +841,7 @@ pub fn worker(
                                 } else {
                                     fail_count += 1;
                                     failed_list.push(partition.clone());
-                                    log(&tx, LogLevel::Error, 2, format!("{} FAILED", lbl));
+                                    log(&tx, LogLevel::Error, 2, format!("{} FAILED: {}", lbl, result.error));
                                 }
                             } else {
                                 fail_count += 1;
@@ -826,6 +851,7 @@ pub fn worker(
                             done += 1;
                         }
                     }
+                    if cancelled { continue; }
 
                     let success = fail_count == 0;
                     let msg = if success {
@@ -871,7 +897,7 @@ pub fn worker(
                     log(&tx, LogLevel::Info, 1, "Starting download...");
                     let tx_dl = tx.clone();
                     let token = lfff_lib::downloader::CancelToken::new();
-                    *dl_cancel_token.lock().unwrap() = Some(token.clone());
+                    if let Ok(mut guard) = dl_cancel_token.lock() { *guard = Some(token.clone()); }
                     std::thread::spawn(move || {
                         let out = get_output_dir();
                         log(&tx_dl, LogLevel::Info, 1, format!("Output: {}", out.display()));
@@ -902,7 +928,7 @@ pub fn worker(
                 }
 
         Cmd::CancelDownload => {
-                    if let Some(token) = dl_cancel_token.lock().unwrap().take() {
+                    if let Some(token) = dl_cancel_token.lock().ok().and_then(|mut g| g.take()) {
                         token.cancel();
                         log(&tx, LogLevel::Warn, 1, "Cancelling download...");
                     }
@@ -962,9 +988,13 @@ pub fn worker(
                     };
 
                     step(&tx, 1, "Checking ADB connection...");
-                    let adb_ok = Cmd2::new("adb").args(["devices"]).output()
-                        .map(|o| String::from_utf8_lossy(&o.stdout).contains("\tdevice"))
-                        .unwrap_or(false);
+                    let adb_ok = {
+                        let r = lfff_lib::utils::run_cmd(&["adb", "devices"], 5);
+                        r.code == 0 && r.stdout.lines().skip(1).any(|l| {
+                            let p: Vec<&str> = l.split_whitespace().collect();
+                            p.len() >= 2 && p[1] == "device"
+                        })
+                    };
                     if !adb_ok {
                         let fb = lfff_lib::device::list_fastboot_devices();
                         if fb.is_empty() {
@@ -974,37 +1004,35 @@ pub fn worker(
                         step(&tx, 2, "Device found in fastboot mode");
                     } else {
                         step(&tx, 2, "ADB OK — device connected");
-                        if let Ok(o) = Cmd2::new("adb").args(["shell", "getprop", "ro.product.model"]).output() {
-                            let model = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                            if !model.is_empty() { log(&tx, LogLevel::Success, 0, format!("Model: {}", model)); }
-                        }
-                        if let Ok(o) = Cmd2::new("adb").args(["shell", "getprop", "ro.build.display.id"]).output() {
-                            let build = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                            if !build.is_empty() { log(&tx, LogLevel::Success, 0, format!("Build: {}", build)); }
-                        }
-                        if let Ok(o) = Cmd2::new("adb").args(["shell", "getprop", "ro.product.cpu.abi"]).output() {
-                            let abi = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                            if !abi.is_empty() { log(&tx, LogLevel::Success, 0, format!("ABI: {}", abi)); }
+                        // Single adb round-trip for all three properties.
+                        let r = lfff_lib::utils::run_cmd(&["adb", "shell",
+                            "echo model=$(getprop ro.product.model); \
+                             echo build=$(getprop ro.build.display.id); \
+                             echo abi=$(getprop ro.product.cpu.abi)"], 5);
+                        for (key, label) in [("model", "Model"), ("build", "Build"), ("abi", "ABI")] {
+                            let val = r.stdout.lines()
+                                .find_map(|l| l.trim().strip_prefix(&format!("{}=", key)))
+                                .unwrap_or("")
+                                .trim();
+                            if !val.is_empty() { log(&tx, LogLevel::Success, 0, format!("{}: {}", label, val)); }
                         }
                         step(&tx, 2, "Rebooting to bootloader...");
                         let _ = Cmd2::new("adb").args(["reboot", "bootloader"]).status();
-                        std::thread::sleep(std::time::Duration::from_secs(8));
+                        // No fixed 8s sleep — the device leaves adb immediately
+                        // and the active wait below catches it as soon as the
+                        // bootloader enumerates.
                     }
 
                     step(&tx, 3, "Checking fastboot...");
-                    let mut retries = 0;
-                    loop {
-                        let fb = lfff_lib::device::list_fastboot_devices();
-                        if !fb.is_empty() {
-                            log(&tx, LogLevel::Success, 0, format!("Fastboot OK: {}", fb[0]));
-                            serial = Some(fb[0].clone());
-                            break;
-                        }
-                        retries += 1;
-                        if retries > 15 { step(&tx, -1, "Fastboot not detected after 15s"); break; }
-                        std::thread::sleep(std::time::Duration::from_secs(1));
+                    if !lfff_lib::flasher::wait_for_any_fastboot(None, 60) {
+                        step(&tx, -1, "Fastboot not detected after 60s");
+                        continue;
                     }
-                    if retries > 15 { continue; }
+                    let fb = lfff_lib::device::list_fastboot_devices();
+                    if let Some(first) = fb.first() {
+                        log(&tx, LogLevel::Success, 0, format!("Fastboot OK: {}", first));
+                        serial = Some(first.clone());
+                    }
 
                     if let Some(ref ser) = serial
                         && let Some(info) = lfff_lib::device::get_device_info(Some(ser)) {
@@ -1019,20 +1047,14 @@ pub fn worker(
 
                     step(&tx, 4, "Rebooting to fastbootd...");
                     let _ = Cmd2::new("fastboot").args(["reboot", "fastboot"]).status();
-                    std::thread::sleep(std::time::Duration::from_secs(6));
-
-                    let mut retries2 = 0;
-                    loop {
-                        let fb = lfff_lib::device::list_fastboot_devices();
-                        if !fb.is_empty() {
-                            log(&tx, LogLevel::Success, 0, "Fastbootd OK");
-                            break;
-                        }
-                        retries2 += 1;
-                        if retries2 > 15 { step(&tx, -1, "Fastbootd not detected after 15s"); break; }
-                        std::thread::sleep(std::time::Duration::from_secs(1));
+                    // No fixed 6s sleep: we wait specifically for "fastbootd",
+                    // and the device currently reports "fastboot" — the stale
+                    // enumeration cannot false-positive.
+                    if !lfff_lib::flasher::wait_for_fastbootd(serial.as_deref(), 60) {
+                        step(&tx, -1, "Fastbootd not detected after 60s");
+                        continue;
                     }
-                    if retries2 > 15 { continue; }
+                    log(&tx, LogLevel::Success, 0, "Fastbootd OK");
 
                     step(&tx, 5, "All drivers OK!");
                     log(&tx, LogLevel::Success, 0, "Driver test completed successfully");
@@ -1045,24 +1067,22 @@ pub fn worker(
                         .timeout(std::time::Duration::from_secs(10))
                         .user_agent("LFFF")
                         .build();
-                    if let Ok(client) = client {
-                        if let Ok(resp) = client.get("https://api.github.com/repos/mrFrok/LibreFastbootFirmwareFlasher/releases/latest").send() {
-                            if let Ok(json) = resp.json::<serde_json::Value>() {
-                                if let Some(tag) = json.get("tag_name").and_then(|v| v.as_str()) {
-                                    let latest = tag.trim_start_matches('v');
-                                    if latest != current {
-                                        let body = json.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                        let url = json.get("html_url").and_then(|v| v.as_str()).unwrap_or("https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/latest").to_string();
-                                        tx.send(WMsg::UpdateAvailable {
-                                            version: latest.to_string(),
-                                            url,
-                                            body,
-                                        }).ok();
-                                    } else {
-                                        log(&tx, LogLevel::Success, 0, "You are running the latest version");
-                                    }
-                                }
-                            }
+                    if let Ok(client) = client
+                        && let Ok(resp) = client.get("https://api.github.com/repos/mrFrok/LibreFastbootFirmwareFlasher/releases/latest").send()
+                        && let Ok(json) = resp.json::<serde_json::Value>()
+                        && let Some(tag) = json.get("tag_name").and_then(|v| v.as_str())
+                    {
+                        let latest = tag.trim_start_matches('v');
+                        if latest != current {
+                            let body = json.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let url = json.get("html_url").and_then(|v| v.as_str()).unwrap_or("https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/latest").to_string();
+                            tx.send(WMsg::UpdateAvailable {
+                                version: latest.to_string(),
+                                url,
+                                body,
+                            }).ok();
+                        } else {
+                            log(&tx, LogLevel::Success, 0, "You are running the latest version");
                         }
                     }
                 }

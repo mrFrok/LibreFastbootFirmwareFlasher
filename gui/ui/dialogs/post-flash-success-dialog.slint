@@ -14,51 +14,46 @@ export component PostFlashSuccessDialog {
         visible: show;
         opacity: show ? 1.0 : 0.0;
         animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 100; background: transparent; width: 100%; height: 100%; TouchArea { }
+        z: 100; background: MaterialPalette.scrim; width: 100%; height: 100%; TouchArea { }
 
         Rectangle {
-            x: (parent.width - 560px) / 2;
-            y: (parent.height - 240px) / 2;
-            width: 560px; height: 240px;
+            x: (parent.width - 460px) / 2;
+            y: (parent.height - 310px) / 2;
+            width: 460px; height: 310px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
-            drop-shadow-blur: 24px; drop-shadow-color: #00000040; drop-shadow-offset-y: 8px;
+            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
 
-            VerticalLayout { padding: 28px; spacing: 12px;
+            VerticalLayout { padding: 24px; spacing: 12px;
                 HorizontalLayout { spacing: 8px; alignment: start;
                     Image {
                         source: @image-url("../icons/check.svg");
                         width: 22px; height: 22px;
-                        colorize: #4caf50;
+                        colorize: MaterialPalette.success;
                         y: (parent.height - 22px) / 2;
                     }
                     Text {
                         text: Tr.flash-complete;
-                        font-size: 18px; font-weight: 700; color: #4caf50;
+                        font-size: 18px; font-weight: 700; color: MaterialPalette.success;
                     }
                 }
                 Text {
                     text: Tr.next-action;
                     font-size: 14px; color: MaterialPalette.on-surface-variant; wrap: word-wrap;
+                    vertical-stretch: 1;
                 }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        min-width: 90px;
-                        text: Tr.dismiss;
-                        clicked => { root.dismiss(); }
-                    }
-                    OutlinedButton {
-                        min-width: 150px;
-                        text: Tr.reboot;
-                        clicked => { root.reboot(); }
-                    }
-                    FilledButton {
-                        min-width: 220px;
-                        text: Tr.wipe-data-reboot;
-                        clicked => { root.wipe-and-reboot(); }
-                    }
+                // Vertical stack: long Russian strings can't fit side-by-side
+                FilledButton {
+                    text: Tr.wipe-data-reboot;
+                    clicked => { root.wipe-and-reboot(); }
+                }
+                OutlinedButton {
+                    text: Tr.reboot;
+                    clicked => { root.reboot(); }
+                }
+                TextButton {
+                    text: Tr.dismiss;
+                    clicked => { root.dismiss(); }
                 }
             }
         }

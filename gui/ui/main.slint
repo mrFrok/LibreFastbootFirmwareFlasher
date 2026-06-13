@@ -15,6 +15,7 @@ import { PartitionPage } from "pages/partition-page.slint";
 import { HistoryPage } from "pages/history-page.slint";
 import { AboutPage } from "pages/about-page.slint";
 
+import { FlashMethodDialog } from "dialogs/flash-method-dialog.slint";
 import { FlashAllRebootDialog } from "dialogs/flash-all-reboot-dialog.slint";
 import { FlashAllFinalDialog } from "dialogs/flash-all-final-dialog.slint";
 import { SourceFlashFinalDialog } from "dialogs/source-flash-final-dialog.slint";
@@ -24,7 +25,6 @@ import { PostFlashSuccessDialog } from "dialogs/post-flash-success-dialog.slint"
 import { CableTestDialog } from "dialogs/cable-test-dialog.slint";
 import { FlashFailureDialog } from "dialogs/flash-failure-dialog.slint";
 import { ArbWarningDialog } from "dialogs/arb-warning-dialog.slint";
-import { ArbDeviceWarningDialog } from "dialogs/arb-device-warning-dialog.slint";
 import { PreloaderWarningDialog } from "dialogs/preloader-warning-dialog.slint";
 import { UpdateDialog } from "dialogs/update-dialog.slint";
 
@@ -112,7 +112,6 @@ export component MainWindow inherits Window {
     in-out property <string> partition-export-status: "";
     in-out property <string> device-export-status: "";
     in-out property <string> download-export-status: "";
-    in-out property <bool>    skip-arb-check: false;
     in-out property <string>  output-dir;
     in-out property <string>  download-url;
     in-out property <string>  dl-speed;
@@ -127,18 +126,18 @@ export component MainWindow inherits Window {
     in-out property <bool>    show-skip-partitions: false;
     in-out property <bool>    show-confirm: false;
     in-out property <int>     confirm-action: 0;
-    // confirm-action: 3=reboot-choice 4=flash-all-final 5=part-reboot 6=part-final 7=success 8=source-final 9=cable-test 10=flash-failure 11=session-error
+    // confirm-action: 3=reboot-choice 4=flash-all-final 5=part-reboot 6=part-final 7=success 8=source-final 9=cable-test 10=flash-failure 11=session-error 12=flash-method
     in-out property <int>     reboot-choice: 0;
+    // Mandatory flash method: 0 = not chosen, 1 = Snapdragon, 2 = MediaTek.
+    // Flashing never starts while this is 0.
+    in-out property <int>     flash-method: 0;
+    // Extracted/validated firmware directory, set by the worker via FlashPrepared.
+    in-out property <string>  prepared-dir: "";
     in-out property <bool>    show-arb-warning: false;
     in-out property <int>     arb-warning-version: 0;
-    in-out property <bool>    as-mediatek: false;
     in-out property <bool>    skip-xbl-abl: false;
     in-out property <bool>    skip-preloader: false;
     in-out property <bool>    show-preloader-warning: false;
-    in-out property <bool>    preloader-is-source: false;
-    in-out property <bool>    show-arb-device-warning: false;
-    in-out property <int>     arb-device-version: 0;
-    in-out property <bool>    arb-device-is-source: false;
     in-out property <bool>    pending-source-flash: false;
     in-out property <string>  app-version: "dev";
     in-out property <bool>    show-update-dialog: false;
@@ -173,10 +172,7 @@ export component MainWindow inherits Window {
     callback paste-clipboard();    callback request-back();
     callback run-driver-test();    callback get-device-info();
     callback reboot-to(string);
-    callback confirm-arb-and-flash();
-    callback confirm-arb-device-flash();
-    callback confirm-preloader-flash();
-    callback confirm-source-flash();
+    callback prepare-flash();
     callback retry-flash();
     callback reboot-device();
     callback run-cable-test();
@@ -282,7 +278,6 @@ export component MainWindow inherits Window {
                             source-dir: root.source-dir;
                             source-image-count: root.source-image-count;
                             source-total-ops: root.source-total-ops;
-                            skip-arb-check <=> root.skip-arb-check;
                             show-skip-partitions <=> root.show-skip-partitions;
                             skip-partitions <=> root.skip-partitions;
                             is-flashing: root.is-flashing;
@@ -299,8 +294,11 @@ export component MainWindow inherits Window {
                             cancel-flash => { root.cancel-flash(); }
                             export-flash-log => { root.export-flash-log(); }
                             show-reboot-choice => {
+                                // Step 0 of the flash flow: mandatory method choice.
+                                root.pending-source-flash = false;
+                                root.flash-method = 0;
                                 root.reboot-choice = 0;
-                                root.confirm-action = 3;
+                                root.confirm-action = 12;
                                 root.show-confirm = true;
                             }
                         }
@@ -353,11 +351,26 @@ export component MainWindow inherits Window {
     }
 
     // ── Dialogs ───────────────────────────────────────────────────────────────
+    // Flash-all flow: method choice (12) → reboot choice (3) → cable test (9)
+    // → [worker prepares firmware] → ARB warning (Snapdragon) or preloader
+    // warning (MediaTek) → final warning (4/8) → flash.
+    FlashMethodDialog {
+        show: root.show-confirm && root.confirm-action == 12;
+        method <=> root.flash-method;
+        cancel => {
+            root.show-confirm = false;
+            root.flash-method = 0;
+            root.pending-source-flash = false;
+        }
+        proceed => { root.confirm-action = 3; }
+    }
+
     FlashAllRebootDialog {
         show: root.show-confirm && root.confirm-action == 3;
         lang: root.lang;
         reboot-choice <=> root.reboot-choice;
-        cancel => { root.show-confirm = false; root.reboot-choice = 0; }
+        cancel => { root.show-confirm = false; root.reboot-choice = 0; root.pending-source-flash = false; }
+        back => { root.confirm-action = 12; }
         reboot-and-flash => { root.show-confirm = false; root.reboot-for-flash(); }
     }
 
@@ -370,9 +383,9 @@ export component MainWindow inherits Window {
 
     SourceFlashFinalDialog {
         show: root.show-confirm && root.confirm-action == 8;
-        cancel => { root.show-confirm = false; }
+        cancel => { root.show-confirm = false; root.pending-source-flash = false; }
         back => { root.confirm-action = 3; }
-        flash => { root.show-confirm = false; root.confirm-source-flash(); }
+        flash => { root.show-confirm = false; root.start-flash(); }
     }
 
     PartitionRebootDialog {
@@ -405,11 +418,13 @@ export component MainWindow inherits Window {
         cable-test-progress: root.cable-test-progress;
         cable-test-status: root.cable-test-status;
         cable-test-passed: root.cable-test-passed;
-        cancel => { root.show-confirm = false; }
+        cancel => { root.show-confirm = false; root.pending-source-flash = false; }
         continue-flash => {
+            // Hand over to the worker: extract + validate the firmware, then
+            // FlashPrepared drives the ARB/preloader warnings and the final
+            // confirmation — in that order.
             root.show-confirm = false;
-            root.confirm-action = root.pending-source-flash ? 8 : 4;
-            root.show-confirm = true;
+            root.prepare-flash();
         }
     }
 
@@ -426,31 +441,31 @@ export component MainWindow inherits Window {
         close => { root.show-confirm = false; }
     }
 
+    // Snapdragon only: ARB must be confirmed BEFORE the final warning.
     ArbWarningDialog {
         show: root.show-arb-warning;
         lang: root.lang;
         arb-warning-version: root.arb-warning-version;
         skip-xbl-abl <=> root.skip-xbl-abl;
-        cancel => { root.show-arb-warning = false; }
-        confirm => { root.show-arb-warning = false; root.confirm-arb-and-flash(); }
+        cancel => { root.show-arb-warning = false; root.pending-source-flash = false; }
+        confirm => {
+            root.show-arb-warning = false;
+            root.confirm-action = 4;
+            root.show-confirm = true;
+        }
     }
 
-    ArbDeviceWarningDialog {
-        show: root.show-arb-device-warning;
-        lang: root.lang;
-        arb-device-version: root.arb-device-version;
-        arb-device-is-source: root.arb-device-is-source;
-        skip-xbl-abl <=> root.skip-xbl-abl;
-        cancel => { root.show-arb-device-warning = false; }
-        confirm => { root.show-arb-device-warning = false; root.confirm-arb-device-flash(); }
-    }
-
+    // MediaTek only: preloader handling must be confirmed BEFORE the final warning.
     PreloaderWarningDialog {
         show: root.show-preloader-warning;
         lang: root.lang;
         skip-preloader <=> root.skip-preloader;
-        cancel => { root.show-preloader-warning = false; }
-        confirm => { root.show-preloader-warning = false; root.confirm-preloader-flash(); }
+        cancel => { root.show-preloader-warning = false; root.pending-source-flash = false; }
+        confirm => {
+            root.show-preloader-warning = false;
+            root.confirm-action = root.pending-source-flash ? 8 : 4;
+            root.show-confirm = true;
+        }
     }
 
     UpdateDialog {

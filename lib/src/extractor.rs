@@ -337,11 +337,11 @@ fn check_free_space(path: &Path) -> (bool, f64) {
     );
     if r.success() {
         // First line is the header "Avail"; second line is the value.
-        if let Some(line) = r.stdout.lines().nth(1) {
-            if let Ok(avail) = line.trim().parse::<u64>() {
-                let gb = avail as f64 / (1024.0 * 1024.0 * 1024.0);
-                return (gb >= 20.0, gb);
-            }
+        if let Some(line) = r.stdout.lines().nth(1)
+            && let Ok(avail) = line.trim().parse::<u64>()
+        {
+            let gb = avail as f64 / (1024.0 * 1024.0 * 1024.0);
+            return (gb >= 20.0, gb);
         }
     }
     // On error (e.g. Windows without df) we silently skip the check.

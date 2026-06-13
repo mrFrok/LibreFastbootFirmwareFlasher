@@ -4,13 +4,68 @@ use std::sync::Arc;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use lfff_lib::flasher::{
-    collect_images, collect_images_from_source, is_mediatek_build,
-    print_summary, run_flash_session_with_log, FirmwareSource, FlashProgress,
+    collect_images, collect_images_from_source, is_preloader, is_xbl_abl,
+    print_summary, run_flash_session_with_log, FirmwareSource, FlashOptions, FlashProgress,
 };
+
+/// Ask the user which flash method to use. Flashing never starts without an
+/// explicit choice — there is no platform auto-detection.
+fn prompt_flash_method() -> Option<bool> {
+    println!("\n{}", "── Flash method ─────────────────────────────────────────".dimmed());
+    println!("  Select the flash method for your device:");
+    println!();
+    println!("  [1] Snapdragon (Qualcomm) — modem flashed in bootloader mode, ARB check");
+    println!("  [2] MediaTek              — everything flashed in fastbootd, xbl/abl skipped");
+    println!("  [q] Abort");
+
+    loop {
+        let c = lfff_lib::utils::prompt("\n  Choice", "");
+        match c.as_str() {
+            "1" => return Some(false),
+            "2" => return Some(true),
+            "q" | "Q" => return None,
+            _ => println!("  Enter 1, 2 or q"),
+        }
+    }
+}
+
+/// ARB confirmation gate for Snapdragon firmware. Must be confirmed BEFORE
+/// the final flash confirmation. Returns false when the user aborts.
+fn arb_gate(dir: &std::path::Path) -> bool {
+    println!("\n{}", "── ARB (Anti-Rollback) warning ──────────────────────────".dimmed());
+    match lfff_lib::arb::find_xbl_config(dir) {
+        Some(xbl) => {
+            let arb = lfff_lib::arb::extract_arb_from_xbl(&xbl);
+            match arb.version {
+                Some(v) if v > 0 => {
+                    println!(
+                        "  {}",
+                        format!("Firmware ARB = {}. Flashing will permanently raise the anti-rollback counter.", v)
+                            .yellow()
+                    );
+                    println!("  {}", "You will NOT be able to downgrade to firmware with a lower ARB afterwards.".dimmed());
+                }
+                Some(_) => {
+                    println!("  {}", "Firmware ARB = 0, but the device's current ARB level cannot be verified.".yellow());
+                    println!("  {}", "If the device already has ARB > 0, this firmware will not boot.".dimmed());
+                }
+                None => {
+                    println!("  {}", "Firmware ARB version is unknown (xbl_config could not be parsed).".yellow());
+                }
+            }
+        }
+        None => {
+            println!("  {}", "xbl_config.img not found — firmware ARB version is unknown.".yellow());
+        }
+    }
+    let ans = lfff_lib::utils::prompt("\n  Type YES to confirm the ARB warning, anything else to abort", "");
+    ans == "YES"
+}
 
 pub fn run(
     source: &FirmwareSource,
     serial: Option<&str>,
+    method: Option<&str>,
     dry_run: bool,
     skip_xbl_abl: bool,
     skip_preloader: bool,
@@ -34,16 +89,53 @@ pub fn run(
     } else {
         collect_images(dir)
     };
+    if images.is_empty() {
+        eprintln!("{} {}", "✗".red().bold(), format!("No .img files found in {}", dir.display()).red());
+        return 1;
+    }
+
+    // -- Mandatory flash-method selection (no auto-detection) --
+    let as_mediatek = match method {
+        Some("mtk") => true,
+        Some(_) => false,
+        None => match prompt_flash_method() {
+            Some(v) => v,
+            None => {
+                println!("{}", "Aborted by user.".yellow());
+                return 1;
+            }
+        },
+    };
+
+    // Warn on an apparent method/firmware mismatch, but respect the user's choice.
+    let has_preloader = images.keys().any(|k| is_preloader(k));
+    let has_xbl = images.keys().any(|k| is_xbl_abl(k));
+    if !as_mediatek && has_preloader {
+        println!(
+            "{} {}",
+            "⚠".yellow().bold(),
+            "preloader.img found — this firmware looks like MediaTek, but Snapdragon was selected.".yellow()
+        );
+    }
+    if as_mediatek && has_xbl {
+        println!(
+            "{} {}",
+            "⚠".yellow().bold(),
+            "xbl/abl images found — this firmware looks like Qualcomm, but MediaTek was selected.".yellow()
+        );
+    }
+
+    // MediaTek: xbl/abl never exist on the device — always exclude them.
+    let skip_xbl_abl = skip_xbl_abl || as_mediatek;
 
     let mut skip_preloader = skip_preloader;
-
-    if !images.is_empty() && is_mediatek_build(&images) {
+    if as_mediatek && has_preloader {
         if dry_run {
-            println!("{} {}", "⚠".yellow().bold(), "Mediatek firmware detected (preloader found).".yellow());
+            println!("{} {}", "⚠".yellow().bold(), "MediaTek firmware contains preloader.img.".yellow());
             println!("   {}", "Use --skip-preloader to exclude it during actual flashing.".dimmed());
         } else if !skip_preloader {
-            println!("\n{} {}", "⚠".yellow().bold(), "Mediatek firmware detected (preloader found).".yellow());
-            println!("   {}", "Flashing preloader on Mediatek devices is risky and may brick your device.".red());
+            println!("\n{} {}", "⚠".yellow().bold(), "Firmware contains preloader.img.".yellow());
+            println!("   {}", "Flashing preloader via fastboot is risky and may brick your device.".red());
             println!("   {}\n", "It is recommended to skip the preloader unless you know what you are doing.".dimmed());
             print!("{} ", "Skip preloader? [Y/n/a] (Y=skip, n=flash preloader, a=abort):".cyan());
             use std::io::Write;
@@ -51,10 +143,6 @@ pub fn run(
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).ok();
             match input.trim().to_lowercase().as_str() {
-                "" | "y" | "yes" => {
-                    println!("{} {}", "→".green(), "Skipping preloader.".green());
-                    skip_preloader = true;
-                }
                 "n" | "no" => {
                     println!("{} {}", "→".yellow(), "Will flash preloader.".yellow());
                 }
@@ -63,10 +151,36 @@ pub fn run(
                     return 1;
                 }
                 _ => {
-                    println!("{} {}", "→".green(), "Skipping preloader (default).".green());
+                    println!("{} {}", "→".green(), "Skipping preloader.".green());
                     skip_preloader = true;
                 }
             }
+        }
+    }
+
+    if !dry_run {
+        // -- Pre-flash device checks (device present, unlocked, battery, cable) --
+        let check = lfff_lib::device::run_pre_flash_checks(serial);
+        lfff_lib::device::print_check_report(&check);
+        if !check.ready() {
+            eprintln!("{} {}", "✗".red().bold(), "Pre-flash checks failed. Aborting.".red());
+            return 1;
+        }
+
+        // -- Snapdragon: ARB confirmation FIRST, final confirmation AFTER --
+        if !as_mediatek && !source.is_source() && !arb_gate(dir) {
+            println!("{}", "Aborted by user (ARB check).".yellow());
+            return 1;
+        }
+
+        // -- Final confirmation --
+        println!("\n{}", "── Final warning ────────────────────────────────────────".dimmed());
+        println!("  {}", "All partitions will be overwritten. This action is irreversible.".red());
+        println!("  {}", "The device must be in fastbootd mode.".dimmed());
+        let ans = lfff_lib::utils::prompt("\n  Type FLASH to start flashing, anything else to abort", "");
+        if ans != "FLASH" {
+            println!("{}", "Aborted by user.".yellow());
+            return 1;
         }
     }
 
@@ -99,16 +213,22 @@ pub fn run(
     let session = run_flash_session_with_log(
         source,
         serial,
-        dry_run,
-        skip_xbl_abl,
-        skip_preloader,
-        None,
+        &FlashOptions {
+            dry_run,
+            skip_xbl_abl,
+            skip_preloader,
+            as_mediatek: Some(as_mediatek),
+            skip_partitions: String::new(),
+        },
         cancel,
-        String::new(),
         &on_log,
         &on_progress,
         &|_, _, _| lfff_lib::flasher::FailureAction::Abort,
     );
+
+    if dry_run {
+        return 0;
+    }
 
     print_summary(&session);
 

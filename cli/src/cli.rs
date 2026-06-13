@@ -83,14 +83,6 @@ pub enum Commands {
         /// Extracted firmware directory (xbl_config.img located automatically)
         #[arg(long, value_name = "DIR", group = "arb_src")]
         firmware_dir: Option<PathBuf>,
-
-        /// Also read ARB version from connected device and compare
-        #[arg(long)]
-        device: bool,
-
-        /// Target a specific device by serial number
-        #[arg(short, long, value_name = "SERIAL")]
-        serial: Option<String>,
     },
 
     /// Flash an extracted firmware directory (or source build with --source)
@@ -105,6 +97,11 @@ pub enum Commands {
         /// Target a specific device by serial number
         #[arg(short, long, value_name = "SERIAL")]
         serial: Option<String>,
+
+        /// Flash method: 'snapdragon' (Qualcomm) or 'mtk' (MediaTek).
+        /// Prompted interactively if omitted.
+        #[arg(long, value_name = "METHOD", value_parser = ["snapdragon", "mtk"])]
+        method: Option<String>,
 
         /// Detect images and run checks without flashing
         #[arg(long)]

@@ -95,7 +95,7 @@ export component DevicePage {
                 Rectangle {
                     width: 10px; height: 10px; border-radius: 5px;
                     background: root.test-step >= s.n
-                            ? #4caf50
+                            ? MaterialPalette.success
                         : root.test-step < 0 ? MaterialPalette.error
                         : MaterialPalette.outline-variant;
                     animate background { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
@@ -104,7 +104,7 @@ export component DevicePage {
                 Text {
                     text: s.label; font-size: 14px;
                     color: root.test-step >= s.n
-                        ? #4caf50
+                        ? MaterialPalette.success
                         : MaterialPalette.on-surface-variant;
                     vertical-alignment: center;
                     animate color { duration: 200ms; }

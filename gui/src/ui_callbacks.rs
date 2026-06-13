@@ -1,9 +1,9 @@
-use slint::{ComponentHandle, SharedString, VecModel, Weak, Model};
+use slint::{ComponentHandle, VecModel, Weak};
 use std::rc::Rc;
 use std::sync::mpsc;
 
-use crate::{LogLevel, LogEntry, MainWindow, Cmd, WMsg, lvl, ts, DeviceInfo, FlashHistoryItem};
-use crate::log_models::LogModels;
+use crate::{LogLevel, LogEntry, MainWindow, Cmd, WMsg, FlashMethod, DeviceInfo, FlashHistoryItem};
+use crate::log_models::{LogModels, add_log_m};
 use crate::config::{save_scale, save_config, load_config, set_output_dir, get_output_dir};
 
 fn export_log(model: &VecModel<LogEntry>, tab_name: &str) -> Option<String> {
@@ -132,24 +132,23 @@ pub fn poll(
                 }
             }
             WMsg::TestStep { step, status } => { ui.set_test_step(step); ui.set_test_status(status.into()); }
-            WMsg::ArbWarning { version, as_mediatek } => {
-                add_log(models, &ui, &LogLevel::Warn, 2, &format!(" ARB={} — flashing will permanently raise the anti-rollback counter. You will NOT be able to downgrade firmware afterwards!", version));
-                ui.set_arb_warning_version(version as i32);
-                ui.set_show_arb_warning(true);
-                ui.set_as_mediatek(as_mediatek.unwrap_or(false));
-            }
-            WMsg::ArbDeviceWarning { path, is_source, device_arb } => {
-                add_log(models, &ui, &LogLevel::Warn, 2, "⚠ Device ARB unknown — firmware ARB may be lower, may brick device!");
-                ui.set_arb_device_version(device_arb as i32);
-                ui.set_arb_device_is_source(is_source);
-                ui.set_firmware_path(path.into());
-                ui.set_show_arb_device_warning(true);
-            }
-            WMsg::PreloaderWarning { path, is_source } => {
-                add_log(models, &ui, &LogLevel::Warn, 2, "⚠ preloader.img detected — Mediatek platform");
-                ui.set_preloader_is_source(is_source);
-                ui.set_firmware_path(path.into());
-                ui.set_show_preloader_warning(true);
+            WMsg::FlashPrepared { dir, is_source, arb_version, has_preloader } => {
+                ui.set_prepared_dir(dir.into());
+                ui.set_is_flashing(false);
+                // Warning order is fixed: ARB (Snapdragon) or preloader
+                // (MediaTek) FIRST, the final confirmation dialog AFTER.
+                let method = ui.get_flash_method(); // 1 = Snapdragon, 2 = MediaTek
+                if method == 1 && !is_source {
+                    add_log(models, &ui, &LogLevel::Warn, 2, &format!("ARB={} — flashing may permanently raise the anti-rollback counter. Confirm to continue.", arb_version));
+                    ui.set_arb_warning_version(arb_version);
+                    ui.set_show_arb_warning(true);
+                } else if method == 2 && has_preloader {
+                    add_log(models, &ui, &LogLevel::Warn, 2, "⚠ preloader.img detected — confirm how to handle it");
+                    ui.set_show_preloader_warning(true);
+                } else {
+                    ui.set_confirm_action(if is_source { 8 } else { 4 });
+                    ui.set_show_confirm(true);
+                }
             }
             WMsg::ReadyToFlash => {
                 ui.set_confirm_action(9);
@@ -173,17 +172,8 @@ pub fn poll(
     }
 }
 
-pub fn add_log_m(model: &VecModel<LogEntry>, _ui: &MainWindow, l: &LogLevel, m: &str) {
-    model.push(LogEntry { timestamp: ts().into(), level: SharedString::from(lvl(l)), message: SharedString::from(m) });
-    while model.row_count() > 500 { model.remove(0); }
-}
-
-pub fn add_log_ui_m(model: &VecModel<LogEntry>, ui: &MainWindow, msg: &str) {
-    add_log_m(model, ui, &LogLevel::Info, msg);
-}
-
 fn add_log(models: &LogModels, ui: &MainWindow, l: &LogLevel, tab: u8, m: &str) {
-    crate::log_models::add_log_m(models.by_tab(tab), ui, l, m);
+    add_log_m(models.by_tab(tab), ui, l, m);
 }
 
 pub fn register_callbacks(
@@ -227,6 +217,7 @@ pub fn register_callbacks(
     ui.on_browse_source_dir(move || {
         if let Some(p) = rfd::FileDialog::new()
             .set_title("Select build output directory (containing .img files)")
+            .set_directory(get_output_dir())
             .pick_folder()
             && let Some(ui) = w.upgrade() {
                 let dir_str = p.display().to_string();
@@ -265,7 +256,11 @@ pub fn register_callbacks(
 
     let w = ui.as_weak();
     ui.on_browse_output_dir(move || {
-        if let Some(p) = rfd::FileDialog::new().pick_folder()
+        // Start at the currently configured output dir (config.json or the
+        // default data dir) so the user adjusts from there.
+        if let Some(p) = rfd::FileDialog::new()
+            .set_directory(get_output_dir())
+            .pick_folder()
             && let Some(ui) = w.upgrade() {
                 let s = p.display().to_string();
                 set_output_dir(&s);
@@ -273,17 +268,66 @@ pub fn register_callbacks(
             }
     });
 
+    // Extract/validate the firmware. Called after the cable test; the worker
+    // replies with FlashPrepared, which drives the ARB/preloader dialogs.
+    let fl = Rc::clone(&models.flash);
+    let t = ctx.clone();
+    let w = ui.as_weak();
+    ui.on_prepare_flash(move || {
+        if let Some(ui) = w.upgrade() {
+            let is_source = ui.get_pending_source_flash();
+            let path = if is_source { ui.get_source_dir() } else { ui.get_firmware_path() }.to_string();
+            if path.is_empty() {
+                add_log_m(&fl, &ui, &LogLevel::Error, "No firmware selected");
+                return;
+            }
+            // The flash-method dialog guarantees a choice, but never start
+            // flashing without one even if the UI state is inconsistent.
+            let method = match ui.get_flash_method() {
+                1 => FlashMethod::Snapdragon,
+                2 => FlashMethod::Mtk,
+                _ => {
+                    add_log_m(&fl, &ui, &LogLevel::Error, "Flash method not selected — choose Snapdragon or MediaTek first");
+                    return;
+                }
+            };
+            ui.set_prepared_dir("".into());
+            ui.set_is_flashing(true);
+            ui.set_flash_progress(0.0);
+            ui.set_flash_status("Preparing...".into());
+            t.send(Cmd::PrepareFlash { path, is_source, method }).ok();
+        }
+    });
+
+    // Start the actual flash. Only reachable from the final-warning dialogs,
+    // after the method choice and the ARB/preloader confirmations.
+    let fl = Rc::clone(&models.flash);
     let t = ctx.clone();
     let w = ui.as_weak();
     ui.on_start_flash(move || {
         if let Some(ui) = w.upgrade() {
-            ui.set_pending_source_flash(false);
+            let dir = ui.get_prepared_dir().to_string();
+            if dir.is_empty() {
+                add_log_m(&fl, &ui, &LogLevel::Error, "Firmware not prepared — please restart the flash flow");
+                return;
+            }
+            let method = match ui.get_flash_method() {
+                1 => FlashMethod::Snapdragon,
+                2 => FlashMethod::Mtk,
+                _ => {
+                    add_log_m(&fl, &ui, &LogLevel::Error, "Flash method not selected — flashing refused");
+                    return;
+                }
+            };
             ui.set_is_flashing(true);
             ui.set_flash_progress(0.0);
             ui.set_flash_status("Starting...".into());
-            t.send(Cmd::Flash {
-                path: ui.get_firmware_path().to_string(),
-                skip_arb: ui.get_skip_arb_check(),
+            t.send(Cmd::StartFlash {
+                dir,
+                is_source: ui.get_pending_source_flash(),
+                method,
+                skip_xbl_abl: ui.get_skip_xbl_abl(),
+                skip_preloader: ui.get_skip_preloader(),
                 skip_partitions: if ui.get_show_skip_partitions() { ui.get_skip_partitions().to_string() } else { String::new() },
             }).ok();
         }
@@ -298,29 +342,12 @@ pub fn register_callbacks(
                 add_log_m(&fl, &ui, &LogLevel::Error, "No source directory selected");
                 return;
             }
-            ui.set_firmware_path(dir.into());
             ui.set_pending_source_flash(true);
+            // Method choice is mandatory — reset and ask again for each flow.
+            ui.set_flash_method(0);
             ui.set_reboot_choice(0);
-            ui.set_confirm_action(3);
+            ui.set_confirm_action(12);
             ui.set_show_confirm(true);
-        }
-    });
-
-    let fl = Rc::clone(&models.flash);
-    let t = ctx.clone();
-    let w = ui.as_weak();
-    ui.on_confirm_source_flash(move || {
-        if let Some(ui) = w.upgrade() {
-            let dir = ui.get_firmware_path().to_string();
-            if dir.is_empty() {
-                add_log_m(&fl, &ui, &LogLevel::Error, "Source directory lost — please try again");
-                return;
-            }
-            ui.set_pending_source_flash(false);
-            ui.set_is_flashing(true);
-            ui.set_flash_progress(0.0);
-            ui.set_flash_status("Starting flash from source...".into());
-            t.send(Cmd::FlashFromSource { dir, skip_partitions: ui.get_skip_partitions().to_string() }).ok();
         }
     });
 
@@ -346,11 +373,14 @@ pub fn register_callbacks(
         }
     });
 
+    // Reboot must go through the worker — a blocking `adb reboot` here would
+    // freeze the UI thread for as long as adb takes to respond.
     let dv = Rc::clone(&models.device);
+    let t = ctx.clone();
     let w = ui.as_weak();
     ui.on_reboot_device(move || {
         if let Some(ui) = w.upgrade() { add_log_m(&dv, &ui, &LogLevel::Info, "Rebooting device..."); }
-        let _ = std::process::Command::new("adb").args(["reboot"]).status();
+        t.send(Cmd::RebootTo("adb-reboot".into())).ok();
     });
 
     let t = ctx.clone();
@@ -386,49 +416,6 @@ pub fn register_callbacks(
         save_config(&config);
     });
 
-    let t = ctx.clone();
-    let w = ui.as_weak();
-    ui.on_confirm_arb_and_flash(move || {
-        if let Some(ui) = w.upgrade() {
-            ui.set_is_flashing(true); ui.set_flash_progress(0.0); ui.set_flash_status("Starting...".into());
-            t.send(Cmd::ConfirmArbAndFlash {
-                path: ui.get_firmware_path().to_string(),
-                skip_xbl_abl: ui.get_skip_xbl_abl(),
-                skip_partitions: if ui.get_show_skip_partitions() { ui.get_skip_partitions().to_string() } else { String::new() },
-            }).ok();
-        }
-    });
-
-    let t = ctx.clone();
-    let w = ui.as_weak();
-    ui.on_confirm_arb_device_flash(move || {
-        if let Some(ui) = w.upgrade() {
-            ui.set_is_flashing(true); ui.set_flash_progress(0.0); ui.set_flash_status("Starting...".into());
-            let is_source = ui.get_arb_device_is_source();
-            t.send(Cmd::ConfirmArbDeviceFlash {
-                path: ui.get_firmware_path().to_string(),
-                is_source,
-                skip_xbl_abl: ui.get_skip_xbl_abl(),
-                skip_partitions: if ui.get_show_skip_partitions() { ui.get_skip_partitions().to_string() } else { String::new() },
-            }).ok();
-        }
-    });
-
-    let t = ctx.clone();
-    let w = ui.as_weak();
-    ui.on_confirm_preloader_flash(move || {
-        if let Some(ui) = w.upgrade() {
-            ui.set_is_flashing(true); ui.set_flash_progress(0.0); ui.set_flash_status("Starting...".into());
-            let is_source = ui.get_preloader_is_source();
-            t.send(Cmd::ConfirmPreloaderFlash {
-                path: ui.get_firmware_path().to_string(),
-                is_source,
-                skip_preloader: ui.get_skip_preloader(),
-                skip_partitions: if ui.get_show_skip_partitions() { ui.get_skip_partitions().to_string() } else { String::new() },
-            }).ok();
-        }
-    });
-
     let fl = Rc::clone(&models.flash);
     let t = ctx.clone();
     let w = ui.as_weak();
@@ -436,7 +423,7 @@ pub fn register_callbacks(
         if let Some(ui) = w.upgrade() {
             let reboot_choice = ui.get_reboot_choice() as u8;
             ui.set_show_confirm(false);
-            add_log_ui_m(&fl, &ui, "Rebooting to fastbootd...");
+            add_log_m(&fl, &ui, &LogLevel::Info, "Rebooting to fastbootd...");
             t.send(Cmd::RebootForFlash { reboot_choice }).ok();
         }
     });
@@ -563,40 +550,40 @@ pub fn register_callbacks(
     let fl = Rc::clone(&models.flash);
     let w_flash = ui.as_weak();
     ui.on_export_flash_log(move || {
-        if let Some(path) = export_log(&fl, "flash") {
-            if let Some(ui) = w_flash.upgrade() {
-                ui.set_flash_export_status(path.into());
-            }
+        if let Some(path) = export_log(&fl, "flash")
+            && let Some(ui) = w_flash.upgrade()
+        {
+            ui.set_flash_export_status(path.into());
         }
     });
 
     let pl = Rc::clone(&models.partition);
     let w_part = ui.as_weak();
     ui.on_export_partition_log(move || {
-        if let Some(path) = export_log(&pl, "partition") {
-            if let Some(ui) = w_part.upgrade() {
-                ui.set_partition_export_status(path.into());
-            }
+        if let Some(path) = export_log(&pl, "partition")
+            && let Some(ui) = w_part.upgrade()
+        {
+            ui.set_partition_export_status(path.into());
         }
     });
 
     let dl = Rc::clone(&models.device);
     let w_dev = ui.as_weak();
     ui.on_export_device_log(move || {
-        if let Some(path) = export_log(&dl, "device") {
-            if let Some(ui) = w_dev.upgrade() {
-                ui.set_device_export_status(path.into());
-            }
+        if let Some(path) = export_log(&dl, "device")
+            && let Some(ui) = w_dev.upgrade()
+        {
+            ui.set_device_export_status(path.into());
         }
     });
 
     let dl2 = Rc::clone(&models.download);
     let w_dl = ui.as_weak();
     ui.on_export_download_log(move || {
-        if let Some(path) = export_log(&dl2, "download") {
-            if let Some(ui) = w_dl.upgrade() {
-                ui.set_download_export_status(path.into());
-            }
+        if let Some(path) = export_log(&dl2, "download")
+            && let Some(ui) = w_dl.upgrade()
+        {
+            ui.set_download_export_status(path.into());
         }
     });
 }

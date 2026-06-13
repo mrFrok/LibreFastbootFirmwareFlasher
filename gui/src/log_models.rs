@@ -28,7 +28,6 @@ impl LogModels {
         ui.set_flash_log(ModelRc::from(Rc::clone(&self.flash)));
         ui.set_partition_log(ModelRc::from(Rc::clone(&self.partition)));
         ui.set_history_items(ModelRc::from(Rc::clone(&self.history)));
-        ui.set_history_items(ModelRc::from(Rc::clone(&self.history)));
     }
 
     pub fn by_tab(&self, tab: u8) -> &VecModel<LogEntry> {
