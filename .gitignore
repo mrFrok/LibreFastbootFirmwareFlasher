@@ -2,9 +2,6 @@
 /target/
 **/*.rs.bk
 
-# Cargo lock (binary crate — lock should be committed, but uncomment if you prefer not to)
-# Cargo.lock
-
 # IDE / editor
 .idea/
 .vscode/
@@ -12,6 +9,7 @@
 *.swo
 *~
 .DS_Store
+Thumbs.db
 
 # Environment
 .env
@@ -28,3 +26,6 @@ lfff_arb/
 lfff_extract/
 lfff_cable_test.img
 _staging/
+
+# Claude Code memory
+.claude/
