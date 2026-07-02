@@ -16,6 +16,19 @@ slint::include_modules!();
 #[derive(Debug, Clone)]
 enum LogLevel { Info, Warn, Error, Success }
 
+/// Values of the `confirm-action` property — must match the dialog switch in
+/// `ui/main.slint` (see the comment next to the property declaration there).
+/// Only the values set from Rust are listed.
+mod confirm_action {
+    pub const FLASH_ALL_FINAL: i32 = 4;
+    pub const SUCCESS: i32 = 7;
+    pub const SOURCE_FINAL: i32 = 8;
+    pub const CABLE_TEST: i32 = 9;
+    pub const FLASH_FAILURE: i32 = 10;
+    pub const SESSION_ERROR: i32 = 11;
+    pub const FLASH_METHOD: i32 = 12;
+}
+
 /// Flash method — always an explicit user choice, never auto-detected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FlashMethod { Snapdragon, Mtk }
@@ -236,23 +249,7 @@ fn main() -> Result<(), slint::PlatformError> {
     models.attach(&ui);
     ui.set_output_dir(config::get_output_dir().display().to_string().as_str().into());
 
-    // Load flash history
-    let history = lfff_lib::flash_history::load_history();
-    for entry in history.iter().rev() {
-        let result = if entry.aborted { "Aborted" } else if entry.failed > 0 { "Failed" } else { "OK" };
-        let duration = if entry.duration_s > 0.0 {
-            format!("{:.0}m {:.0}s", entry.duration_s / 60.0, entry.duration_s % 60.0)
-        } else {
-            String::new()
-        };
-        models.history.push(FlashHistoryItem {
-            timestamp: entry.timestamp.clone().into(),
-            firmware: entry.firmware_name.clone().into(),
-            device: entry.device_product.clone().into(),
-            result: result.into(),
-            duration: duration.into(),
-        });
-    }
+    models.refresh_history();
 
     ui_callbacks::register_callbacks(&ui, &ctx, &models, &fail_resp, &flash_cancel);
 

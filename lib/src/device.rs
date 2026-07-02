@@ -280,8 +280,23 @@ pub fn get_device_info(serial: Option<&str>) -> Option<DeviceInfo> {
 /// Estimate USB transfer speed via `fastboot stage` (RAM only, no NAND write).
 pub fn test_cable_speed(serial: Option<&str>) -> CableTestResult {
     let bytes = CABLE_TEST_PAYLOAD_MB * 1024 * 1024;
-    let tmp = std::env::temp_dir().join("lfff_cable_test.img");
-    if let Err(e) = fs::write(&tmp, vec![0u8; bytes]) {
+    // Unpredictable per-run temp file: a fixed /tmp name is open to symlink
+    // attacks and collides between concurrent runs. Deleted on drop.
+    let tmp = match tempfile::Builder::new()
+        .prefix("lfff-cable-")
+        .suffix(".img")
+        .tempfile()
+    {
+        Ok(f) => f,
+        Err(e) => {
+            return CableTestResult {
+                passed: false,
+                speed_mbs: 0.0,
+                error: format!("Cannot create test payload: {}", e),
+            };
+        }
+    };
+    if let Err(e) = fs::write(tmp.path(), vec![0u8; bytes]) {
         return CableTestResult {
             passed: false,
             speed_mbs: 0.0,
@@ -289,7 +304,7 @@ pub fn test_cable_speed(serial: Option<&str>) -> CableTestResult {
         };
     }
 
-    let ts = tmp.to_string_lossy().to_string();
+    let ts = tmp.path().to_string_lossy().to_string();
     let mut cmd: Vec<&str> = vec!["fastboot"];
     let s;
     if let Some(ser) = serial {
@@ -302,7 +317,7 @@ pub fn test_cable_speed(serial: Option<&str>) -> CableTestResult {
     let start = Instant::now();
     let r = run_cmd(&cmd, 60);
     let elapsed = start.elapsed().as_secs_f64();
-    let _ = fs::remove_file(&tmp);
+    drop(tmp);
 
     if r.code != 0 {
         let stderr_lower = r.stderr.to_lowercase();

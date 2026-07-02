@@ -30,6 +30,36 @@ impl LogModels {
         ui.set_history_items(ModelRc::from(Rc::clone(&self.history)));
     }
 
+    /// Reload flash history from disk into the history model (newest first).
+    pub fn refresh_history(&self) {
+        let history = lfff_lib::flash_history::load_history();
+        let items: Vec<FlashHistoryItem> = history
+            .iter()
+            .rev()
+            .map(|entry| {
+                let result = if entry.aborted { "Aborted" }
+                    else if entry.failed > 0 { "Failed" }
+                    else { "OK" };
+                // Integer math — rounding minutes and seconds independently
+                // produced labels like "2m 60s".
+                let secs = entry.duration_s.round() as u64;
+                let duration = if secs > 0 {
+                    format!("{}m {:02}s", secs / 60, secs % 60)
+                } else {
+                    String::new()
+                };
+                FlashHistoryItem {
+                    timestamp: entry.timestamp.clone().into(),
+                    firmware: entry.firmware_name.clone().into(),
+                    device: entry.device_product.clone().into(),
+                    result: result.into(),
+                    duration: duration.into(),
+                }
+            })
+            .collect();
+        self.history.set_vec(items);
+    }
+
     pub fn by_tab(&self, tab: u8) -> &VecModel<LogEntry> {
         match tab {
             0 => &self.device,

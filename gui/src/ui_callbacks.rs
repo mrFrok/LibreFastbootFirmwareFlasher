@@ -2,7 +2,7 @@ use slint::{ComponentHandle, VecModel, Weak};
 use std::rc::Rc;
 use std::sync::mpsc;
 
-use crate::{LogLevel, LogEntry, MainWindow, Cmd, WMsg, FlashMethod, DeviceInfo, FlashHistoryItem};
+use crate::{LogLevel, LogEntry, MainWindow, Cmd, WMsg, FlashMethod, DeviceInfo, confirm_action};
 use crate::log_models::{LogModels, add_log_m};
 use crate::config::{save_scale, save_config, load_config, set_output_dir, get_output_dir};
 
@@ -74,35 +74,17 @@ pub fn poll(
                 if success { ui.set_flash_progress(1.0); }
                 let is_cancel = message.contains("aborted by user") || message.contains("cancelled");
                 add_log(models, &ui, if success { &LogLevel::Success } else { &LogLevel::Error }, 2, &log_summary);
-                
-                // Refresh flash history
-                let history = lfff_lib::flash_history::load_history();
-                models.history.clear();
-                for entry in history.iter().rev() {
-                    let result = if entry.aborted { "Aborted" } else if entry.failed > 0 { "Failed" } else { "OK" };
-                    let duration = if entry.duration_s > 0.0 {
-                        format!("{:.0}m {:.0}s", entry.duration_s / 60.0, entry.duration_s % 60.0)
-                    } else {
-                        String::new()
-                    };
-                    models.history.push(FlashHistoryItem {
-                        timestamp: entry.timestamp.clone().into(),
-                        firmware: entry.firmware_name.clone().into(),
-                        device: entry.device_product.clone().into(),
-                        result: result.into(),
-                        duration: duration.into(),
-                    });
-                }
-                
+                models.refresh_history();
+
                 if success {
-                    ui.set_confirm_action(7);
+                    ui.set_confirm_action(confirm_action::SUCCESS);
                     ui.set_show_confirm(true);
                 } else if !is_cancel {
                     ui.set_flash_fail_partition("".into());
                     ui.set_flash_fail_slot("".into());
                     ui.set_flash_fail_error(message.into());
                     ui.set_flash_failed_partitions(failed_partitions.join(",").into());
-                    ui.set_confirm_action(11);
+                    ui.set_confirm_action(confirm_action::SESSION_ERROR);
                     ui.set_show_confirm(true);
                 }
             }
@@ -110,7 +92,7 @@ pub fn poll(
                 ui.set_flash_fail_partition(partition.into());
                 ui.set_flash_fail_slot(slot.into());
                 ui.set_flash_fail_error(error.into());
-                ui.set_confirm_action(10);
+                ui.set_confirm_action(confirm_action::FLASH_FAILURE);
                 ui.set_show_confirm(true);
                 *fail_resp.borrow_mut() = Some(response);
             }
@@ -146,12 +128,16 @@ pub fn poll(
                     add_log(models, &ui, &LogLevel::Warn, 2, "⚠ preloader.img detected — confirm how to handle it");
                     ui.set_show_preloader_warning(true);
                 } else {
-                    ui.set_confirm_action(if is_source { 8 } else { 4 });
+                    ui.set_confirm_action(if is_source {
+                        confirm_action::SOURCE_FINAL
+                    } else {
+                        confirm_action::FLASH_ALL_FINAL
+                    });
                     ui.set_show_confirm(true);
                 }
             }
             WMsg::ReadyToFlash => {
-                ui.set_confirm_action(9);
+                ui.set_confirm_action(confirm_action::CABLE_TEST);
                 ui.set_cable_test_progress(0.0);
                 ui.set_cable_test_status(if ui.get_lang() == "ru" { "Подготовка к тесту..." } else { "Preparing test..." }.into());
                 ui.set_cable_test_passed(false);
@@ -346,7 +332,7 @@ pub fn register_callbacks(
             // Method choice is mandatory — reset and ask again for each flow.
             ui.set_flash_method(0);
             ui.set_reboot_choice(0);
-            ui.set_confirm_action(12);
+            ui.set_confirm_action(confirm_action::FLASH_METHOD);
             ui.set_show_confirm(true);
         }
     });

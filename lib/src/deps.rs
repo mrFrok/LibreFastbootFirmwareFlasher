@@ -236,6 +236,24 @@ fn pdg_is_runnable() -> bool {
         .unwrap_or(false)
 }
 
+/// ~/.local/bin, but only when it is already in $PATH — installing there
+/// otherwise produces a binary nothing can find.
+fn local_bin_in_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let lb = Path::new(&home).join(".local/bin");
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path).any(|p| p == lb).then_some(lb)
+}
+
+#[cfg(unix)]
+fn set_exec(p: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = fs::set_permissions(p, fs::Permissions::from_mode(0o755));
+}
+
+#[cfg(not(unix))]
+fn set_exec(_p: &Path) {}
+
 /// Pick the correct asset name for the current platform.
 ///
 /// Asset naming: `payload_dumper-{os}-{arch}.zip`
@@ -286,7 +304,7 @@ fn install_payload_dumper() -> DepResult {
     println!("  Fetching latest payload_dumper release from GitHub ...");
     let api_result = Command::new("curl")
         .args([
-            "-sL",
+            "-sfL",
             &format!("https://api.github.com/repos/{}/releases/latest", PDG_REPO),
             "-H",
             "User-Agent: lfff/0.2",
@@ -327,13 +345,19 @@ fn install_payload_dumper() -> DepResult {
     println!("  Downloading {} ...", asset_name);
     println!("  URL: {}", dl_url);
 
-    let tmp_dir = std::env::temp_dir().join("lfff_pdg_install");
-    fs::create_dir_all(&tmp_dir).ok();
-    let archive = tmp_dir.join(&asset_name);
+    // Unique per-run temp dir, auto-removed on drop.
+    let tmp_dir = match tempfile::Builder::new().prefix("lfff-pdg-").tempdir() {
+        Ok(d) => d,
+        Err(e) => {
+            result.error = format!("Cannot create temp dir: {}", e);
+            return result;
+        }
+    };
+    let archive = tmp_dir.path().join(&asset_name);
 
-    // Download
+    // Download (-f: fail on HTTP errors instead of saving an error page)
     let dl_ok = Command::new("curl")
-        .args(["-sL", "-o"])
+        .args(["-sfL", "-o"])
         .arg(&archive)
         .arg(&dl_url)
         .status()
@@ -342,51 +366,66 @@ fn install_payload_dumper() -> DepResult {
 
     if !dl_ok {
         result.error = format!("Download failed: {}", dl_url);
-        let _ = fs::remove_dir_all(&tmp_dir);
         return result;
     }
 
-    // unzip may not be installed on minimal systems (e.g. Alpine, Docker)
-    if which::which("unzip").is_err() {
-        result.error = "unzip not found — install it (e.g. sudo apt install unzip) and re-run".into();
-        let _ = fs::remove_dir_all(&tmp_dir);
+    // Extract with the zip crate — no external unzip dependency.
+    let binary = tmp_dir.path().join("payload_dumper");
+    let unzip_result = (|| -> Result<(), String> {
+        let f = fs::File::open(&archive).map_err(|e| e.to_string())?;
+        let mut z = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
+        let idx = (0..z.len())
+            .find(|&i| {
+                z.by_index(i)
+                    .map(|e| {
+                        Path::new(e.name())
+                            .file_name()
+                            .map(|n| n == "payload_dumper")
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            })
+            .ok_or_else(|| "payload_dumper binary not found in archive".to_string())?;
+        let mut entry = z.by_index(idx).map_err(|e| e.to_string())?;
+        let mut out = fs::File::create(&binary).map_err(|e| e.to_string())?;
+        std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    if let Err(e) = unzip_result {
+        result.error = format!("Failed to extract archive: {}", e);
         return result;
     }
 
-    // Extract ZIP
-    let unzip_ok = Command::new("unzip")
-        .args(["-o", "-q"])
-        .arg(&archive)
-        .arg("-d")
-        .arg(&tmp_dir)
-        .status()
-        .map(|s| s.success())
+    set_exec(&binary);
+
+    // Sanity check BEFORE installing: the downloaded binary must actually run
+    // (catches wrong-architecture downloads and corrupted archives).
+    let runs = Command::new(&binary)
+        .arg("--help")
+        .output()
+        .map(|o| o.status.code().is_some_and(|c| c != 126 && c != 127))
         .unwrap_or(false);
-
-    if !unzip_ok {
-        result.error = "Failed to unzip archive".into();
-        let _ = fs::remove_dir_all(&tmp_dir);
+    if !runs {
+        result.error =
+            "Downloaded payload_dumper does not run (wrong architecture or corrupted download)"
+                .into();
         return result;
     }
 
-    // Find the binary
-    let binary = tmp_dir.join("payload_dumper");
-    if !binary.exists() {
-        result.error = "payload_dumper binary not found in archive".into();
-        let _ = fs::remove_dir_all(&tmp_dir);
-        return result;
+    // Install. Preferred: ~/.local/bin when already in PATH — no root needed.
+    if let Some(local_bin) = local_bin_in_path() {
+        fs::create_dir_all(&local_bin).ok();
+        let dest = local_bin.join("payload_dumper");
+        if fs::copy(&binary, &dest).is_ok() {
+            set_exec(&dest);
+            println!("  Installed to {}", dest.display());
+            result.installed = true;
+            return result;
+        }
     }
 
-    // Make executable
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).ok();
-    }
-
-    // Install to /usr/local/bin (with sudo) or ~/.local/bin
+    // Otherwise /usr/local/bin via sudo/pkexec.
     let dest = std::path::Path::new("/usr/local/bin/payload_dumper");
-
     let sc = sudo_cmd();
     let install_ok = Command::new(&sc)
         .args(["cp"])
@@ -406,17 +445,13 @@ fn install_payload_dumper() -> DepResult {
         println!("  Installed to {}", dest.display());
         result.installed = true;
     } else {
-        // Fallback: ~/.local/bin
+        // Last resort: ~/.local/bin even if it is not in PATH yet.
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
         let local_bin = std::path::Path::new(&home).join(".local/bin");
         fs::create_dir_all(&local_bin).ok();
         let local_dest = local_bin.join("payload_dumper");
         if fs::copy(&binary, &local_dest).is_ok() {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(&local_dest, fs::Permissions::from_mode(0o755)).ok();
-            }
+            set_exec(&local_dest);
             println!(
                 "  Installed to {}  (add ~/.local/bin to PATH if needed)",
                 local_dest.display()
@@ -427,7 +462,6 @@ fn install_payload_dumper() -> DepResult {
         }
     }
 
-    let _ = fs::remove_dir_all(&tmp_dir);
     result
 }
 

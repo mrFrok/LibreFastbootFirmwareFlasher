@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # GUI is excluded: compiling Slint + Skia takes too long for PR CI.
+      # It is still built by release.yml on tags.
+      - name: Clippy (deny warnings)
+        run: cargo clippy -p lfff-lib -p lfff-cli --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test -p lfff-lib -p lfff-cli

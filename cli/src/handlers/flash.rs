@@ -233,6 +233,7 @@ pub fn run(
     print_summary(&session);
 
     if !session.aborted && session.failed().is_empty() {
+        lfff_lib::flasher::offer_wipe_and_reboot(&session);
         println!("\n{}", "✓ Flash completed successfully".green().bold());
         0
     } else if session.aborted {

@@ -9,7 +9,6 @@ pub mod arb;
 pub mod deps;
 pub mod device;
 pub mod downloader;
-pub mod errors;
 pub mod extractor;
 pub mod file_ops;
 pub mod flash_history;

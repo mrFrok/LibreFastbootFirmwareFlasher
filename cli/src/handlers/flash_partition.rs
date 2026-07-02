@@ -67,7 +67,10 @@ pub fn run(
 
     let session = run_flash_single(&image_path, partition, slots.as_deref(), serial, dry_run);
 
-    if session.critical_failed().is_empty() {
+    // Any failed partition (critical or not) is a failure for scripting.
+    // An empty result set outside dry-run means flashing never started
+    // (missing image, undetectable active slot, …) — also a failure.
+    if session.failed().is_empty() && (dry_run || !session.results.is_empty()) {
         0
     } else {
         1
