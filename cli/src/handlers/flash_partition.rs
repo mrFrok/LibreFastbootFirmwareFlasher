@@ -65,7 +65,19 @@ pub fn run(
         None
     };
 
-    let session = run_flash_single(&image_path, partition, slots.as_deref(), serial, dry_run);
+    let session = run_flash_single(
+        &image_path,
+        partition,
+        slots.as_deref(),
+        serial,
+        dry_run,
+        &|line| println!("{}", line),
+    );
+
+    // run_flash_single aborts on the first failure — diagnose it for the user.
+    if let Some(failed) = session.failed().last() {
+        crate::output::report_failure(failed);
+    }
 
     // Any failed partition (critical or not) is a failure for scripting.
     // An empty result set outside dry-run means flashing never started

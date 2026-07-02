@@ -317,48 +317,13 @@ pub fn check_tools(tools: &[&str]) -> HashMap<String, bool> {
         .collect()
 }
 
-/// Print dependency table, return false if any tool is missing.
-pub fn require_tools(tools: &[&str]) -> bool {
-    let results = check_tools(tools);
-    let mut all_ok = true;
-    for &tool in tools {
-        let found = results.get(tool).copied().unwrap_or(false);
-        let status = if found { "✓" } else { "✗" };
-        let hint = if found {
-            String::new()
-        } else {
-            format!("  →  {}", tool_install_hint(tool))
-        };
-        println!("  {}  {}{}", status, tool, hint);
-        if !found {
-            all_ok = false;
-        }
-    }
-    all_ok
-}
-
-// ---------------------------------------------------------------------------
-// Interactive input
-// ---------------------------------------------------------------------------
-
-/// Prompt user for input, return default on empty.
-pub fn prompt(message: &str, default: &str) -> String {
-    use std::io::{self, Write};
-    let suffix = if default.is_empty() {
-        String::new()
-    } else {
-        format!(" [{}]", default)
-    };
-    print!("{}{}: ", message, suffix);
-    io::stdout().flush().ok();
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).ok();
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        default.to_string()
-    } else {
-        trimmed.to_string()
-    }
+/// Names of the tools from `tools` that are missing from $PATH.
+pub fn missing_tools(tools: &[&str]) -> Vec<String> {
+    tools
+        .iter()
+        .filter(|&&t| which::which(t).is_err())
+        .map(|&t| t.to_string())
+        .collect()
 }
 
 #[cfg(test)]

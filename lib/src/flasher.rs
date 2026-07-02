@@ -11,7 +11,6 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Instant;
@@ -104,7 +103,7 @@ pub fn is_super_partition(name: &str) -> bool {
     SUPER_PARTITIONS.contains(&name)
 }
 
-fn is_critical_partition(name: &str) -> bool {
+pub fn is_critical_partition(name: &str) -> bool {
     CRITICAL_PARTITIONS.contains(&name)
 }
 
@@ -695,58 +694,19 @@ pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
-// Error reporting and interactive handler
-// ---------------------------------------------------------------------------
-
-fn report_failure(result: &FlashResult) {
-    let is_crit = is_critical_partition(&result.partition);
-    let err_lower = result.error.to_lowercase();
-
-    println!();
-    println!("{}", "━".repeat(60));
-    println!("  ✗  FAILED  {}_{}", result.partition, result.slot);
-    println!("  {}", result.error);
-    println!();
-
-    if err_lower.contains("resize") || err_lower.contains("not enough space") {
-        println!("  Cause: Dynamic partition resize failed.");
-        println!("  Fix  : Make sure the device is in fastbootd and retry.");
-    } else if err_lower.contains("does not exist") || err_lower.contains("not found") {
-        println!("  Cause: Partition not present on this device.");
-        println!("  Fix  : This image may not be compatible with your device variant.");
-    } else if err_lower.contains("permission denied") || err_lower.contains("not allowed") {
-        println!("  Cause: Bootloader is locked.");
-        println!("  Fix  : fastboot flashing unlock");
-    } else if err_lower.contains("timeout") {
-        println!("  Cause: USB timeout.");
-        println!("  Fix  : Try a different cable or USB 3.0 port.");
-    } else {
-        println!("  Possible causes:");
-        println!("    • Faulty USB cable — try a different one");
-        println!("    • Bootloader is locked  →  fastboot flashing unlock");
-        println!("    • Corrupted image — re-download the firmware");
-        println!("    • Low battery during flash");
-    }
-
-    if is_crit {
-        println!();
-        println!("  ⚠  CRITICAL partition — do NOT reboot or unplug until resolved.");
-    }
-    println!("{}", "━".repeat(60));
-    println!();
-}
-
-// ---------------------------------------------------------------------------
 // Single-partition flash
 // ---------------------------------------------------------------------------
 
 /// Flash a single .img file to one or both slots.
+/// All human-readable output goes through `on_log` — the caller decides how
+/// to present it (terminal, GUI log pane, …).
 pub fn run_flash_single(
     image_path: &Path,
     partition: Option<&str>,
     slots: Option<&[String]>,
     serial: Option<&str>,
     dry_run: bool,
+    on_log: &dyn Fn(String),
 ) -> FlashSession {
     let mut session = FlashSession::new(
         &FirmwareSource::Extracted(image_path.parent().unwrap_or(Path::new(".")).to_path_buf()),
@@ -755,7 +715,7 @@ pub fn run_flash_single(
     );
 
     if !image_path.exists() {
-        println!("✗ Image not found: {}", image_path.display());
+        on_log(format!("✗ Image not found: {}", image_path.display()));
         return session;
     }
 
@@ -783,15 +743,15 @@ pub fn run_flash_single(
         Some(s) => s.to_vec(),
         None if is_super && !dry_run => match get_active_slot(serial) {
             Some(s) => {
-                println!("  Dynamic partition — flashing active slot '{}' only", s);
+                on_log(format!("  Dynamic partition — flashing active slot '{}' only", s));
                 vec![s]
             }
             None => {
-                println!(
+                on_log(format!(
                     "✗ Could not detect the active slot — refusing to flash dynamic partition '{}'.",
                     part_name
-                );
-                println!("  Check that the device is in fastbootd, or pass --slot explicitly.");
+                ));
+                on_log("  Check that the device is in fastbootd, or pass --slot explicitly.".into());
                 return session;
             }
         },
@@ -803,26 +763,22 @@ pub fn run_flash_single(
         .map(|m| m.len() as f64 / 1024.0 / 1024.0)
         .unwrap_or(0.0);
 
-    println!(
-        "\n── Flash single partition: {} ──────────────────",
-        part_name
-    );
-    println!(
+    on_log(format!("\n── Flash single partition: {} ──────────────────", part_name));
+    on_log(format!(
         "  Image     : {}  ({:.1} MB)",
         image_path.file_name().unwrap_or_default().to_string_lossy(),
         size_mb
-    );
-    println!("  Partition : {}", part_name);
+    ));
+    on_log(format!("  Partition : {}", part_name));
     let slot_label = if flash_slots == [""] {
         "non-A/B".to_string()
     } else {
         flash_slots.join(", ")
     };
-    println!("  Slots     : {}", slot_label);
+    on_log(format!("  Slots     : {}", slot_label));
     if is_crit {
-        println!("  ⚠  CRITICAL partition — do not unplug during flash");
+        on_log("  ⚠  CRITICAL partition — do not unplug during flash".into());
     }
-    println!();
 
     if dry_run {
         for slot in &flash_slots {
@@ -831,13 +787,13 @@ pub fn run_flash_single(
             } else {
                 format!("{}_{}", part_name, slot)
             };
-            println!(
+            on_log(format!(
                 "  [dry-run] would flash: {} <- {}",
                 label,
                 image_path.file_name().unwrap_or_default().to_string_lossy()
-            );
+            ));
         }
-        println!("────────────────────────────────────────────────────────");
+        on_log("────────────────────────────────────────────────────────".into());
         return session;
     }
 
@@ -847,138 +803,22 @@ pub fn run_flash_single(
         } else {
             format!("{}_{}", part_name, slot)
         };
-        print!("  Flashing {} ...", label);
-        io::stdout().flush().ok();
+        on_log(format!("  Flashing {} ...", label));
 
         let result = flash_partition(image_path, &part_name, slot, serial);
         session.results.push(result.clone());
 
         if result.success {
-            println!(" OK  ({:.1}s)", result.duration_s);
+            on_log(format!("  {} OK  ({:.1}s)", label, result.duration_s));
         } else {
-            println!(" FAILED");
-            report_failure(&result);
-            println!("────────────────────────────────────────────────────────");
+            on_log(format!("  {} FAILED", label));
             return session;
         }
     }
 
-    println!("────────────────────────────────────────────────────────");
-    println!("  ✓ {} flashed successfully", part_name);
+    on_log("────────────────────────────────────────────────────────".into());
+    on_log(format!("  ✓ {} flashed successfully", part_name));
     session
-}
-
-// ---------------------------------------------------------------------------
-// Summary + wipe + reboot
-// ---------------------------------------------------------------------------
-
-/// Print session summary. Pure output — no prompts, no device commands.
-/// CLI callers follow up with [`offer_wipe_and_reboot`] on success.
-pub fn print_summary(session: &FlashSession) {
-    let total = session.results.len();
-    let ok = session.succeeded().len();
-    let failed_count = session.failed().len();
-
-    println!("\n── Flash session summary ───────────────────────────────");
-    println!("  Total      :  {}", total);
-    println!("  ✓ OK       :  {}", ok);
-    if failed_count > 0 {
-        println!("  ✗ Failed   :  {}", failed_count);
-    }
-
-    if !session.failed().is_empty() {
-        println!("\n  Failed partitions:");
-        for r in session.failed() {
-            let crit = if is_critical_partition(&r.partition) {
-                "  [CRITICAL]"
-            } else {
-                ""
-            };
-            println!("    ✗  {}_{}{}", r.partition, r.slot, crit);
-            println!("       {}", r.error);
-        }
-    }
-
-    println!();
-
-    if session.failed().is_empty() && !session.aborted {
-        let elapsed_total: f64 = session.succeeded().iter().map(|r| r.duration_s).sum();
-        let mins = elapsed_total as u64 / 60;
-        let secs = elapsed_total as u64 % 60;
-        let time_str = if mins > 0 {
-            format!("{}m {:02}s", mins, secs)
-        } else {
-            format!("{}s", secs)
-        };
-
-        println!("{}", "━".repeat(60));
-        println!("  ✓  Flash complete!");
-        println!("{}", "━".repeat(60));
-        println!("  Partitions flashed :  {}", ok);
-        println!("  Total flash time   :  {}", time_str);
-        println!("{}", "━".repeat(60));
-        println!();
-    } else if !session.critical_failed().is_empty() {
-        println!("{}", "━".repeat(60));
-        println!("  ✗  Critical failure");
-        println!("  One or more CRITICAL partitions failed to flash.");
-        println!("  The device may not boot.");
-        println!("  Do NOT reboot or unplug until resolved.");
-        println!("{}", "━".repeat(60));
-    } else if !session.failed().is_empty() {
-        println!("{}", "━".repeat(60));
-        println!("  ⚠  Flash completed with errors");
-        println!("  Non-critical partitions failed — device should still boot.");
-        println!("  Re-flash the failed partitions to complete the update.");
-        println!("{}", "━".repeat(60));
-    } else if session.aborted {
-        println!("{}", "━".repeat(60));
-        println!("  ⚠  Flash was aborted");
-        println!("{}", "━".repeat(60));
-    }
-}
-
-/// Interactively offer a userdata wipe, then reboot to system.
-/// CLI-only follow-up to a successful [`print_summary`].
-pub fn offer_wipe_and_reboot(session: &FlashSession) {
-    offer_wipe(session);
-
-    println!("\n  Rebooting to system ...");
-    let mut args: Vec<&str> = Vec::new();
-    push_serial_arg(&mut args, session.serial.as_deref());
-    args.push("reboot");
-    fastboot_cmd(&args, 30);
-}
-
-fn offer_wipe(session: &FlashSession) {
-    println!("── Format userdata ──────────────────────────────────────");
-    println!("  'fastboot -w' wipes ALL user data (contacts, apps, files).");
-    println!("  Recommended after a major version change or cross-region flash.");
-    println!();
-    println!("  ⚠  ALL DATA WILL BE PERMANENTLY ERASED.");
-    println!();
-
-    let answer = crate::utils::prompt("  Wipe userdata now? (yes / no)", "no");
-    if answer != "yes" {
-        println!("  Skipped. Wipe manually later: fastboot -w");
-        println!("────────────────────────────────────────────────────────\n");
-        return;
-    }
-
-    println!("  Wiping userdata ...");
-    let mut args: Vec<&str> = Vec::new();
-    push_serial_arg(&mut args, session.serial.as_deref());
-    args.push("-w");
-    let (rc, out, err) = fastboot_cmd(&args, 120);
-    if rc == 0 {
-        println!("  ✓ Userdata wiped successfully.");
-    } else {
-        println!(
-            "  ✗ Wipe failed: {}",
-            if err.is_empty() { &out } else { &err }
-        );
-    }
-    println!("────────────────────────────────────────────────────────\n");
 }
 
 // ---------------------------------------------------------------------------

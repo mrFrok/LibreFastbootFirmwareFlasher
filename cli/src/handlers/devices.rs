@@ -1,7 +1,7 @@
 use colored::Colorize;
-use lfff_lib::device::{
-    list_adb_devices, list_fastboot_devices, print_check_report, run_pre_flash_checks,
-};
+use lfff_lib::device::{list_adb_devices, list_fastboot_devices, run_pre_flash_checks};
+
+use crate::output::print_check_report;
 
 pub fn run(check: bool, serial: Option<&str>) -> i32 {
     println!("\n{}", "── Connected devices ────────────────────────────────────".dimmed());

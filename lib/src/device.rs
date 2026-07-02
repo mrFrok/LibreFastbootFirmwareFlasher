@@ -453,44 +453,6 @@ pub fn run_pre_flash_checks(serial: Option<&str>) -> PreFlashCheck {
     c
 }
 
-/// Print human-readable pre-flash check report.
-pub fn print_check_report(check: &PreFlashCheck) {
-    let s = |ok: bool| if ok { "✓" } else { "✗" };
-    println!("\n── Pre-flash check report ─────────────────────────────");
-    println!("  {:<3} Device detected", s(check.device_found));
-    println!("  {:<3} Fastboot communication", s(check.communication_ok));
-    println!(
-        "  {:<3} Cable speed ({:.2} MB/s)",
-        s(check.cable_ok),
-        check.cable_result.speed_mbs
-    );
-    println!(
-        "  {:<3} Battery level ({}%)",
-        s(check.battery_ok),
-        check.device_info.battery_level
-    );
-    println!("  {:<3} Bootloader unlocked", s(check.unlocked));
-    if !check.warnings.is_empty() {
-        println!("\n  Warnings:");
-        for w in &check.warnings {
-            println!("    ⚠  {}", w);
-        }
-    }
-    if !check.errors.is_empty() {
-        println!("\n  Errors:");
-        for e in &check.errors {
-            println!("    ✗  {}", e);
-        }
-    }
-    println!();
-    if check.ready() {
-        println!("  ✓ Device is ready for flashing.");
-    } else {
-        println!("  ✗ Device is NOT ready. Fix errors above.");
-    }
-    println!("────────────────────────────────────────────────────────\n");
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

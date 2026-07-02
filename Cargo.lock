@@ -3096,7 +3096,6 @@ dependencies = [
  "dirs",
  "env_logger",
  "lfff-lib",
- "libc",
  "log",
  "reqwest",
  "rfd",
@@ -3111,7 +3110,6 @@ name = "lfff-lib"
 version = "2.4.0"
 dependencies = [
  "anyhow",
- "colored",
  "dirs",
  "libc",
  "serde",
