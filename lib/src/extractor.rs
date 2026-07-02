@@ -283,7 +283,15 @@ fn available_bytes(_path: &Path) -> Option<u64> {
     None
 }
 
-fn check_free_space(path: &Path) -> (bool, f64) {
+/// Require free space proportional to the archive: payload.bin plus the
+/// extracted images is roughly 3× the ZIP, with a small fixed floor. A flat
+/// threshold would reject tiny archives on half-full disks.
+fn required_free_gb(zip_size_bytes: u64) -> f64 {
+    let zip_gb = zip_size_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+    (zip_gb * 3.0).max(0.5)
+}
+
+fn check_free_space(path: &Path, required_gb: f64) -> (bool, f64) {
     let mut check = path.to_path_buf();
     while !check.exists() {
         if let Some(p) = check.parent() {
@@ -294,7 +302,7 @@ fn check_free_space(path: &Path) -> (bool, f64) {
     }
     if let Some(avail) = available_bytes(&check) {
         let gb = avail as f64 / (1024.0 * 1024.0 * 1024.0);
-        return (gb >= 20.0, gb);
+        return (gb >= required_gb, gb);
     }
     // Cannot determine free space — skip the check rather than block.
     (true, 0.0)
@@ -341,11 +349,15 @@ pub fn extract_firmware_with_log(
         }
     }
 
-    let (ok, free_gb) = check_free_space(output_dir);
+    let required_gb = required_free_gb(fs::metadata(&zip_path).map(|m| m.len()).unwrap_or(0));
+    let (ok, free_gb) = check_free_space(output_dir, required_gb);
     if !ok {
         return ExtractionResult::fail(
             output_dir,
-            &format!("Not enough disk space: {:.1} GB available", free_gb),
+            &format!(
+                "Not enough disk space: {:.1} GB available, ~{:.1} GB needed for this archive",
+                free_gb, required_gb
+            ),
         );
     }
 
