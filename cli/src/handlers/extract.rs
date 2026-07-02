@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use colored::Colorize;
-use lfff_lib::extractor::{extract_firmware, get_firmware_name, print_extraction_result};
+use lfff_lib::extractor::{extract_firmware, get_firmware_name};
+
+use crate::output::{print_extraction_result, prompt};
 
 pub fn run(
     zip: &PathBuf,
@@ -58,8 +60,7 @@ pub fn run(
                 .join("firmwares")
                 .join(&name);
             println!("  Firmware : {}", name);
-            let raw =
-                lfff_lib::utils::prompt(&format!("  Output directory [{}]", default.display()), "");
+            let raw = prompt(&format!("  Output directory [{}]", default.display()), "");
             if raw.is_empty() {
                 default
             } else {

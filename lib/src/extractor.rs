@@ -631,41 +631,6 @@ pub fn get_firmware_name(zip_path: &Path) -> String {
     fallback()
 }
 
-/// Print extraction result summary to stdout.
-pub fn print_extraction_result(result: &ExtractionResult) {
-    if !result.success {
-        println!("\n✗ Extraction failed: {}", result.error);
-        return;
-    }
-    println!("\n✓ Extracted to: {}", result.output_dir.display());
-    let mut sorted: Vec<_> = result.groups.iter().collect();
-    sorted.sort_by_key(|(k, _)| *k);
-    for (group, images) in &sorted {
-        println!("\n  {}/", group);
-        let mut imgs: Vec<&PathBuf> = images.iter().collect();
-        imgs.sort();
-        for img in imgs {
-            let mb = fs::metadata(img)
-                .map(|m| m.len() as f64 / 1024.0 / 1024.0)
-                .unwrap_or(0.0);
-            println!(
-                "    {:<45} {:>7.1} MB",
-                img.file_name().unwrap_or_default().to_string_lossy(),
-                mb
-            );
-        }
-    }
-    println!("\n  Total: {} image(s)", result.all_images().len());
-    if let Some(arb) = &result.arb_info {
-        println!("\n── ARB ──────────────────────────────────────────────────");
-        println!("  {}", arb);
-        if arb.enforced() {
-            println!("  ⚠  Hard ARB is ACTIVE on this firmware.");
-        }
-        println!("────────────────────────────────────────────────────────");
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

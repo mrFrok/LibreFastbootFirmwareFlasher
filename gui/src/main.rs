@@ -16,8 +16,8 @@ slint::include_modules!();
 #[derive(Debug, Clone)]
 enum LogLevel { Info, Warn, Error, Success }
 
-/// Values of the `confirm-action` property — must match the dialog switch in
-/// `ui/main.slint` (see the comment next to the property declaration there).
+/// Values of the `confirm-action` property — mirror of the ConfirmAction
+/// global in `ui/globals/confirm-action.slint`; keep both in sync.
 /// Only the values set from Rust are listed.
 mod confirm_action {
     pub const FLASH_ALL_FINAL: i32 = 4;
@@ -75,21 +75,7 @@ enum Cmd {
 }
 
 fn ts() -> String {
-    #[cfg(unix)]
-    {
-        let epoch = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as libc::time_t;
-        let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-        unsafe { libc::localtime_r(&epoch, &mut tm); }
-        format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
-    }
-    #[cfg(not(unix))]
-    {
-        let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
-        format!("{:02}:{:02}:{:02}", (n / 3600) % 24, (n / 60) % 60, n % 60)
-    }
+    chrono::Local::now().format("%H:%M:%S").to_string()
 }
 
 fn lvl(l: &LogLevel) -> &'static str {
@@ -98,70 +84,6 @@ fn lvl(l: &LogLevel) -> &'static str {
         LogLevel::Warn => "warn",
         LogLevel::Error => "error",
         LogLevel::Success => "success",
-    }
-}
-
-/// Run a closure while capturing its stdout lines and forwarding them to the GUI log.
-fn with_captured_stdout<F: FnOnce()>(tx: &mpsc::Sender<WMsg>, tab: u8, f: F) {
-    unsafe {
-        let mut fds = [-1i32; 2];
-        if libc::pipe(fds.as_mut_ptr()) != 0 { f(); return; }
-        let rd_fd = fds[0];
-        let wr_fd = fds[1];
-        let saved = libc::dup(libc::STDOUT_FILENO);
-        if saved < 0 {
-            libc::close(rd_fd);
-            libc::close(wr_fd);
-            f();
-            return;
-        }
-        if libc::dup2(wr_fd, libc::STDOUT_FILENO) < 0 {
-            libc::close(rd_fd);
-            libc::close(wr_fd);
-            libc::close(saved);
-            f();
-            return;
-        }
-        libc::close(wr_fd);
-
-        struct StdoutGuard { saved: libc::c_int }
-        impl Drop for StdoutGuard {
-            fn drop(&mut self) {
-                unsafe {
-                    libc::dup2(self.saved, libc::STDOUT_FILENO);
-                    libc::close(self.saved);
-                }
-            }
-        }
-        let _guard = StdoutGuard { saved };
-
-        let tx2 = tx.clone();
-        let reader = thread::spawn(move || {
-            use std::io::Read;
-            use std::os::unix::io::FromRawFd;
-            let mut rd = std::fs::File::from_raw_fd(rd_fd);
-            let mut buf = [0u8; 4096];
-            let mut partial = String::new();
-            while let Ok(n) = rd.read(&mut buf) {
-                if n == 0 { break; }
-                partial.push_str(&String::from_utf8_lossy(&buf[..n]));
-                while let Some(pos) = partial.find('\n') {
-                    let line = partial[..pos].trim().to_string();
-                    if !line.is_empty() {
-                        tx2.send(WMsg::Log { level: LogLevel::Info, message: line, tab }).ok();
-                    }
-                    partial = partial[pos + 1..].to_string();
-                }
-            }
-            let last = partial.trim().to_string();
-            if !last.is_empty() {
-                tx2.send(WMsg::Log { level: LogLevel::Info, message: last, tab }).ok();
-            }
-        });
-
-        f();
-        drop(_guard);
-        reader.join().ok();
     }
 }
 

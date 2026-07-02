@@ -933,28 +933,36 @@ pub fn worker(
 
         Cmd::CheckDeps => {
                     log(&tx, LogLevel::Info, 0, "Checking dependencies...");
-                    crate::with_captured_stdout(&tx, 0, || {
-                        let r = lfff_lib::deps::install_dependencies(None, true);
-                        for d in &r.results {
-                            if d.already_installed { log(&tx, LogLevel::Success, 0, format!("{}: OK", d.tool)); }
-                            else if d.skipped { log(&tx, LogLevel::Warn, 0, format!("{}: skipped", d.tool)); }
-                            else if !d.error.is_empty() { log(&tx, LogLevel::Error, 0, format!("{}: {}", d.tool, d.error)); }
+                    let tx_log = tx.clone();
+                    let r = lfff_lib::deps::install_dependencies(None, true, &move |line| {
+                        let msg = line.trim().to_string();
+                        if !msg.is_empty() {
+                            tx_log.send(WMsg::Log { level: LogLevel::Info, message: msg, tab: 0 }).ok();
                         }
-                        tx.send(WMsg::DepsResult { ok: r.all_ok(), message: if r.all_ok() { "All dependencies OK".into() } else { "Some missing".into() } }).ok();
                     });
+                    for d in &r.results {
+                        if d.already_installed { log(&tx, LogLevel::Success, 0, format!("{}: OK", d.tool)); }
+                        else if d.skipped { log(&tx, LogLevel::Warn, 0, format!("{}: skipped", d.tool)); }
+                        else if !d.error.is_empty() { log(&tx, LogLevel::Error, 0, format!("{}: {}", d.tool, d.error)); }
+                    }
+                    tx.send(WMsg::DepsResult { ok: r.all_ok(), message: if r.all_ok() { "All dependencies OK".into() } else { "Some missing".into() } }).ok();
                 }
 
         Cmd::InstallDeps => {
                     log(&tx, LogLevel::Info, 0, "Installing dependencies...");
-                    crate::with_captured_stdout(&tx, 0, || {
-                        let r = lfff_lib::deps::install_dependencies(None, false);
-                        for d in &r.results {
-                            if d.installed { log(&tx, LogLevel::Success, 0, format!("{}: installed", d.tool)); }
-                            else if d.already_installed { log(&tx, LogLevel::Success, 0, format!("{}: already OK", d.tool)); }
-                            else if !d.error.is_empty() { log(&tx, LogLevel::Error, 0, format!("{}: {}", d.tool, d.error)); }
+                    let tx_log = tx.clone();
+                    let r = lfff_lib::deps::install_dependencies(None, false, &move |line| {
+                        let msg = line.trim().to_string();
+                        if !msg.is_empty() {
+                            tx_log.send(WMsg::Log { level: LogLevel::Info, message: msg, tab: 0 }).ok();
                         }
-                        tx.send(WMsg::DepsResult { ok: r.all_ok(), message: if r.all_ok() { "All OK".into() } else { "Some failed".into() } }).ok();
                     });
+                    for d in &r.results {
+                        if d.installed { log(&tx, LogLevel::Success, 0, format!("{}: installed", d.tool)); }
+                        else if d.already_installed { log(&tx, LogLevel::Success, 0, format!("{}: already OK", d.tool)); }
+                        else if !d.error.is_empty() { log(&tx, LogLevel::Error, 0, format!("{}: {}", d.tool, d.error)); }
+                    }
+                    tx.send(WMsg::DepsResult { ok: r.all_ok(), message: if r.all_ok() { "All OK".into() } else { "Some failed".into() } }).ok();
                 }
 
         Cmd::Download { url } => {

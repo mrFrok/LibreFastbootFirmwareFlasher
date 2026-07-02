@@ -5,8 +5,10 @@ use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use lfff_lib::flasher::{
     collect_images, collect_images_from_source, is_preloader, is_xbl_abl,
-    print_summary, run_flash_session_with_log, FirmwareSource, FlashOptions, FlashProgress,
+    run_flash_session_with_log, FirmwareSource, FlashOptions, FlashProgress,
 };
+
+use crate::output::{offer_wipe_and_reboot, print_check_report, print_summary, prompt, require_tools};
 
 /// Ask the user which flash method to use. Flashing never starts without an
 /// explicit choice — there is no platform auto-detection.
@@ -19,7 +21,7 @@ fn prompt_flash_method() -> Option<bool> {
     println!("  [q] Abort");
 
     loop {
-        let c = lfff_lib::utils::prompt("\n  Choice", "");
+        let c = prompt("\n  Choice", "");
         match c.as_str() {
             "1" => return Some(false),
             "2" => return Some(true),
@@ -58,7 +60,7 @@ fn arb_gate(dir: &std::path::Path) -> bool {
             println!("  {}", "xbl_config.img not found — firmware ARB version is unknown.".yellow());
         }
     }
-    let ans = lfff_lib::utils::prompt("\n  Type YES to confirm the ARB warning, anything else to abort", "");
+    let ans = prompt("\n  Type YES to confirm the ARB warning, anything else to abort", "");
     ans == "YES"
 }
 
@@ -77,7 +79,7 @@ pub fn run(
     }
 
     println!("\n{}", "── Dependency check ─────────────────────────────────────".dimmed());
-    let ok = lfff_lib::utils::require_tools(&["fastboot"]);
+    let ok = require_tools(&["fastboot"]);
     println!("{}\n", "────────────────────────────────────────────────────────".dimmed());
     if !ok {
         eprintln!("{} {}", "✗".red().bold(), "fastboot is required for flashing. Aborting.".red());
@@ -161,7 +163,7 @@ pub fn run(
     if !dry_run {
         // -- Pre-flash device checks (device present, unlocked, battery, cable) --
         let check = lfff_lib::device::run_pre_flash_checks(serial);
-        lfff_lib::device::print_check_report(&check);
+        print_check_report(&check);
         if !check.ready() {
             eprintln!("{} {}", "✗".red().bold(), "Pre-flash checks failed. Aborting.".red());
             return 1;
@@ -177,7 +179,7 @@ pub fn run(
         println!("\n{}", "── Final warning ────────────────────────────────────────".dimmed());
         println!("  {}", "All partitions will be overwritten. This action is irreversible.".red());
         println!("  {}", "The device must be in fastbootd mode.".dimmed());
-        let ans = lfff_lib::utils::prompt("\n  Type FLASH to start flashing, anything else to abort", "");
+        let ans = prompt("\n  Type FLASH to start flashing, anything else to abort", "");
         if ans != "FLASH" {
             println!("{}", "Aborted by user.".yellow());
             return 1;
@@ -233,7 +235,7 @@ pub fn run(
     print_summary(&session);
 
     if !session.aborted && session.failed().is_empty() {
-        lfff_lib::flasher::offer_wipe_and_reboot(&session);
+        offer_wipe_and_reboot(&session);
         println!("\n{}", "✓ Flash completed successfully".green().bold());
         0
     } else if session.aborted {

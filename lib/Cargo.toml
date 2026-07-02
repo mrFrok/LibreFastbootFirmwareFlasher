@@ -17,7 +17,6 @@ sha2 = "0.10"
 which = "8"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 url = "2"
-colored = "3"
 wait-timeout = "0.2"
 dirs = "6"
 serde = { version = "1", features = ["derive"] }

@@ -209,6 +209,57 @@ fn sudo_cmd() -> String {
     std::env::var("LFFF_SUDO_CMD").unwrap_or_else(|_| "sudo".to_string())
 }
 
+/// Run a command with stdout/stderr streamed line-by-line to `on_log`, so
+/// package-manager output is visible live in both the CLI and the GUI log.
+/// sudo/pkexec password prompts still work — they use /dev/tty or a
+/// graphical agent, not the piped descriptors.
+fn run_streaming(mut cmd: Command, on_log: &dyn Fn(String)) -> bool {
+    use std::io::BufRead;
+    use std::process::Stdio;
+    use std::sync::mpsc;
+
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            on_log(format!("Failed to run command: {}", e));
+            return false;
+        }
+    };
+
+    let (tx, rx) = mpsc::channel::<String>();
+    let mut readers = Vec::new();
+    if let Some(out) = child.stdout.take() {
+        let tx = tx.clone();
+        readers.push(std::thread::spawn(move || {
+            for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                tx.send(line).ok();
+            }
+        }));
+    }
+    if let Some(err) = child.stderr.take() {
+        let tx = tx.clone();
+        readers.push(std::thread::spawn(move || {
+            for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
+                tx.send(line).ok();
+            }
+        }));
+    }
+    drop(tx);
+    // `on_log` is not Send — forward lines on this thread; the loop ends when
+    // both reader threads finish (child closed its pipes).
+    for line in rx {
+        let t = line.trim();
+        if !t.is_empty() {
+            on_log(t.to_string());
+        }
+    }
+    for r in readers {
+        r.join().ok();
+    }
+    child.wait().map(|s| s.success()).unwrap_or(false)
+}
+
 fn needs_sudo(pm: &str) -> bool {
     // Per-user package managers don't need sudo
     if matches!(pm, "brew" | "nix-profile" | "nix-env") {
@@ -274,7 +325,7 @@ fn pdg_asset_name() -> Option<String> {
 }
 
 /// Install payload_dumper from GitHub releases.
-fn install_payload_dumper() -> DepResult {
+fn install_payload_dumper(on_log: &dyn Fn(String)) -> DepResult {
     let mut result = DepResult {
         tool: PDG_BINARY.into(),
         already_installed: false,
@@ -301,7 +352,7 @@ fn install_payload_dumper() -> DepResult {
     };
 
     // Fetch latest release tag from GitHub API
-    println!("  Fetching latest payload_dumper release from GitHub ...");
+    on_log("  Fetching latest payload_dumper release from GitHub ...".into());
     let api_result = Command::new("curl")
         .args([
             "-sfL",
@@ -342,8 +393,8 @@ fn install_payload_dumper() -> DepResult {
         PDG_REPO, tag, asset_name
     );
 
-    println!("  Downloading {} ...", asset_name);
-    println!("  URL: {}", dl_url);
+    on_log(format!("  Downloading {} ...", asset_name));
+    on_log(format!("  URL: {}", dl_url));
 
     // Unique per-run temp dir, auto-removed on drop.
     let tmp_dir = match tempfile::Builder::new().prefix("lfff-pdg-").tempdir() {
@@ -418,7 +469,7 @@ fn install_payload_dumper() -> DepResult {
         let dest = local_bin.join("payload_dumper");
         if fs::copy(&binary, &dest).is_ok() {
             set_exec(&dest);
-            println!("  Installed to {}", dest.display());
+            on_log(format!("  Installed to {}", dest.display()));
             result.installed = true;
             return result;
         }
@@ -442,7 +493,7 @@ fn install_payload_dumper() -> DepResult {
             .unwrap_or(false);
 
     if install_ok {
-        println!("  Installed to {}", dest.display());
+        on_log(format!("  Installed to {}", dest.display()));
         result.installed = true;
     } else {
         // Last resort: ~/.local/bin even if it is not in PATH yet.
@@ -452,10 +503,10 @@ fn install_payload_dumper() -> DepResult {
         let local_dest = local_bin.join("payload_dumper");
         if fs::copy(&binary, &local_dest).is_ok() {
             set_exec(&local_dest);
-            println!(
+            on_log(format!(
                 "  Installed to {}  (add ~/.local/bin to PATH if needed)",
                 local_dest.display()
-            );
+            ));
             result.installed = true;
         } else {
             result.error = "Failed to install binary".into();
@@ -469,7 +520,7 @@ fn install_payload_dumper() -> DepResult {
 // System package installer
 // ---------------------------------------------------------------------------
 
-fn install_via_pkg_manager(tools: &[&str], pm: &str) -> Vec<DepResult> {
+fn install_via_pkg_manager(tools: &[&str], pm: &str, on_log: &dyn Fn(String)) -> Vec<DepResult> {
     let mut results = Vec::new();
     let mut to_install: Vec<(&str, &str)> = Vec::new();
 
@@ -529,7 +580,7 @@ fn install_via_pkg_manager(tools: &[&str], pm: &str) -> Vec<DepResult> {
         cmd = new_cmd;
     }
 
-    println!("  Running: {}", cmd.join(" "));
+    on_log(format!("  Running: {}", cmd.join(" ")));
 
     // Resolve brew to full path if not in PATH (macOS .app launch)
     let cmd0 = if pm == "brew" {
@@ -537,36 +588,35 @@ fn install_via_pkg_manager(tools: &[&str], pm: &str) -> Vec<DepResult> {
     } else {
         cmd[0].to_string()
     };
-    let status = Command::new(&cmd0).args(&cmd[1..]).status();
+    let mut command = Command::new(&cmd0);
+    command.args(&cmd[1..]);
+    let ok = run_streaming(command, on_log);
 
-    match status {
-        Ok(s) if s.success() => {
-            let is_ostree = pm == "rpm-ostree";
-            for (tool, _) in &to_install {
-                let found = which::which(tool).is_ok();
-                results.push(DepResult {
-                    tool: tool.to_string(),
-                    already_installed: false,
-                    installed: found || is_ostree,
-                    skipped: false,
-                    error: if found || !is_ostree {
-                        String::new()
-                    } else {
-                        "Layered via rpm-ostree — reboot to make available".into()
-                    },
-                });
-            }
+    if ok {
+        let is_ostree = pm == "rpm-ostree";
+        for (tool, _) in &to_install {
+            let found = which::which(tool).is_ok();
+            results.push(DepResult {
+                tool: tool.to_string(),
+                already_installed: false,
+                installed: found || is_ostree,
+                skipped: false,
+                error: if found || !is_ostree {
+                    String::new()
+                } else {
+                    "Layered via rpm-ostree — reboot to make available".into()
+                },
+            });
         }
-        _ => {
-            for (tool, _) in &to_install {
-                results.push(DepResult {
-                    tool: tool.to_string(),
-                    already_installed: false,
-                    installed: false,
-                    skipped: false,
-                    error: "Package manager install failed".into(),
-                });
-            }
+    } else {
+        for (tool, _) in &to_install {
+            results.push(DepResult {
+                tool: tool.to_string(),
+                already_installed: false,
+                installed: false,
+                skipped: false,
+                error: "Package manager install failed".into(),
+            });
         }
     }
 
@@ -583,7 +633,13 @@ pub const MANAGED_TOOLS: &[&str] = &["fastboot", "adb", "aria2c", "payload_dumpe
 /// Check and install missing dependencies.
 ///
 /// If `dry_run` is true, only checks and reports without installing.
-pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsReport {
+/// All human-readable output goes through `on_log` — the caller decides how
+/// to present it (terminal, GUI log pane, …).
+pub fn install_dependencies(
+    tools: Option<&[String]>,
+    dry_run: bool,
+    on_log: &dyn Fn(String),
+) -> DepsReport {
     let tool_list: Vec<&str> = tools
         .map(|t| t.iter().map(|s| s.as_str()).collect())
         .unwrap_or_else(|| MANAGED_TOOLS.to_vec());
@@ -594,23 +650,22 @@ pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsRepo
 
     let pm = detect_pkg_manager();
 
-    println!("\n── Dependency check ─────────────────────────────────────");
+    on_log("\n── Dependency check ─────────────────────────────────────".into());
 
     if pm.is_none() && !dry_run {
         if is_atomic_distro() {
-            println!("  ⚠  Atomic/immutable distro detected.");
-            println!("  No compatible package manager found in this session.");
-            println!();
-            println!("  Options:");
-            println!("    a) Install Homebrew on Linux and re-run 'lfff deps'");
-            println!("    b) Use toolbox/distrobox to enter a mutable container:");
-            println!("         toolbox enter");
-            println!("         sudo dnf install android-tools aria2");
-            println!("         lfff deps");
-            println!("    c) Manually download binaries and place them in PATH");
+            on_log("  ⚠  Atomic/immutable distro detected.".into());
+            on_log("  No compatible package manager found in this session.".into());
+            on_log("  Options:".into());
+            on_log("    a) Install Homebrew on Linux and re-run 'lfff deps'".into());
+            on_log("    b) Use toolbox/distrobox to enter a mutable container:".into());
+            on_log("         toolbox enter".into());
+            on_log("         sudo dnf install android-tools aria2".into());
+            on_log("         lfff deps".into());
+            on_log("    c) Manually download binaries and place them in PATH".into());
         } else {
-            println!("  ✗ No supported package manager found.");
-            println!("    Install manually: fastboot, adb, aria2c, payload_dumper");
+            on_log("  ✗ No supported package manager found.".into());
+            on_log("    Install manually: fastboot, adb, aria2c, payload_dumper".into());
         }
         for &t in &tool_list {
             report.results.push(DepResult {
@@ -621,12 +676,12 @@ pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsRepo
                 error: "No package manager available".into(),
             });
         }
-        println!("────────────────────────────────────────────────────────");
+        on_log("────────────────────────────────────────────────────────".into());
         return report;
     }
 
     if let Some(ref pm_name) = pm {
-        println!("  Package manager : {}", pm_name);
+        on_log(format!("  Package manager : {}", pm_name));
     }
 
     // Split: payload_dumper installed via cargo, not system package manager
@@ -668,7 +723,7 @@ pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsRepo
         } else if let Some(ref pm_name) = pm {
             report
                 .results
-                .extend(install_via_pkg_manager(&pkg_tools, pm_name));
+                .extend(install_via_pkg_manager(&pkg_tools, pm_name, on_log));
         }
     }
 
@@ -693,47 +748,39 @@ pub fn install_dependencies(tools: Option<&[String]>, dry_run: bool) -> DepsRepo
                 });
             }
         } else {
-            report.results.push(install_payload_dumper());
+            report.results.push(install_payload_dumper(on_log));
         }
     }
 
-    // Print summary
-    println!();
+    // Summary
     for r in &report.results {
         if r.already_installed {
-            println!("  ✓  {:<25} already installed", r.tool);
+            on_log(format!("  ✓  {:<25} already installed", r.tool));
         } else if r.installed && !r.error.is_empty() {
-            println!("  ✓  {:<25} layered (reboot required)", r.tool);
+            on_log(format!("  ✓  {:<25} layered (reboot required)", r.tool));
         } else if r.installed {
-            println!("  ✓  {:<25} installed", r.tool);
+            on_log(format!("  ✓  {:<25} installed", r.tool));
         } else if r.skipped {
-            println!("  -  {:<25} skipped", r.tool);
+            on_log(format!("  -  {:<25} skipped", r.tool));
         } else {
-            println!("  ✗  {:<25} FAILED", r.tool);
-            println!("     {}", r.error);
+            on_log(format!("  ✗  {:<25} FAILED", r.tool));
+            on_log(format!("     {}", r.error));
         }
     }
-    println!();
 
     if report.all_ok() {
-        println!("{}", "━".repeat(56));
-        println!("  ✓  All dependencies are ready");
-        println!("{}", "━".repeat(56));
+        on_log("  ✓  All dependencies are ready".into());
     } else if !report.failed().is_empty() {
-        println!("{}", "━".repeat(56));
-        println!("  ✗  Some dependencies failed to install");
-        println!("{}", "━".repeat(56));
+        on_log("  ✗  Some dependencies failed to install".into());
     }
 
     // Reboot notice for rpm-ostree layering
     let needs_reboot = report.results.iter().any(|r| r.error.contains("rpm-ostree"));
     if needs_reboot {
-        println!("{}", "━".repeat(56));
-        println!("  ⚠  Packages layered via rpm-ostree.");
-        println!("     Reboot to make them available in PATH.");
-        println!("{}", "━".repeat(56));
+        on_log("  ⚠  Packages layered via rpm-ostree.".into());
+        on_log("     Reboot to make them available in PATH.".into());
     }
-    println!("────────────────────────────────────────────────────────");
+    on_log("────────────────────────────────────────────────────────".into());
 
     report
 }

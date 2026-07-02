@@ -1,0 +1,15 @@
+// Dialog selector values for the `confirm-action` property in main.slint.
+// Mirrored in gui/src/main.rs (mod confirm_action) — keep both in sync.
+export global ConfirmAction {
+    out property <int> none: 0;
+    out property <int> reboot-choice: 3;
+    out property <int> flash-all-final: 4;
+    out property <int> part-reboot: 5;
+    out property <int> part-final: 6;
+    out property <int> success: 7;
+    out property <int> source-final: 8;
+    out property <int> cable-test: 9;
+    out property <int> flash-failure: 10;
+    out property <int> session-error: 11;
+    out property <int> flash-method: 12;
+}

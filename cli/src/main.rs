@@ -4,6 +4,7 @@
 
 mod cli;
 mod handlers;
+mod output;
 mod welcome;
 
 use std::process;

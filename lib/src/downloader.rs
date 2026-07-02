@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::utils::{require_tools, run_cmd};
+use crate::utils::{missing_tools, run_cmd};
 use tracing::info;
 
 const OTA_HEADERS: &[&str] = &[
@@ -247,63 +247,6 @@ fn parse_sizes(line: &str) -> (String, String) {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-/// Resolve OTA link and download firmware via aria2c (simple, no GUI progress).
-pub fn download_firmware(url: &str, output_dir: Option<&Path>, connections: u32) -> DownloadResult {
-    if !require_tools(&["aria2c", "curl"]) {
-        return DownloadResult::fail(url, "Missing tools: aria2c, curl");
-    }
-
-    let real_url = extract_real_url(url);
-    println!("\n  OTA endpoint : {}", real_url);
-    println!("  Resolving CDN link ...");
-
-    let cdn_url = match resolve_cdn(&real_url) {
-        Some(c) => c,
-        None => return DownloadResult::fail(&real_url, "Failed to resolve CDN URL"),
-    };
-    println!("  CDN URL      : {}", cdn_url);
-
-    let (_, expiry_label) = parse_link_expiry(&cdn_url);
-    if !expiry_label.is_empty() {
-        println!("  Link expires : {}", expiry_label);
-    }
-
-    let mut cmd = build_aria2c_cmd(&cdn_url, output_dir, connections);
-    println!("\n  Starting download ({} connections) ...\n", connections);
-
-    let status = match cmd.status() {
-        Ok(s) => s,
-        Err(e) => {
-            return DownloadResult {
-                success: false,
-                url: real_url,
-                cdn_url,
-                output_path: None,
-                error: format!("aria2c: {}", e),
-            }
-        }
-    };
-
-    if !status.success() {
-        return DownloadResult {
-            success: false,
-            url: real_url,
-            cdn_url,
-            output_path: None,
-            error: format!("aria2c exited {}", status.code().unwrap_or(-1)),
-        };
-    }
-
-    let out = resolve_output_path(&cdn_url, output_dir);
-    DownloadResult {
-        success: true,
-        url: real_url,
-        cdn_url,
-        output_path: if out.exists() { Some(out) } else { None },
-        error: String::new(),
-    }
-}
-
 /// Token passed to [`download_firmware_with_progress`] to cancel an in-flight download.
 ///
 /// ```rust,no_run
@@ -363,8 +306,9 @@ where
     use std::process::Stdio;
     use std::sync::mpsc;
 
-    if !require_tools(&["aria2c", "curl"]) {
-        return DownloadResult::fail(url, "Missing tools: aria2c, curl");
+    let missing = missing_tools(&["aria2c", "curl"]);
+    if !missing.is_empty() {
+        return DownloadResult::fail(url, &format!("Missing tools: {}", missing.join(", ")));
     }
 
     let real_url = extract_real_url(url);
