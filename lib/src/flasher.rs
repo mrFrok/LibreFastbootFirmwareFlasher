@@ -457,6 +457,13 @@ pub fn flash_partition_cancellable(
     flash_partition_inner(image_path, partition, slot, serial, Some(cancel))
 }
 
+/// Minimum sustained transfer rate used to size flash timeouts. Matches the
+/// cable-test pass threshold: any cable that passed the pre-flash check can
+/// sustain at least this rate.
+const FLASH_MIN_SPEED_MB_S: u64 = 1;
+/// Base flash timeout on top of the size-derived transfer allowance.
+const FLASH_BASE_TIMEOUT_SECS: u64 = 300;
+
 fn flash_partition_inner(
     image_path: &Path,
     partition: &str,
@@ -464,6 +471,21 @@ fn flash_partition_inner(
     serial: Option<&str>,
     cancel: Option<&std::sync::atomic::AtomicBool>,
 ) -> FlashResult {
+    // Never kill fastboot mid-write on a critical partition: an interrupted
+    // write to abl/xbl/boot can hard-brick the device. Cancellation for these
+    // takes effect between partitions (the batch loop checks the flag).
+    let cancel = if is_critical_partition(partition) {
+        None
+    } else {
+        cancel
+    };
+
+    // Scale the timeout with the image size so a large image on a slow (but
+    // passing) cable is never killed mid-write — killing fastboot mid-flash
+    // corrupts the partition being written.
+    let size_mb = fs::metadata(image_path).map(|m| m.len() / (1024 * 1024)).unwrap_or(0);
+    let timeout_secs = FLASH_BASE_TIMEOUT_SECS + size_mb / FLASH_MIN_SPEED_MB_S;
+
     let mut args: Vec<String> = Vec::new();
     if let Some(s) = serial {
         args.push("-s".into());
@@ -482,8 +504,8 @@ fn flash_partition_inner(
     cmd.extend(&refs);
     let start = Instant::now();
     let result = match cancel {
-        Some(c) => crate::utils::run_cmd_with_cancel(&cmd, 300, c),
-        None => crate::utils::run_cmd(&cmd, 300),
+        Some(c) => crate::utils::run_cmd_with_cancel(&cmd, timeout_secs, c),
+        None => crate::utils::run_cmd(&cmd, timeout_secs),
     };
     let duration = start.elapsed().as_secs_f64();
 
@@ -753,9 +775,29 @@ pub fn run_flash_single(
     }
 
     let is_crit = is_critical_partition(&part_name);
-    let flash_slots: Vec<String> = slots
-        .map(|s| s.to_vec())
-        .unwrap_or_else(|| SLOTS.iter().map(|s| s.to_string()).collect());
+    let is_super = is_super_partition(&part_name);
+    // Dynamic (super) partitions exist only in the active slot's super
+    // metadata — flashing the inactive slot fails or corrupts the layout.
+    // Unless slots were chosen explicitly, restrict them to the active one.
+    let flash_slots: Vec<String> = match slots {
+        Some(s) => s.to_vec(),
+        None if is_super && !dry_run => match get_active_slot(serial) {
+            Some(s) => {
+                println!("  Dynamic partition — flashing active slot '{}' only", s);
+                vec![s]
+            }
+            None => {
+                println!(
+                    "✗ Could not detect the active slot — refusing to flash dynamic partition '{}'.",
+                    part_name
+                );
+                println!("  Check that the device is in fastbootd, or pass --slot explicitly.");
+                return session;
+            }
+        },
+        None if is_super => vec!["<active>".to_string()],
+        None => SLOTS.iter().map(|s| s.to_string()).collect(),
+    };
 
     let size_mb = fs::metadata(image_path)
         .map(|m| m.len() as f64 / 1024.0 / 1024.0)
@@ -830,7 +872,8 @@ pub fn run_flash_single(
 // Summary + wipe + reboot
 // ---------------------------------------------------------------------------
 
-/// Print session summary, offer wipe, and reboot.
+/// Print session summary. Pure output — no prompts, no device commands.
+/// CLI callers follow up with [`offer_wipe_and_reboot`] on success.
 pub fn print_summary(session: &FlashSession) {
     let total = session.results.len();
     let ok = session.succeeded().len();
@@ -875,16 +918,6 @@ pub fn print_summary(session: &FlashSession) {
         println!("  Total flash time   :  {}", time_str);
         println!("{}", "━".repeat(60));
         println!();
-
-        // Offer wipe
-        offer_wipe(session);
-
-        // Reboot
-        println!("\n  Rebooting to system ...");
-        let mut args: Vec<&str> = Vec::new();
-        push_serial_arg(&mut args, session.serial.as_deref());
-        args.push("reboot");
-        fastboot_cmd(&args, 30);
     } else if !session.critical_failed().is_empty() {
         println!("{}", "━".repeat(60));
         println!("  ✗  Critical failure");
@@ -903,6 +936,18 @@ pub fn print_summary(session: &FlashSession) {
         println!("  ⚠  Flash was aborted");
         println!("{}", "━".repeat(60));
     }
+}
+
+/// Interactively offer a userdata wipe, then reboot to system.
+/// CLI-only follow-up to a successful [`print_summary`].
+pub fn offer_wipe_and_reboot(session: &FlashSession) {
+    offer_wipe(session);
+
+    println!("\n  Rebooting to system ...");
+    let mut args: Vec<&str> = Vec::new();
+    push_serial_arg(&mut args, session.serial.as_deref());
+    args.push("reboot");
+    fastboot_cmd(&args, 30);
 }
 
 fn offer_wipe(session: &FlashSession) {

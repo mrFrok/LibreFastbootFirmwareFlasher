@@ -158,12 +158,11 @@ fn run_payload_dumper(
     };
 
     use std::process::Stdio;
-    use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
     // payload_dumper (Rust binary) uses indicatif which suppresses all output
-    // when stdout/stderr are not a TTY — nothing arrives until the process exits.
-    // Strategy: collect output after completion, and send heartbeat ticks every
-    // 2s while the process runs so the GUI shows progress instead of freezing.
+    // when stdout/stderr are not a TTY — nothing arrives until the process
+    // exits, so stdout/stderr are replayed after completion. Live "Extracted:"
+    // progress comes from the GUI worker, which watches the output directory.
     let mut cmd = Command::new(tool);
     cmd.arg("-o").arg(output);
     if let Some(parts) = partitions
@@ -182,63 +181,8 @@ fn run_payload_dumper(
         }
     };
 
-    // payload_dumper writes to /dev/tty directly (bypasses stdout/stderr pipes).
-    // We can't capture its output. Instead, watch the output directory for newly
-    // created .img files and report them in real time, so the GUI shows progress.
-    let done_flag = Arc::new(AtomicBool::new(false));
-    let done_clone = done_flag.clone();
-    let watch_dir = output.to_path_buf();
-    let (tick_tx, tick_rx) = std::sync::mpsc::channel::<String>();
-    std::thread::spawn(move || {
-        let mut known: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut secs = 0u32;
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            if done_clone.load(Ordering::Relaxed) { break; }
-            secs += 1;
-            // Scan for new .img files (recursive)
-            let mut queue = vec![watch_dir.clone()];
-            while let Some(dir) = queue.pop() {
-                if let Ok(entries) = fs::read_dir(&dir) {
-                    for e in entries.flatten() {
-                        let p = e.path();
-                        if p.is_dir() { queue.push(p); continue; }
-                        let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-                        if name.ends_with(".img") && known.insert(name.clone()) {
-                            tick_tx.send(format!("Extracted: {}", name)).ok();
-                        }
-                    }
-                }
-            }
-            // Also tick every 5s so GUI doesn't look frozen
-            if secs.is_multiple_of(5) && known.is_empty() {
-                tick_tx.send(format!("Extracting... ({}s)", secs)).ok();
-            }
-        }
-        // Final scan after process exits (recursive)
-        let mut queue = vec![watch_dir.clone()];
-        while let Some(dir) = queue.pop() {
-            if let Ok(entries) = fs::read_dir(&dir) {
-                for e in entries.flatten() {
-                    let p = e.path();
-                    if p.is_dir() { queue.push(p); continue; }
-                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-                    if name.ends_with(".img") && known.insert(name.clone()) {
-                        tick_tx.send(format!("Extracted: {}", name)).ok();
-                    }
-                }
-            }
-        }
-    });
-
     if let Some(cb) = on_log { cb(format!("Running {}...", tool)); }
     let output_result = child.wait_with_output();
-    done_flag.store(true, Ordering::Relaxed);
-    std::thread::sleep(std::time::Duration::from_millis(1100)); // let watcher do final scan
-
-    while let Ok(tick) = tick_rx.try_recv() {
-        if let Some(cb) = on_log { cb(tick); }
-    }
 
     fn strip_ansi(s: &str) -> String {
         let mut out = String::with_capacity(s.len());
@@ -320,6 +264,25 @@ fn walkdir(dir: &Path) -> Vec<PathBuf> {
     result
 }
 
+/// Available bytes on the filesystem containing `path` (which must exist).
+/// statvfs works on both Linux and macOS — GNU `df` flags do not.
+#[cfg(unix)]
+fn available_bytes(path: &Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } == 0 {
+        Some(st.f_bavail as u64 * st.f_frsize as u64)
+    } else {
+        None
+    }
+}
+
+#[cfg(not(unix))]
+fn available_bytes(_path: &Path) -> Option<u64> {
+    None
+}
+
 fn check_free_space(path: &Path) -> (bool, f64) {
     let mut check = path.to_path_buf();
     while !check.exists() {
@@ -329,22 +292,11 @@ fn check_free_space(path: &Path) -> (bool, f64) {
             break;
         }
     }
-    // Use --output=avail so the line never contains the mount path
-    // (which may include spaces and breaks simple column parsing).
-    let r = crate::utils::run_cmd(
-        &["df", "-B1", "--output=avail", &check.to_string_lossy()],
-        5,
-    );
-    if r.success() {
-        // First line is the header "Avail"; second line is the value.
-        if let Some(line) = r.stdout.lines().nth(1)
-            && let Ok(avail) = line.trim().parse::<u64>()
-        {
-            let gb = avail as f64 / (1024.0 * 1024.0 * 1024.0);
-            return (gb >= 20.0, gb);
-        }
+    if let Some(avail) = available_bytes(&check) {
+        let gb = avail as f64 / (1024.0 * 1024.0 * 1024.0);
+        return (gb >= 20.0, gb);
     }
-    // On error (e.g. Windows without df) we silently skip the check.
+    // Cannot determine free space — skip the check rather than block.
     (true, 0.0)
 }
 
@@ -446,11 +398,18 @@ pub fn extract_firmware_with_log(
             info!("Using payload_dumper with ZIP input (no unzipping needed)");
             run_payload_dumper(&zip_path, &staging, partitions, on_log)
         } else {
-            // payload-dumper-go needs raw payload.bin — extract it first
+            // payload-dumper-go needs raw payload.bin — extract it first.
+            // Unique per-run temp dir (auto-removed on drop): a fixed /tmp path
+            // collides between concurrent runs and is open to symlink attacks.
             info!("Extracting payload.bin for payload-dumper-go ...");
-            let tmp = std::env::temp_dir().join("lfff_extract");
-            fs::create_dir_all(&tmp).ok();
-            let payload_tmp = tmp.join("payload.bin");
+            let tmp = match tempfile::Builder::new().prefix("lfff-extract-").tempdir() {
+                Ok(d) => d,
+                Err(e) => {
+                    tracing::error!("Cannot create temp dir: {}", e);
+                    return ExtractionResult::fail(output_dir, &format!("Cannot create temp dir: {}", e));
+                }
+            };
+            let payload_tmp = tmp.path().join("payload.bin");
 
             let extract_result = (|| -> bool {
                 let f = match fs::File::open(&zip_path) {
@@ -489,15 +448,11 @@ pub fn extract_firmware_with_log(
             })();
 
             if !extract_result {
-                let _ = fs::remove_file(&payload_tmp);
-                let _ = fs::remove_dir(&tmp);
                 false
             } else {
-                let result = run_payload_dumper(&payload_tmp, &staging, partitions, on_log);
-                let _ = fs::remove_file(&payload_tmp);
-                let _ = fs::remove_dir(&tmp);
-                result
+                run_payload_dumper(&payload_tmp, &staging, partitions, on_log)
             }
+            // `tmp` (with payload.bin inside) is removed when it drops here.
         };
 
         if !ok {
