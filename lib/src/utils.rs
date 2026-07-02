@@ -272,7 +272,14 @@ pub fn compute_sha256(file_path: &Path) -> Result<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    // digest 0.11: the output array no longer implements LowerHex directly.
+    use std::fmt::Write as _;
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        let _ = write!(&mut hex, "{:02x}", b);
+    }
+    Ok(hex)
 }
 
 /// Return true if file digest matches expected.
