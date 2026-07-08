@@ -42,7 +42,7 @@
 
         commonRustArgs = {
           pname = "lfff";
-          version = "2.5.0";
+          version = "2.6.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           nativeBuildInputs = with pkgs; [ pkg-config cmake makeWrapper installShellFiles python3 gn ninja ];
@@ -54,7 +54,7 @@
         # Binary package — downloads prebuilt release from GitHub
         lfff-bin = pkgs.stdenv.mkDerivation rec {
           pname = "lfff-bin";
-          version = "2.5.0";
+          version = "2.6.0";
 
           arch = if system == "aarch64-linux" then "aarch64" else "x86_64";
 
