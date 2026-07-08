@@ -128,6 +128,85 @@ fn wait_for_fastboot(tx: &mpsc::Sender<WMsg>, tab: u8, timeout_secs: u64, serial
     }
 }
 
+fn fastbootd_fallback_detail(status: lfff_lib::flasher::FastbootdStatus) -> String {
+    match status {
+        lfff_lib::flasher::FastbootdStatus::UserspaceFastboot => {
+            "The device is listed as plain 'fastboot', but it reports 'is-userspace: yes'. This is a known OnePlus / OPPO / Realme fastbootd label issue. Continuing will use this userspace fastboot session for dynamic partitions.".into()
+        }
+        lfff_lib::flasher::FastbootdStatus::BootloaderFastboot => {
+            "The device is still listed as bootloader fastboot and did not confirm userspace fastboot. Dynamic partition flashing may fail from this mode. Continue only if this device is known to support it.".into()
+        }
+        lfff_lib::flasher::FastbootdStatus::UnknownFastboot => {
+            "A fastboot device is connected, but LFFF could not confirm fastbootd/userspace mode. Dynamic partition flashing may fail from this mode.".into()
+        }
+        lfff_lib::flasher::FastbootdStatus::NotFound => {
+            "No fastboot device was found.".into()
+        }
+        lfff_lib::flasher::FastbootdStatus::Fastbootd => String::new(),
+    }
+}
+
+fn confirm_fastbootd_fallback(
+    tx: &mpsc::Sender<WMsg>,
+    tab: u8,
+    status: lfff_lib::flasher::FastbootdStatus,
+) -> bool {
+    let detail = fastbootd_fallback_detail(status);
+    log(tx, LogLevel::Warn, tab, detail.clone());
+    let (resp_tx, resp_rx) = std::sync::mpsc::channel();
+    if tx.send(WMsg::FastbootdFallback { detail, response: resp_tx }).is_err() {
+        return false;
+    }
+    resp_rx.recv().unwrap_or(false)
+}
+
+fn handle_fastbootd_status(
+    tx: &mpsc::Sender<WMsg>,
+    tab: u8,
+    status: lfff_lib::flasher::FastbootdStatus,
+) -> bool {
+    match status {
+        lfff_lib::flasher::FastbootdStatus::Fastbootd => {
+            log(tx, LogLevel::Success, tab, "Device confirmed in fastbootd");
+            true
+        }
+        lfff_lib::flasher::FastbootdStatus::UserspaceFastboot => {
+            if confirm_fastbootd_fallback(tx, tab, status) {
+                log(tx, LogLevel::Success, tab, "Continuing with confirmed userspace fastboot");
+                true
+            } else {
+                log(tx, LogLevel::Warn, tab, "Stopped by user at fastbootd warning");
+                false
+            }
+        }
+        lfff_lib::flasher::FastbootdStatus::BootloaderFastboot
+        | lfff_lib::flasher::FastbootdStatus::UnknownFastboot => {
+            if confirm_fastbootd_fallback(tx, tab, status) {
+                log(tx, LogLevel::Warn, tab, "Continuing without confirmed fastbootd/userspace mode");
+                true
+            } else {
+                log(tx, LogLevel::Warn, tab, "Stopped by user at fastbootd warning");
+                false
+            }
+        }
+        lfff_lib::flasher::FastbootdStatus::NotFound => {
+            log(tx, LogLevel::Error, tab, "Device not found in fastbootd");
+            false
+        }
+    }
+}
+
+fn wait_for_flash_fastbootd(
+    tx: &mpsc::Sender<WMsg>,
+    tab: u8,
+    serial: Option<&str>,
+    timeout_secs: u64,
+) -> bool {
+    log(tx, LogLevel::Info, tab, "Waiting for device to enter fastbootd/userspace fastboot...");
+    let status = lfff_lib::flasher::wait_for_fastbootd_status(serial, timeout_secs);
+    handle_fastbootd_status(tx, tab, status)
+}
+
 fn do_flash(
     tx: &mpsc::Sender<WMsg>,
     source: &lfff_lib::flasher::FirmwareSource,
@@ -360,8 +439,7 @@ pub fn worker(
                             if let Some(s) = &serial { ser_s = s.clone(); args.extend(["-s", ser_s.as_str()]); }
                             args.extend(["reboot", "fastboot"]);
                             let _ = std::process::Command::new("adb").args(&args).status();
-                            log(&tx, LogLevel::Info, 2, "Waiting for device to enter fastbootd...");
-                            lfff_lib::flasher::wait_for_fastbootd(serial.as_deref(), 90)
+                            wait_for_flash_fastbootd(&tx, 2, serial.as_deref(), 90)
                         }
                         2 => {
                             // No fixed sleep: the device is currently in
@@ -374,19 +452,12 @@ pub fn worker(
                             if let Some(s) = &serial { ser_s = s.clone(); args.extend(["-s", ser_s.as_str()]); }
                             args.extend(["reboot", "fastboot"]);
                             let _ = std::process::Command::new("fastboot").args(&args).status();
-                            log(&tx, LogLevel::Info, 2, "Waiting for device to enter fastbootd...");
-                            lfff_lib::flasher::wait_for_fastbootd(serial.as_deref(), 90)
+                            wait_for_flash_fastbootd(&tx, 2, serial.as_deref(), 90)
                         }
                         3 => {
-                            log(&tx, LogLevel::Info, 2, "Verifying device is in fastbootd mode...");
-                            let fb = lfff_lib::device::list_fastbootd_devices();
-                            if !fb.is_empty() {
-                                log(&tx, LogLevel::Success, 2, "Device confirmed in fastbootd");
-                                true
-                            } else {
-                                log(&tx, LogLevel::Error, 2, "Device is NOT in fastbootd mode — it may be in bootloader (fastboot) instead. Please reboot to fastbootd and try again.");
-                                false
-                            }
+                            log(&tx, LogLevel::Info, 2, "Verifying device is in fastbootd/userspace fastboot mode...");
+                            let status = lfff_lib::flasher::fastbootd_status(serial.as_deref());
+                            handle_fastbootd_status(&tx, 2, status)
                         }
                         _ => false,
                     };
@@ -394,11 +465,8 @@ pub fn worker(
                         adopt_fastboot_serial(&tx, &mut serial, 2);
                         tx.send(WMsg::ReadyToFlash).ok();
                     } else {
-                        log(&tx, LogLevel::Error, 2, "Device not found in fastbootd — aborting");
-                        tx.send(WMsg::FlashComplete {
-                            success: false, message: "Device not found in fastbootd".into(),
-                            log_summary: "Device not found".into(), failed_partitions: vec![],
-                        }).ok();
+                        log(&tx, LogLevel::Warn, 2, "Flash flow stopped before flashing");
+                        tx.send(WMsg::Flashing(false)).ok();
                     }
                 }
 
@@ -503,7 +571,7 @@ pub fn worker(
                     };
                     match lfff_lib::device::get_device_info(serial.as_deref()) {
                         None => {
-                            abort("Cannot communicate with the device (fastboot getvar failed). Check the cable and that the device is in fastbootd.");
+                            abort("Cannot communicate with the device (fastboot getvar failed). Check the cable and that the device is in fastbootd/userspace fastboot.");
                             continue;
                         }
                         Some(info) => {

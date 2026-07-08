@@ -4,8 +4,9 @@ use std::sync::Arc;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use lfff_lib::flasher::{
-    collect_images, collect_images_from_source, is_preloader, is_xbl_abl,
+    collect_images, collect_images_from_source, fastbootd_status, is_preloader, is_xbl_abl,
     run_flash_session_with_log, FirmwareSource, FlashOptions, FlashProgress,
+    FastbootdStatus,
 };
 
 use crate::output::{offer_wipe_and_reboot, print_check_report, print_summary, prompt, require_tools};
@@ -62,6 +63,31 @@ fn arb_gate(dir: &std::path::Path) -> bool {
     }
     let ans = prompt("\n  Type YES to confirm the ARB warning, anything else to abort", "");
     ans == "YES"
+}
+
+fn confirm_fastbootd_status(serial: Option<&str>) -> bool {
+    match fastbootd_status(serial) {
+        FastbootdStatus::Fastbootd => true,
+        FastbootdStatus::UserspaceFastboot => {
+            println!("\n{}", "── Fastbootd label warning ──────────────────────────────".dimmed());
+            println!("  {}", "Device reports userspace fastboot, but it is listed as plain 'fastboot'.".yellow());
+            println!("  {}", "This is a known OnePlus / OPPO / Realme issue: fastbootd may be usable even when the mode label does not say fastbootd.".dimmed());
+            println!("  {}", "Continuing will flash dynamic partitions from this userspace fastboot session.".dimmed());
+            let ans = prompt("\n  Continue anyway? (continue/stop)", "stop");
+            ans.eq_ignore_ascii_case("continue")
+        }
+        FastbootdStatus::BootloaderFastboot | FastbootdStatus::UnknownFastboot => {
+            println!("\n{}", "── Fastbootd warning ────────────────────────────────────".dimmed());
+            println!("  {}", "Device is not confirmed as fastbootd/userspace fastboot.".yellow());
+            println!("  {}", "Dynamic partition flashing may fail unless your device supports flashing them from this mode.".dimmed());
+            let ans = prompt("\n  Continue anyway? (continue/stop)", "stop");
+            ans.eq_ignore_ascii_case("continue")
+        }
+        FastbootdStatus::NotFound => {
+            eprintln!("{} {}", "✗".red().bold(), "No fastboot device found. Aborting.".red());
+            false
+        }
+    }
 }
 
 pub fn run(
@@ -169,6 +195,11 @@ pub fn run(
             return 1;
         }
 
+        if !confirm_fastbootd_status(serial) {
+            println!("{}", "Aborted by user (fastbootd check).".yellow());
+            return 1;
+        }
+
         // -- Snapdragon: ARB confirmation FIRST, final confirmation AFTER --
         if !as_mediatek && !source.is_source() && !arb_gate(dir) {
             println!("{}", "Aborted by user (ARB check).".yellow());
@@ -178,7 +209,7 @@ pub fn run(
         // -- Final confirmation --
         println!("\n{}", "── Final warning ────────────────────────────────────────".dimmed());
         println!("  {}", "All partitions will be overwritten. This action is irreversible.".red());
-        println!("  {}", "The device must be in fastbootd mode.".dimmed());
+        println!("  {}", "The device should be in fastbootd/userspace fastboot; any warning above must be accepted.".dimmed());
         let ans = prompt("\n  Type FLASH to start flashing, anything else to abort", "");
         if ans != "FLASH" {
             println!("{}", "Aborted by user.".yellow());

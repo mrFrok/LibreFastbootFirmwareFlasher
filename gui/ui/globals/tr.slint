@@ -78,12 +78,16 @@ export global Tr {
     out property <string> flash-reboot-from-system:     lang == "ru" ? "Из системы\n(adb reboot fastboot)" : "From system\n(adb reboot fastboot)";
     out property <string> flash-reboot-from-bootloader: lang == "ru" ? "Из Bootloader\n(fastboot reboot fastboot)" : "From bootloader\n(fastboot reboot fastboot)";
     out property <string> flash-reboot-skip:            lang == "ru" ? "Уже в Fastbootd\n(не перезагружаться)" : "Already in Fastbootd\n(don't reboot)";
+    out property <string> fastbootd-fallback-title: lang == "ru" ? "Fastbootd не подтверждён" : "Fastbootd not confirmed";
+    out property <string> fastbootd-fallback-warning: lang == "ru"
+        ? "Это известная особенность некоторых OnePlus / OPPO / Realme: userspace fastboot может отображаться как обычный fastboot. Продолжайте только если уверены."
+        : "This is a known issue on some OnePlus / OPPO / Realme devices: userspace fastboot can be listed as plain fastboot. Continue only if you trust this mode.";
 
     // Flash All step 2 — final confirm
     out property <string> flash-final-title: lang == "ru" ? "Последнее предупреждение" : "Final warning";
-    out property <string> flash-final-body:  lang == "ru" ? "Устройство находится в Fastbootd. Все разделы будут перезаписаны. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd. All partitions will be overwritten. This action is irreversible.\n\nProceed with flashing?";
+    out property <string> flash-final-body:  lang == "ru" ? "Устройство находится в Fastbootd или предупреждение о режиме fastboot было принято. Все разделы будут перезаписаны. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd, or the fastboot mode warning was accepted. All partitions will be overwritten. This action is irreversible.\n\nProceed with flashing?";
     out property <string> src-final-title:  lang == "ru" ? "Прошивка из исходников" : "Flash from source";
-    out property <string> src-final-body:   lang == "ru" ? "Устройство находится в Fastbootd. Образы из папки исходников будут прошиты. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd. Images from the source build folder will be flashed. This action is irreversible.\n\nProceed with flashing?";
+    out property <string> src-final-body:   lang == "ru" ? "Устройство находится в Fastbootd или предупреждение о режиме fastboot было принято. Образы из папки исходников будут прошиты. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd, or the fastboot mode warning was accepted. Images from the source build folder will be flashed. This action is irreversible.\n\nProceed with flashing?";
 
     // Flash Partition step 1 — reboot to bootloader
     out property <string> part-reboot-title:        lang == "ru" ? "Откуда перезагрузиться в Bootloader?" : "How to reboot into Bootloader?";

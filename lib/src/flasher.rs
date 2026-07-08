@@ -170,6 +170,24 @@ pub enum DeviceMode {
     Unknown,
 }
 
+/// Whether the current fastboot connection is suitable for userspace-fastboot
+/// operations. Some OnePlus / OPPO / Realme devices report plain `fastboot`
+/// even though `getvar is-userspace` says `yes`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FastbootdStatus {
+    Fastbootd,
+    UserspaceFastboot,
+    BootloaderFastboot,
+    UnknownFastboot,
+    NotFound,
+}
+
+impl FastbootdStatus {
+    pub fn is_usable(self) -> bool {
+        matches!(self, Self::Fastbootd | Self::UserspaceFastboot)
+    }
+}
+
 /// Result of flashing a single partition.
 #[derive(Debug, Clone)]
 pub struct FlashResult {
@@ -324,6 +342,76 @@ fn fastboot_device_list() -> Vec<(String, String)> {
         .collect()
 }
 
+fn target_fastboot_device(serial: Option<&str>) -> Option<(String, String)> {
+    let devices = fastboot_device_list();
+    if devices.is_empty() {
+        return None;
+    }
+    if let Some(s) = serial {
+        if let Some(device) = devices.iter().find(|(ser, _)| ser == s) {
+            return Some(device.clone());
+        }
+        if devices.len() == 1 {
+            warn!(
+                "Expected serial {} but found single device {} — accepting (serial can change between adb and fastboot)",
+                s, devices[0].0
+            );
+            return Some(devices[0].clone());
+        }
+        return None;
+    }
+    devices.into_iter().next()
+}
+
+fn parse_fastboot_getvar(output: &str, key: &str) -> Option<String> {
+    for line in output.lines() {
+        let line = line.trim().trim_start_matches("(bootloader)").trim();
+        if let Some((k, v)) = line.split_once(':')
+            && k.trim() == key {
+                return Some(v.trim().to_string());
+            }
+    }
+    None
+}
+
+fn fastboot_getvar(serial: Option<&str>, key: &str, timeout: u64) -> Option<String> {
+    let mut args: Vec<&str> = Vec::new();
+    push_serial_arg(&mut args, serial);
+    args.extend(&["getvar", key]);
+
+    let (rc, out, err) = fastboot_cmd(&args, timeout);
+    if rc != 0 && out.is_empty() && err.is_empty() {
+        return None;
+    }
+    parse_fastboot_getvar(&format!("{}\n{}", out, err), key)
+}
+
+pub fn is_userspace_fastboot(serial: Option<&str>) -> Option<bool> {
+    let (ser, _) = target_fastboot_device(serial)?;
+    let value = fastboot_getvar(Some(&ser), "is-userspace", 10)?;
+    match value.to_lowercase().as_str() {
+        "yes" | "true" | "1" => Some(true),
+        "no" | "false" | "0" => Some(false),
+        _ => None,
+    }
+}
+
+pub fn fastbootd_status(serial: Option<&str>) -> FastbootdStatus {
+    let Some((ser, mode)) = target_fastboot_device(serial) else {
+        return FastbootdStatus::NotFound;
+    };
+    if mode == "fastbootd" {
+        return FastbootdStatus::Fastbootd;
+    }
+    if is_userspace_fastboot(Some(&ser)) == Some(true) {
+        return FastbootdStatus::UserspaceFastboot;
+    }
+    if mode == "fastboot" {
+        return FastbootdStatus::BootloaderFastboot;
+    }
+    FastbootdStatus::UnknownFastboot
+}
+
 /// True when a device in the target mode is present.
 ///
 /// When a serial is given but not found, a single device in the target mode is
@@ -379,7 +467,33 @@ fn wait_for_mode(
 
 /// Poll until device reports 'fastbootd' mode.
 pub fn wait_for_fastbootd(serial: Option<&str>, timeout: u64) -> bool {
-    wait_for_mode(serial, timeout, &|m| m == "fastbootd", "fastbootd")
+    wait_for_fastbootd_status(serial, timeout).is_usable()
+}
+
+/// Poll until the device is usable for fastbootd operations, accepting devices
+/// that report `is-userspace: yes` even when the mode label remains `fastboot`.
+pub fn wait_for_fastbootd_status(serial: Option<&str>, timeout: u64) -> FastbootdStatus {
+    let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
+    let mut last_log = Instant::now();
+    let mut last_status = FastbootdStatus::NotFound;
+    loop {
+        let status = fastbootd_status(serial);
+        if status.is_usable() {
+            return status;
+        }
+        if status != FastbootdStatus::NotFound {
+            last_status = status;
+        }
+        if Instant::now() >= deadline {
+            return last_status;
+        }
+        if last_log.elapsed().as_secs() >= 5 {
+            let remaining = (deadline - Instant::now()).as_secs();
+            info!("Waiting for fastbootd/userspace fastboot ... ({}s left)", remaining);
+            last_log = Instant::now();
+        }
+        thread::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS));
+    }
 }
 
 /// Poll until device reports 'fastboot' (bootloader) mode.
@@ -1067,6 +1181,18 @@ pub fn run_flash_session_with_log(
 
     // -- Stage 1: fastbootd (all partitions on MediaTek, non-bootloader on Snapdragon) --
     if !fastbootd_images.is_empty() {
+        match fastbootd_status(serial) {
+            FastbootdStatus::Fastbootd => {}
+            FastbootdStatus::UserspaceFastboot => {
+                on_log("Warning: device reports userspace fastboot but is listed as 'fastboot'. This is a known OnePlus/OPPO/Realme fastbootd label issue; continuing after user confirmation.".into());
+            }
+            FastbootdStatus::BootloaderFastboot | FastbootdStatus::UnknownFastboot => {
+                on_log("Warning: device is not confirmed as fastbootd/userspace fastboot. Dynamic partition flashing may fail.".into());
+            }
+            FastbootdStatus::NotFound => {
+                on_log("Warning: no fastboot device found while starting fastbootd stage.".into());
+            }
+        }
         let active_slot = match get_active_slot(serial) {
             Some(s) => s,
             None => {

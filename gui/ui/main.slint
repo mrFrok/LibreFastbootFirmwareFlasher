@@ -28,6 +28,7 @@ import { FlashFailureDialog } from "dialogs/flash-failure-dialog.slint";
 import { ArbWarningDialog } from "dialogs/arb-warning-dialog.slint";
 import { PreloaderWarningDialog } from "dialogs/preloader-warning-dialog.slint";
 import { UpdateDialog } from "dialogs/update-dialog.slint";
+import { WarningDialog } from "dialogs/all.slint";
 
 export component MainWindow inherits Window {
     title: "LibreFastbootFirmwareFlasher";
@@ -153,6 +154,7 @@ export component MainWindow inherits Window {
     in-out property <string>  flash-fail-partition: "";
     in-out property <string>  flash-fail-slot: "";
     in-out property <string>  flash-fail-error: "";
+    in-out property <string>  fastbootd-fallback-detail: "";
 
     init => { Tr.lang = lang; Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
     changed lang => { Tr.lang = lang; }
@@ -184,6 +186,8 @@ export component MainWindow inherits Window {
     callback flash-fail-skip();
     callback flash-fail-abort();
     callback flash-fail-retry();
+    callback fastbootd-fallback-continue();
+    callback fastbootd-fallback-stop();
     callback export-flash-log();
     callback export-partition-log();
     callback export-device-log();
@@ -428,6 +432,26 @@ export component MainWindow inherits Window {
             root.show-confirm = false;
             root.prepare-flash();
         }
+    }
+
+    WarningDialog {
+        show: root.show-confirm && root.confirm-action == ConfirmAction.fastbootd-fallback;
+        title: Tr.fastbootd-fallback-title;
+        body: root.fastbootd-fallback-detail;
+        warning-text: Tr.fastbootd-fallback-warning;
+        has-checkbox: false;
+        checkbox-text: "";
+        checkbox-checked: false;
+        lang: root.lang;
+        cancelled => {
+            root.show-confirm = false;
+            root.fastbootd-fallback-stop();
+        }
+        confirmed => {
+            root.show-confirm = false;
+            root.fastbootd-fallback-continue();
+        }
+        checkbox-toggled => {}
     }
 
     FlashFailureDialog {

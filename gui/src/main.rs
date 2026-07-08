@@ -27,6 +27,7 @@ mod confirm_action {
     pub const FLASH_FAILURE: i32 = 10;
     pub const SESSION_ERROR: i32 = 11;
     pub const FLASH_METHOD: i32 = 12;
+    pub const FASTBOOTD_FALLBACK: i32 = 13;
 }
 
 /// Flash method — always an explicit user choice, never auto-detected.
@@ -52,6 +53,7 @@ enum WMsg {
     ReadyToFlash,
     CableTestProgress { step: u8, total: u8, status: String },
     FlashFailure { partition: String, slot: String, error: String, response: std::sync::mpsc::Sender<lfff_lib::flasher::FailureAction> },
+    FastbootdFallback { detail: String, response: std::sync::mpsc::Sender<bool> },
     UpdateAvailable { version: String, url: String, body: String },
 }
 
@@ -164,6 +166,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let flash_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let flash_cancel_w = flash_cancel.clone();
     let fail_resp = std::rc::Rc::new(std::cell::RefCell::new(None));
+    let fastbootd_resp = std::rc::Rc::new(std::cell::RefCell::new(None));
 
     thread::spawn(move || worker::worker(crx, mtx, flash_cancel_w));
 
@@ -173,7 +176,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     models.refresh_history();
 
-    ui_callbacks::register_callbacks(&ui, &ctx, &models, &fail_resp, &flash_cancel);
+    ui_callbacks::register_callbacks(&ui, &ctx, &models, &fail_resp, &fastbootd_resp, &flash_cancel);
 
     ctx.send(Cmd::CheckForUpdates).ok();
 
@@ -181,8 +184,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let timer = slint::Timer::default();
     let mut last_dl_pct: u32 = 0;
     let fr_poll = fail_resp.clone();
+    let fb_poll = fastbootd_resp.clone();
     timer.start(slint::TimerMode::Repeated, Duration::from_millis(50), move || {
-        ui_callbacks::poll(&w, &mrx, &mut last_dl_pct, &models, &fr_poll);
+        ui_callbacks::poll(&w, &mrx, &mut last_dl_pct, &models, &fr_poll, &fb_poll);
     });
 
     ui.run()

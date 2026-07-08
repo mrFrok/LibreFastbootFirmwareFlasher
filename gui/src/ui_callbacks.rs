@@ -38,6 +38,7 @@ pub fn poll(
     last_dl_pct: &mut u32,
     models: &LogModels,
     fail_resp: &std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<lfff_lib::flasher::FailureAction>>>>,
+    fastbootd_resp: &std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<bool>>>>,
 ) {
     let Some(ui) = w.upgrade() else { return };
 
@@ -95,6 +96,12 @@ pub fn poll(
                 ui.set_confirm_action(confirm_action::FLASH_FAILURE);
                 ui.set_show_confirm(true);
                 *fail_resp.borrow_mut() = Some(response);
+            }
+            WMsg::FastbootdFallback { detail, response } => {
+                ui.set_fastbootd_fallback_detail(detail.into());
+                ui.set_confirm_action(confirm_action::FASTBOOTD_FALLBACK);
+                ui.set_show_confirm(true);
+                *fastbootd_resp.borrow_mut() = Some(response);
             }
             WMsg::DepsResult { message, ok } => add_log(models, &ui, if ok { &LogLevel::Success } else { &LogLevel::Error }, 0, &message),
             WMsg::Flashing(f) => ui.set_is_flashing(f),
@@ -167,6 +174,7 @@ pub fn register_callbacks(
     ctx: &mpsc::Sender<Cmd>,
     models: &LogModels,
     fail_resp: &std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<lfff_lib::flasher::FailureAction>>>>,
+    fastbootd_resp: &std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<bool>>>>,
     flash_cancel: &std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     let t = ctx.clone();
@@ -455,6 +463,16 @@ pub fn register_callbacks(
     let fr = fail_resp.clone();
     ui.on_flash_fail_retry(move || {
         if let Some(tx) = fr.borrow_mut().take() { tx.send(lfff_lib::flasher::FailureAction::Retry).ok(); }
+    });
+
+    let fb = fastbootd_resp.clone();
+    ui.on_fastbootd_fallback_continue(move || {
+        if let Some(tx) = fb.borrow_mut().take() { tx.send(true).ok(); }
+    });
+
+    let fb = fastbootd_resp.clone();
+    ui.on_fastbootd_fallback_stop(move || {
+        if let Some(tx) = fb.borrow_mut().take() { tx.send(false).ok(); }
     });
 
     let t = ctx.clone();
