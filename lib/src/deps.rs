@@ -10,7 +10,7 @@
 //!                        nix profile / nix-env (NixOS)
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 // ---------------------------------------------------------------------------
@@ -275,16 +275,81 @@ fn needs_sudo(pm: &str) -> bool {
 
 const PDG_REPO: &str = "rhythmcache/payload-dumper-rust";
 
-/// Check if payload_dumper is runnable.
-fn pdg_is_runnable() -> bool {
-    if which::which(PDG_BINARY).is_err() {
+/// Escape hatch for distros that ship a foreign `payload_dumper`: point this at
+/// the payload-dumper-rust binary and every lookup below honours it.
+pub const PDG_ENV_OVERRIDE: &str = "LFFF_PAYLOAD_DUMPER";
+
+/// Is this candidate payload-dumper-rust, or something else wearing the name?
+///
+/// `payload_dumper` is not a unique binary name. nixpkgs ships an unrelated
+/// 2022-era Python script under it (vm03/payload_dumper): different CLI
+/// (`--out`/`--images`, raw payload.bin only, no ZIP input), and generated
+/// protobuf stubs that abort on protobuf >= 4 with "Descriptors cannot be
+/// created directly". Running it by mistake fails deep inside extraction with
+/// an error that reads like ours.
+///
+/// payload-dumper-rust is a clap program: `--version` exits 0 and prints a
+/// banner naming the project. The Python script has no such flag — argparse
+/// exits 2 with an empty stdout.
+fn is_payload_dumper_rust(bin: &Path) -> bool {
+    let out = match Command::new(bin).arg("--version").output() {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    if !out.status.success() {
         return false;
     }
-    Command::new(PDG_BINARY)
-        .arg("--help")
-        .output()
-        .map(|o| o.status.code() != Some(126))
-        .unwrap_or(false)
+    let banner = String::from_utf8_lossy(&out.stdout);
+    banner.contains("payload-dumper-rust") || banner.starts_with("payload_dumper ")
+}
+
+/// Locate the payload-dumper-rust binary.
+///
+/// The copy LFFF installed itself is searched before $PATH: where a foreign
+/// `payload_dumper` occupies the name, $PATH resolves to the wrong program and
+/// `lfff deps` would otherwise install a binary that is never picked up.
+pub fn find_payload_dumper_rust() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(p) = std::env::var_os(PDG_ENV_OVERRIDE) {
+        candidates.push(PathBuf::from(p));
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        candidates.push(Path::new(&home).join(".local/bin").join(PDG_BINARY));
+    }
+    candidates.push(Path::new("/usr/local/bin").join(PDG_BINARY));
+    if let Ok(p) = which::which(PDG_BINARY) {
+        candidates.push(p);
+    }
+
+    let mut probed: Vec<PathBuf> = Vec::new();
+    for cand in candidates {
+        if !cand.is_file() {
+            continue;
+        }
+        // The same binary can be reached through several of the paths above.
+        let real = cand.canonicalize().unwrap_or_else(|_| cand.clone());
+        if probed.contains(&real) {
+            continue;
+        }
+        probed.push(real);
+        if is_payload_dumper_rust(&cand) {
+            return Some(cand);
+        }
+        tracing::debug!("{} is not payload-dumper-rust — skipping", cand.display());
+    }
+    None
+}
+
+/// A `payload_dumper` in $PATH that is *not* payload-dumper-rust. Turns
+/// "no payload dumper found" into a message that names the actual problem.
+pub fn foreign_payload_dumper() -> Option<PathBuf> {
+    let p = which::which(PDG_BINARY).ok()?;
+    (!is_payload_dumper_rust(&p)).then_some(p)
+}
+
+/// Check if payload_dumper is runnable.
+fn pdg_is_runnable() -> bool {
+    find_payload_dumper_rust().is_some()
 }
 
 /// ~/.local/bin, but only when it is already in $PATH — installing there
@@ -730,7 +795,7 @@ pub fn install_dependencies(
     // payload_dumper
     if tool_list.contains(&"payload_dumper") {
         if dry_run {
-            if which::which(PDG_BINARY).is_ok() {
+            if find_payload_dumper_rust().is_some() {
                 report.results.push(DepResult {
                     tool: PDG_BINARY.into(),
                     already_installed: true,
@@ -783,4 +848,57 @@ pub fn install_dependencies(
     on_log("────────────────────────────────────────────────────────".into());
 
     report
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    fn fake_tool(dir: &Path, name: &str, body: &str) -> PathBuf {
+        let p = dir.join(name);
+        fs::write(&p, format!("#!/bin/sh\n{}\n", body)).unwrap();
+        set_exec(&p);
+        p
+    }
+
+    /// payload-dumper-rust answers `--version` with a banner naming the project.
+    #[cfg(unix)]
+    #[test]
+    fn accepts_payload_dumper_rust() {
+        let tmp = tempfile::tempdir().unwrap();
+        let clap_style = fake_tool(
+            tmp.path(),
+            "rust_new",
+            r#"[ "$1" = "--version" ] && echo "payload_dumper 0.8.4" && echo "Project home: <https://github.com/rhythmcache/payload-dumper-rust>" && exit 0
+exit 1"#,
+        );
+        assert!(is_payload_dumper_rust(&clap_style));
+    }
+
+    /// nixpkgs' `payload_dumper` is vm03's Python script: no `--version`, so
+    /// argparse exits 2 with nothing on stdout. Picking it up would fail much
+    /// later, inside extraction, on a protobuf error.
+    #[cfg(unix)]
+    #[test]
+    fn rejects_python_payload_dumper() {
+        let tmp = tempfile::tempdir().unwrap();
+        let argparse_style = fake_tool(
+            tmp.path(),
+            "python_like",
+            r#"echo "usage: payload_dumper [-h] [--out OUT] payloadfile" >&2
+echo "payload_dumper: error: unrecognized arguments: --version" >&2
+exit 2"#,
+        );
+        assert!(!is_payload_dumper_rust(&argparse_style));
+    }
+
+    /// A binary that exits 0 but is plainly something else must not pass.
+    #[cfg(unix)]
+    #[test]
+    fn rejects_unrelated_binary() {
+        let tmp = tempfile::tempdir().unwrap();
+        let other = fake_tool(tmp.path(), "unrelated", r#"echo "GNU coreutils 9.5"; exit 0"#);
+        assert!(!is_payload_dumper_rust(&other));
+    }
 }

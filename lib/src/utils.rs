@@ -316,11 +316,21 @@ pub fn tool_install_hint(tool: &str) -> &'static str {
     }
 }
 
+/// Is the tool usable? `payload_dumper` needs more than a $PATH hit: the name
+/// is shared with an unrelated Python script on some distros, so it goes
+/// through the resolver that tells the two apart.
+fn tool_present(tool: &str) -> bool {
+    if tool == "payload_dumper" {
+        return crate::deps::find_payload_dumper_rust().is_some();
+    }
+    which::which(tool).is_ok()
+}
+
 /// Check whether each tool is available in $PATH.
 pub fn check_tools(tools: &[&str]) -> HashMap<String, bool> {
     tools
         .iter()
-        .map(|&t| (t.to_string(), which::which(t).is_ok()))
+        .map(|&t| (t.to_string(), tool_present(t)))
         .collect()
 }
 
@@ -328,7 +338,7 @@ pub fn check_tools(tools: &[&str]) -> HashMap<String, bool> {
 pub fn missing_tools(tools: &[&str]) -> Vec<String> {
     tools
         .iter()
-        .filter(|&&t| which::which(t).is_err())
+        .filter(|&&t| !tool_present(t))
         .map(|&t| t.to_string())
         .collect()
 }

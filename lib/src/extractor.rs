@@ -147,15 +147,31 @@ fn run_payload_dumper(
     partitions: Option<&[String]>,
     on_log: Option<&dyn Fn(String)>,
 ) -> bool {
-    let (tool, images_flag) = if which::which("payload_dumper").is_ok() {
-        ("payload_dumper", "-i")
-    } else if which::which("payload-dumper-go").is_ok() {
-        ("payload-dumper-go", "-p")
+    let (tool, images_flag) = if let Some(bin) = crate::deps::find_payload_dumper_rust() {
+        (bin, "-i")
+    } else if let Ok(bin) = which::which("payload-dumper-go") {
+        (bin, "-p")
     } else {
-        tracing::error!("No payload dumper found in $PATH. Install: cargo install payload_dumper");
-        if let Some(cb) = on_log { cb("ERROR: No payload dumper found. Install payload_dumper.".into()); }
+        // A `payload_dumper` may well be in $PATH and still be the wrong
+        // program — say so, or the user reinstalls the one they already have.
+        let hint = match crate::deps::foreign_payload_dumper() {
+            Some(p) => format!(
+                "{} is not payload-dumper-rust — LFFF cannot use it. Run 'lfff deps', \
+                 or set {}=/path/to/payload_dumper",
+                p.display(),
+                crate::deps::PDG_ENV_OVERRIDE
+            ),
+            None => "No payload dumper found in $PATH. Install: cargo install payload_dumper".into(),
+        };
+        tracing::error!("{}", hint);
+        if let Some(cb) = on_log { cb(format!("ERROR: {}", hint)); }
         return false;
     };
+    let tool_name = tool
+        .file_name()
+        .unwrap_or(tool.as_os_str())
+        .to_string_lossy()
+        .into_owned();
 
     use std::process::Stdio;
 
@@ -163,7 +179,7 @@ fn run_payload_dumper(
     // when stdout/stderr are not a TTY — nothing arrives until the process
     // exits, so stdout/stderr are replayed after completion. Live "Extracted:"
     // progress comes from the GUI worker, which watches the output directory.
-    let mut cmd = Command::new(tool);
+    let mut cmd = Command::new(&tool);
     cmd.arg("-o").arg(output);
     if let Some(parts) = partitions
         && !parts.is_empty() {
@@ -176,12 +192,12 @@ fn run_payload_dumper(
     let child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            if let Some(cb) = on_log { cb(format!("ERROR: failed to start {}: {}", tool, e)); }
+            if let Some(cb) = on_log { cb(format!("ERROR: failed to start {}: {}", tool.display(), e)); }
             return false;
         }
     };
 
-    if let Some(cb) = on_log { cb(format!("Running {}...", tool)); }
+    if let Some(cb) = on_log { cb(format!("Running {}...", tool_name)); }
     let output_result = child.wait_with_output();
 
     fn strip_ansi(s: &str) -> String {
@@ -229,7 +245,7 @@ fn run_payload_dumper(
                 // payload_dumper wrote nothing useful — show a summary anyway
                 if let Some(cb) = on_log {
                     cb(format!("{} finished (stdout: {} B, stderr: {} B, exit: {})",
-                        tool, stdout_bytes, stderr_bytes,
+                        tool_name, stdout_bytes, stderr_bytes,
                         if out.status.success() { "OK" } else { "FAIL" }));
                 }
             }
@@ -246,7 +262,7 @@ fn run_payload_dumper(
 /// Check if payload_dumper (Rust version) is available.
 /// It supports ZIP input directly, so we can skip payload.bin extraction.
 fn has_payload_dumper_rust() -> bool {
-    which::which("payload_dumper").is_ok()
+    crate::deps::find_payload_dumper_rust().is_some()
 }
 
 fn walkdir(dir: &Path) -> Vec<PathBuf> {
@@ -372,33 +388,59 @@ pub fn extract_firmware_with_log(
         Ok(f) => f,
         Err(e) => return ExtractionResult::fail(output_dir, &format!("Cannot open: {}", e)),
     };
-    let mut archive = match zip::ZipArchive::new(file) {
-        Ok(a) => a,
-        Err(e) => return ExtractionResult::fail(output_dir, &format!("Not a zip: {}", e)),
+    // The central directory is read only to decide which extraction route to
+    // take; payload.bin itself is parsed out of the archive by payload_dumper,
+    // which brings its own ZIP reader. Large OTA archives (>4 GB, ZIP64) do
+    // trip this one — "Support for multi-disk files is not implemented" turns
+    // up on 8 GB OnePlus/Xiaomi packages — so a failure here must not abort an
+    // extraction that would have worked.
+    let (has_payload, has_img, props) = match zip::ZipArchive::new(file) {
+        Ok(mut archive) => {
+            let names: Vec<String> = (0..archive.len())
+                .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_string()))
+                .collect();
+            let has_payload = names.iter().any(|n| n == "payload.bin");
+            let has_img = names.iter().any(|n| n.ends_with(".img"));
+
+            // Parse payload_properties.txt if present
+            let props = if names.iter().any(|n| n == "payload_properties.txt") {
+                archive
+                    .by_name("payload_properties.txt")
+                    .ok()
+                    .and_then(|mut e| {
+                        let mut buf = String::new();
+                        io::Read::read_to_string(&mut e, &mut buf).ok()?;
+                        Some(parse_payload_properties(&buf))
+                    })
+                    .unwrap_or_default()
+            } else {
+                HashMap::new()
+            };
+
+            (has_payload, has_img, props)
+        }
+        Err(e) => {
+            // Only the payload.bin route can survive this: raw .img extraction
+            // needs the very reader that just failed.
+            if !has_payload_dumper_rust() {
+                return ExtractionResult::fail(
+                    output_dir,
+                    &format!("Cannot read the ZIP index: {}", e),
+                );
+            }
+            tracing::warn!(
+                "Cannot read the ZIP index ({}) — passing the archive to payload_dumper as-is",
+                e
+            );
+            if let Some(cb) = on_log {
+                cb(format!(
+                    "WARNING: cannot read the ZIP index ({}) — letting payload_dumper read the archive directly",
+                    e
+                ));
+            }
+            (true, false, HashMap::new())
+        }
     };
-
-    let names: Vec<String> = (0..archive.len())
-        .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_string()))
-        .collect();
-    let has_payload = names.iter().any(|n| n == "payload.bin");
-    let has_img = names.iter().any(|n| n.ends_with(".img"));
-
-    // Parse payload_properties.txt if present
-    let props = if names.iter().any(|n| n == "payload_properties.txt") {
-        archive
-            .by_name("payload_properties.txt")
-            .ok()
-            .and_then(|mut e| {
-                let mut buf = String::new();
-                io::Read::read_to_string(&mut e, &mut buf).ok()?;
-                Some(parse_payload_properties(&buf))
-            })
-            .unwrap_or_default()
-    } else {
-        HashMap::new()
-    };
-
-    drop(archive);
 
     if has_payload {
         info!("Format: payload.bin (modern OTA)");

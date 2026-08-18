@@ -88,6 +88,15 @@ lfff flash ./firmwares/RMX3709             # Flash full firmware
 lfff flash --source /out/target/product/   # Flash from source build
 ```
 
+LFFF extracts OTAs with [payload-dumper-rust](https://github.com/rhythmcache/payload-dumper-rust).
+Some distributions (NixOS among them) ship an unrelated Python script under the
+same `payload_dumper` name; LFFF detects that and ignores it. If your copy lives
+somewhere unusual, point LFFF at it directly:
+
+```bash
+export LFFF_PAYLOAD_DUMPER=/path/to/payload_dumper
+```
+
 ---
 
 ## CLI Commands
