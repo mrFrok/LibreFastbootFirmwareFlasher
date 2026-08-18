@@ -292,14 +292,21 @@ pub const PDG_ENV_OVERRIDE: &str = "LFFF_PAYLOAD_DUMPER";
 /// banner naming the project. The Python script has no such flag — argparse
 /// exits 2 with an empty stdout.
 fn is_payload_dumper_rust(bin: &Path) -> bool {
-    let out = match Command::new(bin).arg("--version").output() {
-        Ok(o) => o,
-        Err(_) => return false,
-    };
-    if !out.status.success() {
+    match Command::new(bin).arg("--version").output() {
+        Ok(out) => version_banner_is_rust(out.status.success(), &out.stdout),
+        Err(_) => false,
+    }
+}
+
+/// The decision [`is_payload_dumper_rust`] makes about a `--version` result,
+/// split out so it can be tested without writing a script and executing it:
+/// doing that from a test thread races with process spawns on other threads
+/// and intermittently fails with ETXTBSY.
+fn version_banner_is_rust(success: bool, stdout: &[u8]) -> bool {
+    if !success {
         return false;
     }
-    let banner = String::from_utf8_lossy(&out.stdout);
+    let banner = String::from_utf8_lossy(stdout);
     banner.contains("payload-dumper-rust") || banner.starts_with("payload_dumper ")
 }
 
@@ -854,51 +861,29 @@ pub fn install_dependencies(
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
-    fn fake_tool(dir: &Path, name: &str, body: &str) -> PathBuf {
-        let p = dir.join(name);
-        fs::write(&p, format!("#!/bin/sh\n{}\n", body)).unwrap();
-        set_exec(&p);
-        p
-    }
-
-    /// payload-dumper-rust answers `--version` with a banner naming the project.
-    #[cfg(unix)]
+    /// payload-dumper-rust is a clap program: `--version` exits 0 and prints
+    /// "<bin> <version>" followed by a banner naming the project.
     #[test]
     fn accepts_payload_dumper_rust() {
-        let tmp = tempfile::tempdir().unwrap();
-        let clap_style = fake_tool(
-            tmp.path(),
-            "rust_new",
-            r#"[ "$1" = "--version" ] && echo "payload_dumper 0.8.4" && echo "Project home: <https://github.com/rhythmcache/payload-dumper-rust>" && exit 0
-exit 1"#,
-        );
-        assert!(is_payload_dumper_rust(&clap_style));
+        assert!(version_banner_is_rust(
+            true,
+            b"payload_dumper 0.8.4\n\nProject home: <https://github.com/rhythmcache/payload-dumper-rust>\n"
+        ));
+        // Older releases print the version line alone.
+        assert!(version_banner_is_rust(true, b"payload_dumper 0.8.3\n"));
     }
 
-    /// nixpkgs' `payload_dumper` is vm03's Python script: no `--version`, so
-    /// argparse exits 2 with nothing on stdout. Picking it up would fail much
-    /// later, inside extraction, on a protobuf error.
-    #[cfg(unix)]
+    /// nixpkgs' `payload_dumper` is vm03's Python script, which has no
+    /// `--version`: argparse writes usage to stderr and exits 2. Picking it up
+    /// would fail much later, inside extraction, on a protobuf error.
     #[test]
     fn rejects_python_payload_dumper() {
-        let tmp = tempfile::tempdir().unwrap();
-        let argparse_style = fake_tool(
-            tmp.path(),
-            "python_like",
-            r#"echo "usage: payload_dumper [-h] [--out OUT] payloadfile" >&2
-echo "payload_dumper: error: unrecognized arguments: --version" >&2
-exit 2"#,
-        );
-        assert!(!is_payload_dumper_rust(&argparse_style));
+        assert!(!version_banner_is_rust(false, b""));
     }
 
     /// A binary that exits 0 but is plainly something else must not pass.
-    #[cfg(unix)]
     #[test]
     fn rejects_unrelated_binary() {
-        let tmp = tempfile::tempdir().unwrap();
-        let other = fake_tool(tmp.path(), "unrelated", r#"echo "GNU coreutils 9.5"; exit 0"#);
-        assert!(!is_payload_dumper_rust(&other));
+        assert!(!version_banner_is_rust(true, b"GNU coreutils 9.5\n"));
     }
 }
