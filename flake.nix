@@ -61,9 +61,9 @@
           src = pkgs.fetchurl {
             url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
             sha256 = if arch == "aarch64" then
-              "sha256-K5TQrqm3f+DKxucFFQ5n65+hNuEdYhlJrhSVNe20a6A="
+              "sha256-rWUFhnQfQgEHWgMJ4LFxGG0zA/6S6MSITM9dSgAQ8E8="
             else
-              "sha256-hQTncpv0fiAZv7L6KS5EmSNQhBLxgjiDf7OrRmwnXqQ=";
+              "sha256-6QdfbfyrSXxx0FV8nlhvSX+wlB05UndUVj9xyqRYVdg=";
           };
 
           nativeBuildInputs = with pkgs; [ makeWrapper ];
