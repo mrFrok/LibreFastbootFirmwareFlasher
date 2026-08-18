@@ -10,181 +10,111 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        version = "2.7.0";
+        arch = if system == "aarch64-linux" then "aarch64" else "x86_64";
 
-        # Runtime libraries needed by the prebuilt binary
-        runtimeDeps = with pkgs; [
-          fontconfig
-          freetype
-          libGL
-          libxkbcommon
-          wayland
-          libx11
-          libxcursor
-          libxi
-          libxrandr
-          libxcb
-          libxcb-util
-          libxcb-keysyms
-          libxcb-wm
-          alsa-lib
-          dbus
-          openssl
-          stdenv.cc.cc.lib
+        buildInputs = with pkgs; [
+          fontconfig freetype libGL libxkbcommon wayland libx11 libxcursor
+          libxi libxrandr libxcb libxcb-util libxcb-keysyms libxcb-wm
+          alsa-lib dbus openssl stdenv.cc.cc.lib
         ];
 
-        # Build-time dependencies (only used when building from source)
-        skiaSrc = pkgs.fetchFromGitHub {
-          owner = "rust-skia";
-          repo = "skia";
-          rev = "m142-0.89.1";
-          hash = "sha256-J7mBQ124/dODxX6MsuMW1NHizCMATAqdSzwxpP2afgk=";
+        assets = pkgs.fetchFromGitHub {
+          owner = "mrFrok";
+          repo = "LibreFastbootFirmwareFlasher";
+          rev = "v${version}";
+          hash = "sha256-7dVCuNmLkLGP2Z4RSK09YNHOoe7D4RJnGJjKOdnXZOA=";
         };
-
-        commonRustArgs = {
-          pname = "lfff";
-          version = "2.7.0";
-          src = ./.;
-          cargoLock.lockFile = ./Cargo.lock;
-          nativeBuildInputs = with pkgs; [ pkg-config cmake makeWrapper installShellFiles python3 gn ninja ];
-          buildInputs = runtimeDeps;
-          PYTHON = "${pkgs.python3}/bin/python3";
-          SKIA_SOURCE_DIR = "${skiaSrc}";
-        };
-
-        # Binary package — downloads prebuilt release from GitHub
-        lfff-bin = pkgs.stdenv.mkDerivation rec {
-          pname = "lfff-bin";
-          version = "2.7.0";
-
-          arch = if system == "aarch64-linux" then "aarch64" else "x86_64";
-
-          src = pkgs.fetchurl {
-            url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
-            sha256 = if arch == "aarch64" then
-              "sha256-rWUFhnQfQgEHWgMJ4LFxGG0zA/6S6MSITM9dSgAQ8E8="
-            else
-              "sha256-6QdfbfyrSXxx0FV8nlhvSX+wlB05UndUVj9xyqRYVdg=";
-          };
-
-          nativeBuildInputs = with pkgs; [ makeWrapper ];
-
-          unpackPhase = ''
-            tar xzf $src
-          '';
-
-          installPhase = ''
-            mkdir -p $out/bin $out/share/applications $out/share/icons/hicolor/scalable/apps
-            install -Dm755 lfff-gui $out/bin/lfff-gui
-            install -Dm644 ${./lfff-gui.desktop} $out/share/applications/lfff-gui.desktop
-            install -Dm644 ${./lfff-gui.svg} $out/share/icons/hicolor/scalable/apps/lfff-gui.svg
-
-            wrapProgram $out/bin/lfff-gui \
-              --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
-              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeDeps}
-          '';
-
-          meta = with pkgs.lib; {
-            description = "Android firmware flasher via fastboot (GUI, prebuilt binary)";
-            homepage = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
-            license = licenses.gpl3;
-            platforms = platforms.linux;
-            mainProgram = "lfff-gui";
-          };
-        };
-
-        # Build GUI package
-        lfff-gui = pkgs.rustPlatform.buildRustPackage (commonRustArgs // {
-          pname = "lfff-gui";
-          cargoBuildFlags = [ "--package" "lfff-gui" ];
-          
-          postInstall = ''
-            # Install CLI binary as well
-            install -Dm755 target/release/lfff $out/bin/lfff
-            
-            # Install desktop file
-            install -Dm644 lfff-gui.desktop $out/share/applications/lfff-gui.desktop
-            
-            # Install icon
-            install -Dm644 lfff-gui.svg $out/share/icons/hicolor/scalable/apps/lfff-gui.svg
-            
-            # Wrap GUI binary with required environment
-            wrapProgram $out/bin/lfff-gui \
-              --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
-              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath runtimeDeps}
-          '';
-
-          meta = with pkgs.lib; {
-            description = "Android firmware flasher via fastboot (GUI)";
-            homepage = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
-            license = licenses.gpl3;
-            platforms = platforms.linux;
-            mainProgram = "lfff-gui";
-          };
-        });
-
-        # Build CLI package
-        lfff-cli = pkgs.rustPlatform.buildRustPackage (commonRustArgs // {
-          pname = "lfff-cli";
-          cargoBuildFlags = [ "--package" "lfff-cli" ];
-          
-          postInstall = ''
-            install -Dm755 target/release/lfff $out/bin/lfff
-          '';
-
-          meta = with pkgs.lib; {
-            description = "Android firmware flasher via fastboot (CLI)";
-            homepage = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
-            license = licenses.gpl3;
-            platforms = platforms.linux;
-            mainProgram = "lfff";
-          };
-        });
       in
       {
-        packages =
-          let
-            common = {
-              lfff-gui = lfff-gui;
-              lfff-cli = lfff-cli;
-            };
-            linux-only = if system == "x86_64-linux" || system == "aarch64-linux" then
-              { lfff-bin = lfff-bin; default = lfff-bin; }
-            else
-              { default = lfff-gui; };
-          in
-          common // linux-only;
+        packages = {
+          lfff-gui = pkgs.stdenvNoCC.mkDerivation {
+            pname = "lfff-gui";
+            inherit version;
 
-        devShells.default = pkgs.mkShell {
-          inputsFrom = [ lfff-gui ];
-          
-          packages = with pkgs; [
-            rust-analyzer
-            cargo-watch
-            fastboot
-            adb
-            rustfmt
-            clippy
-          ];
-        };
+            src = pkgs.fetchurl {
+              url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
+              sha256 = if arch == "aarch64" then
+                "sha256-rWUFhnQfQgEHWgMJ4LFxGG0zA/6S6MSITM9dSgAQ8E8="
+              else
+                "sha256-6QdfbfyrSXxx0FV8nlhvSX+wlB05UndUVj9xyqRYVdg=";
+            };
 
-        apps =
-          let
-            gui-pkg = if system == "x86_64-linux" || system == "aarch64-linux" then lfff-bin else lfff-gui;
-          in
-          {
-            default = {
-              type = "app";
-              program = "${gui-pkg}/bin/lfff-gui";
-            };
-            gui = {
-              type = "app";
-              program = "${gui-pkg}/bin/lfff-gui";
-            };
-            cli = {
-              type = "app";
-              program = "${lfff-cli}/bin/lfff";
+            nativeBuildInputs = with pkgs; [ autoPatchelfHook makeWrapper ];
+            inherit buildInputs;
+
+            unpackPhase = "tar xzf $src";
+
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out/bin $out/share/applications $out/share/icons/hicolor/scalable/apps
+
+              install -Dm755 lfff-gui $out/bin/lfff-gui
+              install -Dm644 ${assets}/lfff-gui.desktop $out/share/applications/lfff-gui.desktop
+              install -Dm644 ${assets}/lfff-gui.svg $out/share/icons/hicolor/scalable/apps/lfff-gui.svg
+
+              wrapProgram $out/bin/lfff-gui \
+                --set FONTCONFIG_FILE ${pkgs.fontconfig.out}/etc/fonts/fonts.conf \
+                --set SLINT_BACKEND wayland \
+                --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath buildInputs} \
+                --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.payload-dumper-go pkgs.aria2 pkgs.android-tools ]}
+
+              runHook postInstall
+            '';
+
+            meta = with pkgs.lib; {
+              description = "Android firmware flasher via fastboot (GUI, prebuilt)";
+              homepage = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
+              license = licenses.gpl3;
+              platforms = platforms.linux;
+              mainProgram = "lfff-gui";
+              sourceProvenance = with sourceTypes; [ binaryNativeCode ];
             };
           };
+
+          lfff-cli = pkgs.stdenvNoCC.mkDerivation {
+            pname = "lfff-cli";
+            inherit version;
+
+            src = pkgs.fetchurl {
+              url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-linux-${arch}.tar.gz";
+              hash = "sha256-TKyh54YRUxQOFxryewHI6SlNunch4cKOYDGglN3RtOI=";
+            };
+
+            buildInputs = with pkgs; [ stdenv.cc.cc.lib ];
+            nativeBuildInputs = with pkgs; [ autoPatchelfHook ];
+
+            unpackPhase = "tar xzf $src";
+
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out/bin
+              install -Dm755 lfff $out/bin/lfff
+              runHook postInstall
+            '';
+
+            meta = with pkgs.lib; {
+              description = "Android firmware flasher via fastboot (CLI, prebuilt)";
+              homepage = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
+              license = licenses.gpl3;
+              platforms = platforms.linux;
+              mainProgram = "lfff";
+              sourceProvenance = with sourceTypes; [ binaryNativeCode ];
+            };
+          };
+
+          default = self.packages.${system}.lfff-gui;
+        };
+
+        apps = {
+          default = flake-utils.lib.mkApp { drv = self.packages.${system}.lfff-gui; exePath = "/bin/lfff-gui"; };
+          gui = flake-utils.lib.mkApp { drv = self.packages.${system}.lfff-gui; exePath = "/bin/lfff-gui"; };
+          cli = flake-utils.lib.mkApp { drv = self.packages.${system}.lfff-cli; exePath = "/bin/lfff"; };
+        };
+
+        devShells.default = pkgs.mkShell {
+          packages = with pkgs; [ fastboot adb payload-dumper-go aria2 ];
+        };
       }
     );
 }
