@@ -318,10 +318,11 @@ pub fn tool_install_hint(tool: &str) -> &'static str {
 
 /// Is the tool usable? `payload_dumper` needs more than a $PATH hit: the name
 /// is shared with an unrelated Python script on some distros, so it goes
-/// through the resolver that tells the two apart.
+/// through the resolver that tells the two apart — and payload-dumper-go
+/// counts as well, since extraction works through it too.
 fn tool_present(tool: &str) -> bool {
     if tool == "payload_dumper" {
-        return crate::deps::find_payload_dumper_rust().is_some();
+        return crate::deps::find_payload_dumper().is_some();
     }
     which::which(tool).is_ok()
 }

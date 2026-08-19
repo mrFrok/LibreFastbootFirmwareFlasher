@@ -347,6 +347,48 @@ pub fn find_payload_dumper_rust() -> Option<PathBuf> {
     None
 }
 
+/// payload-dumper-go, the other dumper LFFF can drive.
+///
+/// It works, but only through the slower route: it takes a raw payload.bin, so
+/// the OTA zip has to be unpacked first, and archives whose ZIP index our
+/// reader rejects cannot be recovered at all.
+pub fn find_payload_dumper_go() -> Option<PathBuf> {
+    which::which("payload-dumper-go").ok()
+}
+
+/// A payload dumper LFFF can use, preferring the one it drives best.
+#[derive(Debug, Clone)]
+pub enum PayloadDumper {
+    /// payload-dumper-rust — reads the OTA zip directly.
+    Rust(PathBuf),
+    /// payload-dumper-go — needs a raw payload.bin.
+    Go(PathBuf),
+}
+
+impl PayloadDumper {
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Rust(p) | Self::Go(p) => p,
+        }
+    }
+    pub fn into_path(self) -> PathBuf {
+        match self {
+            Self::Rust(p) | Self::Go(p) => p,
+        }
+    }
+    pub fn is_rust(&self) -> bool {
+        matches!(self, Self::Rust(_))
+    }
+}
+
+/// Find whichever payload dumper is available, best first.
+pub fn find_payload_dumper() -> Option<PayloadDumper> {
+    if let Some(p) = find_payload_dumper_rust() {
+        return Some(PayloadDumper::Rust(p));
+    }
+    find_payload_dumper_go().map(PayloadDumper::Go)
+}
+
 /// A `payload_dumper` in $PATH that is *not* payload-dumper-rust. Turns
 /// "no payload dumper found" into a message that names the actual problem.
 pub fn foreign_payload_dumper() -> Option<PathBuf> {
@@ -802,7 +844,21 @@ pub fn install_dependencies(
     // payload_dumper
     if tool_list.contains(&"payload_dumper") {
         if dry_run {
-            if find_payload_dumper_rust().is_some() {
+            // payload-dumper-go satisfies the dependency too — extraction works
+            // through it, just on the slower route — so report it as present
+            // rather than missing, with the caveat spelled out.
+            let go = if find_payload_dumper_rust().is_some() {
+                None
+            } else {
+                find_payload_dumper_go()
+            };
+            if let Some(ref path) = go {
+                on_log(format!(
+                    "  ⚠  using payload-dumper-go ({}) — it cannot read OTA zips directly; payload-dumper-rust is preferred",
+                    path.display()
+                ));
+            }
+            if find_payload_dumper_rust().is_some() || go.is_some() {
                 report.results.push(DepResult {
                     tool: PDG_BINARY.into(),
                     already_installed: true,
@@ -820,7 +876,19 @@ pub fn install_dependencies(
                 });
             }
         } else {
-            report.results.push(install_payload_dumper(on_log));
+            let result = install_payload_dumper(on_log);
+            // Installing the preferred dumper failed, but extraction is still
+            // possible if the Go one is around — say so instead of leaving the
+            // report looking fatal.
+            if !result.ok()
+                && let Some(path) = find_payload_dumper_go()
+            {
+                on_log(format!(
+                    "  ⚠  payload-dumper-go ({}) will be used instead — slower, and it cannot read OTA zips directly",
+                    path.display()
+                ));
+            }
+            report.results.push(result);
         }
     }
 

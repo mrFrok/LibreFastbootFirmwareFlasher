@@ -147,10 +147,9 @@ fn run_payload_dumper(
     partitions: Option<&[String]>,
     on_log: Option<&dyn Fn(String)>,
 ) -> bool {
-    let (tool, images_flag) = if let Some(bin) = crate::deps::find_payload_dumper_rust() {
-        (bin, "-i")
-    } else if let Ok(bin) = which::which("payload-dumper-go") {
-        (bin, "-p")
+    let (tool, images_flag) = if let Some(dumper) = crate::deps::find_payload_dumper() {
+        let flag = if dumper.is_rust() { "-i" } else { "-p" };
+        (dumper.into_path(), flag)
     } else {
         // A `payload_dumper` may well be in $PATH and still be the wrong
         // program — say so, or the user reinstalls the one they already have.
