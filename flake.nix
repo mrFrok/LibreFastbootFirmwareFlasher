@@ -17,12 +17,24 @@
         arch = if pkgs.stdenv.hostPlatform.isAarch64 then "aarch64" else "x86_64";
         os = if pkgs.stdenv.hostPlatform.isDarwin then "macos" else "linux";
 
+        # Runtime libraries the GUI needs. libGL, wayland and libxkbcommon are
+        # dlopen'd rather than listed in DT_NEEDED, so they have to stay on
+        # LD_LIBRARY_PATH even once autoPatchelfHook has patched the binary.
         runtimeDeps = with pkgs; [
           fontconfig freetype libGL libxkbcommon wayland libx11 libxcursor
           libxi libxrandr libxcb libxcb-util libxcb-keysyms libxcb-wm
           alsa-lib dbus openssl stdenv.cc.cc.lib
         ];
 
+        # payload-dumper-rust, prebuilt from upstream releases.
+        #
+        # LFFF looks for this tool specifically. It reads the OTA .zip directly,
+        # whereas payload-dumper-go only accepts a raw payload.bin — LFFF then
+        # has to unpack one first (~8 GB of scratch space on a large OTA), and
+        # loses the fallback that lets it extract archives its own ZIP index
+        # reader rejects. nixpkgs carries no payload-dumper-rust, and its
+        # `payload_dumper` is an unrelated Python script that LFFF detects and
+        # deliberately refuses to run.
         payloadDumperVersion = "0.8.4";
         payload-dumper-rust = pkgs.stdenvNoCC.mkDerivation {
           pname = "payload-dumper-rust";
@@ -39,8 +51,12 @@
           };
 
           nativeBuildInputs = [ pkgs.unzip ];
+
+          # The archive holds payload_dumper and sha256sum.txt side by side, so
+          # there is no single directory for sourceRoot to autodetect.
           sourceRoot = ".";
 
+          # The Linux builds are statically linked — no autoPatchelfHook needed.
           installPhase = ''
             runHook preInstall
             install -Dm755 payload_dumper $out/bin/payload_dumper
@@ -56,6 +72,8 @@
           };
         };
 
+        # Tools LFFF shells out to. A GUI launched from its .desktop entry does
+        # not inherit an interactive shell's PATH, so they are wired in here.
         runtimeTools = [ payload-dumper-rust pkgs.aria2 pkgs.android-tools ];
 
         wrapGui = ''
@@ -88,11 +106,13 @@
           inherit version;
 
           src = pkgs.fetchurl {
-            url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-${os}-${arch}.tar.gz";
+            # Linux only: the macOS GUI ships as an .app bundle with a
+            # different layout, so darwin falls back to the source build.
+            url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
             hash = {
-              linux-x86_64 = "sha256-6QdfbfyrSXxx0FV8nlhvSX+wlB05UndUVj9xyqRYVdg=";
-              linux-aarch64 = "sha256-rWUFhnQfQgEHWgMJ4LFxGG0zA/6S6MSITM9dSgAQ8E8=";
-            }.${os + "-" + arch};
+              x86_64 = "sha256-6QdfbfyrSXxx0FV8nlhvSX+wlB05UndUVj9xyqRYVdg=";
+              aarch64 = "sha256-rWUFhnQfQgEHWgMJ4LFxGG0zA/6S6MSITM9dSgAQ8E8=";
+            }.${arch};
           };
 
           nativeBuildInputs = with pkgs; [ autoPatchelfHook makeWrapper ];
@@ -108,6 +128,7 @@
             runHook postInstall
           '';
 
+          # Runs after autoPatchelfHook, which patches during fixupPhase.
           postFixup = wrapGui;
 
           meta = with pkgs.lib; {
@@ -125,11 +146,11 @@
           inherit version;
 
           src = pkgs.fetchurl {
-            url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-${os}-${arch}.tar.gz";
+            url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-linux-${arch}.tar.gz";
             hash = {
-              linux-x86_64 = "sha256-TKyh54YRUxQOFxryewHI6SlNunch4cKOYDGglN3RtOI=";
-              linux-aarch64 = "sha256-1wDHJQQoRZ+8pxTKji6fUp/a8g1LHoKVySo01rcAfWw=";
-            }.${os + "-" + arch};
+              x86_64 = "sha256-TKyh54YRUxQOFxryewHI6SlNunch4cKOYDGglN3RtOI=";
+              aarch64 = "sha256-1wDHJQQoRZ+8pxTKji6fUp/a8g1LHoKVySo01rcAfWw=";
+            }.${arch};
           };
 
           nativeBuildInputs = with pkgs; [ autoPatchelfHook makeWrapper ];
