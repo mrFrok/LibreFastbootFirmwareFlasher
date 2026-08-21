@@ -135,7 +135,7 @@ install_binary() {
     local url="https://github.com/${REPO}/releases/download/${version}/${asset_name}"
     local tmp
     tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' RETURN
+    trap 'rm -rf "$tmp"; trap - RETURN' RETURN
 
     info "Downloading $asset_name..."
     if command -v curl &>/dev/null; then
