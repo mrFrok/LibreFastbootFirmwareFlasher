@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use clap_complete::Shell;
 
 /// LibreFastbootFirmwareFlasher — extract, check, and flash Android firmware.
 #[derive(Parser)]
@@ -20,8 +19,8 @@ pub enum Commands {
     /// Generate shell completion
     Completion {
         /// Target Shell (bash, zsh, fish, powershell, elvish)
-        #[arg(value_enum)]
-        shell: Shell,
+        #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell", "elvish", "nushell"])]
+        shell: Option<String>,
     },
     /// Install and verify external dependencies
     Deps {

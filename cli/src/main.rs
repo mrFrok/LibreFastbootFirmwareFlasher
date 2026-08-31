@@ -9,10 +9,8 @@ mod welcome;
 
 use clap::CommandFactory;
 use clap::Parser;
-use clap_complete::generate;
 use cli::{Cli, Commands};
 use lfff_lib::flasher::FirmwareSource;
-use std::io;
 use std::process;
 
 fn main() {
@@ -21,9 +19,7 @@ fn main() {
     // Before handling cli.command, to prevent log in script
     if let Some(Commands::Completion { shell }) = &cli.command {
         let mut cmd = Cli::command();
-        let cmd_name = cmd.get_name().to_string();
-        generate(*shell, &mut cmd, cmd_name, &mut io::stdout());
-        process::exit(0);
+        handlers::complete::handle_completion(&mut cmd, shell.as_deref());
     }
 
     let log_level = if cli.verbose { "debug" } else { "warn" };
