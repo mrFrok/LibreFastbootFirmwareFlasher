@@ -20,11 +20,12 @@ pub fn print() {
     println!();
     println!("  Commands:");
     println!("  ─────────────────────────────────────────────────────");
+    println!("  arb               compare Anti-Rollback version");
+    println!("  completion        generate shell completion");
     println!("  deps              install & verify external tools");
+    println!("  devices           list devices, run pre-flash checks");
     println!("  download          download OTA firmware zip");
     println!("  extract           extract .zip into partition images");
-    println!("  devices           list devices, run pre-flash checks");
-    println!("  arb               compare Anti-Rollback version");
     println!("  flash             flash full firmware (A/B, super)");
     println!("  flash-partition   flash a single partition by name");
 
