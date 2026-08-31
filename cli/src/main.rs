@@ -7,14 +7,24 @@ mod handlers;
 mod output;
 mod welcome;
 
-use std::process;
-
+use clap::CommandFactory;
 use clap::Parser;
+use clap_complete::generate;
 use cli::{Cli, Commands};
 use lfff_lib::flasher::FirmwareSource;
+use std::io;
+use std::process;
 
 fn main() {
     let cli = Cli::parse();
+
+    // Before handling cli.command, to prevent log in script
+    if let Some(Commands::Completion { shell }) = &cli.command {
+        let mut cmd = Cli::command();
+        let cmd_name = cmd.get_name().to_string();
+        generate(*shell, &mut cmd, cmd_name, &mut io::stdout());
+        process::exit(0);
+    }
 
     let log_level = if cli.verbose { "debug" } else { "warn" };
     tracing_subscriber::fmt()
@@ -31,6 +41,7 @@ fn main() {
             welcome::print();
             0
         }
+        Some(Commands::Completion { .. }) => unreachable!(),
 
         Some(Commands::Deps { check, ref tools }) => handlers::deps::run(check, tools),
 
@@ -54,7 +65,9 @@ fn main() {
             list,
         ),
 
-        Some(Commands::Devices { check, ref serial }) => handlers::devices::run(check, serial.as_deref()),
+        Some(Commands::Devices { check, ref serial }) => {
+            handlers::devices::run(check, serial.as_deref())
+        }
 
         Some(Commands::Arb {
             ref xbl,
