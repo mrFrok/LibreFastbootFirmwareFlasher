@@ -1,7 +1,7 @@
-use slint::{ModelRc, VecModel, Model};
+use slint::{Model, ModelRc, VecModel};
 use std::rc::Rc;
 
-use crate::{LogLevel, LogEntry, FlashHistoryItem, MainWindow, lvl, ts};
+use crate::{FlashHistoryItem, LogEntry, LogLevel, MainWindow, lvl, ts};
 
 pub struct LogModels {
     pub device: Rc<VecModel<LogEntry>>,
@@ -37,9 +37,13 @@ impl LogModels {
             .iter()
             .rev()
             .map(|entry| {
-                let result = if entry.aborted { "Aborted" }
-                    else if entry.failed > 0 { "Failed" }
-                    else { "OK" };
+                let result = if entry.aborted {
+                    "Aborted"
+                } else if entry.failed > 0 {
+                    "Failed"
+                } else {
+                    "OK"
+                };
                 // Integer math — rounding minutes and seconds independently
                 // produced labels like "2m 60s".
                 let secs = entry.duration_s.round() as u64;
@@ -72,6 +76,12 @@ impl LogModels {
 }
 
 pub fn add_log_m(model: &VecModel<LogEntry>, _ui: &MainWindow, l: &LogLevel, m: &str) {
-    model.push(LogEntry { timestamp: ts().into(), level: lvl(l).into(), message: m.into() });
-    while model.row_count() > 500 { model.remove(0); }
+    model.push(LogEntry {
+        timestamp: ts().into(),
+        level: lvl(l).into(),
+        message: m.into(),
+    });
+    while model.row_count() > 500 {
+        model.remove(0);
+    }
 }

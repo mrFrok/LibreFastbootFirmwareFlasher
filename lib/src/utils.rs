@@ -11,8 +11,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use tracing::{error, info, warn};
 use sha2::{Digest, Sha256};
+use tracing::{error, info, warn};
 
 // ---------------------------------------------------------------------------
 // Command result
@@ -46,7 +46,7 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
             stderr: "Empty command".into(),
         };
     }
-    
+
     // No timeout: use output() directly (captures stdout/stderr)
     if timeout_secs == 0 {
         match Command::new(cmd[0]).args(&cmd[1..]).output() {
@@ -70,7 +70,7 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
             }
         }
     }
-    
+
     // With timeout: spawn threads to drain stdout/stderr concurrently,
     // then wait for the child with a timeout.  This prevents pipe-deadlock
     // when the subprocess writes more than the OS pipe buffer (~64 KiB).
@@ -113,8 +113,12 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
 
     match wait_timeout::ChildExt::wait_timeout(&mut child, Duration::from_secs(timeout_secs)) {
         Ok(Some(status)) => {
-            let stdout = stdout_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
-            let stderr = stderr_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
+            let stdout = stdout_handle
+                .map(|h| h.join().unwrap_or_default())
+                .unwrap_or_default();
+            let stderr = stderr_handle
+                .map(|h| h.join().unwrap_or_default())
+                .unwrap_or_default();
             CmdResult {
                 code: status.code().unwrap_or(-1),
                 stdout: stdout.trim().to_string(),
@@ -122,7 +126,10 @@ pub fn run_cmd(cmd: &[&str], timeout_secs: u64) -> CmdResult {
             }
         }
         Ok(None) => {
-            warn!("Command '{}' exceeded timeout of {}s, killing process", cmd[0], timeout_secs);
+            warn!(
+                "Command '{}' exceeded timeout of {}s, killing process",
+                cmd[0], timeout_secs
+            );
             let _ = child.kill();
             let _ = child.wait();
             CmdResult {
@@ -153,7 +160,11 @@ pub fn run_cmd_owned(cmd: &[String], timeout_secs: u64) -> CmdResult {
 /// the child process is killed immediately and a "cancelled" result is returned.
 pub fn run_cmd_with_cancel(cmd: &[&str], timeout_secs: u64, cancel: &AtomicBool) -> CmdResult {
     if cmd.is_empty() {
-        return CmdResult { code: -1, stdout: String::new(), stderr: "Empty command".into() };
+        return CmdResult {
+            code: -1,
+            stdout: String::new(),
+            stderr: "Empty command".into(),
+        };
     }
 
     let mut child = match Command::new(cmd[0])
@@ -196,8 +207,12 @@ pub fn run_cmd_with_cancel(cmd: &[&str], timeout_secs: u64, cancel: &AtomicBool)
     loop {
         match wait_timeout::ChildExt::wait_timeout(&mut child, poll) {
             Ok(Some(status)) => {
-                let stdout = stdout_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
-                let stderr = stderr_handle.map(|h| h.join().unwrap_or_default()).unwrap_or_default();
+                let stdout = stdout_handle
+                    .map(|h| h.join().unwrap_or_default())
+                    .unwrap_or_default();
+                let stderr = stderr_handle
+                    .map(|h| h.join().unwrap_or_default())
+                    .unwrap_or_default();
                 return CmdResult {
                     code: status.code().unwrap_or(-1),
                     stdout: stdout.trim().to_string(),
@@ -216,13 +231,19 @@ pub fn run_cmd_with_cancel(cmd: &[&str], timeout_secs: u64, cancel: &AtomicBool)
                     };
                 }
                 if std::time::Instant::now() >= deadline {
-                    warn!("Command '{}' exceeded timeout of {}s, killing process", cmd[0], timeout_secs);
+                    warn!(
+                        "Command '{}' exceeded timeout of {}s, killing process",
+                        cmd[0], timeout_secs
+                    );
                     let _ = child.kill();
                     let _ = child.wait();
                     return CmdResult {
                         code: -124,
                         stdout: String::new(),
-                        stderr: format!("Command '{}' exceeded timeout of {}s", cmd[0], timeout_secs),
+                        stderr: format!(
+                            "Command '{}' exceeded timeout of {}s",
+                            cmd[0], timeout_secs
+                        ),
                     };
                 }
             }

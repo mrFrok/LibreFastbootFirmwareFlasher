@@ -2,12 +2,13 @@ use std::path::PathBuf;
 
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
-use lfff_lib::downloader::{
-    download_firmware_with_progress, DownloadProgress, CancelToken,
-};
+use lfff_lib::downloader::{CancelToken, DownloadProgress, download_firmware_with_progress};
 
 pub fn run(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
-    println!("\n{}", "── Firmware download ────────────────────────────────────".dimmed());
+    println!(
+        "\n{}",
+        "── Firmware download ────────────────────────────────────".dimmed()
+    );
 
     use std::sync::Arc;
 
@@ -46,7 +47,11 @@ pub fn run(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
     pb.finish_and_clear();
 
     if !result.success {
-        eprintln!("\n{} {}", "✗".red().bold(), format!("Download failed: {}", result.error).red());
+        eprintln!(
+            "\n{} {}",
+            "✗".red().bold(),
+            format!("Download failed: {}", result.error).red()
+        );
         return 1;
     }
 
@@ -54,8 +59,15 @@ pub fn run(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
     if let Some(ref path) = result.output_path {
         println!("  {} {}", "Saved to:".dimmed(), path.display());
         println!("\n  {}", "Next step:".dimmed());
-        println!("    {} {}", "lfff extract".cyan(), format!("\"{}\"", path.display()).cyan());
+        println!(
+            "    {} {}",
+            "lfff extract".cyan(),
+            format!("\"{}\"", path.display()).cyan()
+        );
     }
-    println!("{}", "────────────────────────────────────────────────────────".dimmed());
+    println!(
+        "{}",
+        "────────────────────────────────────────────────────────".dimmed()
+    );
     0
 }

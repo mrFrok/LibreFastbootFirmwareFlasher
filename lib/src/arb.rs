@@ -64,7 +64,6 @@ impl fmt::Display for ArbInfo {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // ELF parser — extract ARB from xbl_config.img
 // ---------------------------------------------------------------------------
@@ -95,7 +94,7 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
     let e_phoff = u64::from_le_bytes(data[0x20..0x28].try_into().unwrap_or([0; 8])) as usize;
     let e_phentsz = u16::from_le_bytes(data[0x36..0x38].try_into().unwrap_or([0; 2])) as usize;
     let e_phnum = u16::from_le_bytes(data[0x38..0x3A].try_into().unwrap_or([0; 2])) as usize;
-    
+
     if e_phentsz == 0 {
         return ArbInfo::unknown("invalid ELF program header entry size");
     }
@@ -112,15 +111,11 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
         if ph + 56 > data.len() {
             continue;
         }
-        let p_type = u32::from_le_bytes(
-            data[ph..ph + 4].try_into().unwrap_or([0; 4])
-        );
-        let p_offset = u64::from_le_bytes(
-            data[ph + 8..ph + 16].try_into().unwrap_or([0; 8])
-        ) as usize;
-        let p_filesz = u64::from_le_bytes(
-            data[ph + 32..ph + 40].try_into().unwrap_or([0; 8])
-        ) as usize;
+        let p_type = u32::from_le_bytes(data[ph..ph + 4].try_into().unwrap_or([0; 4]));
+        let p_offset =
+            u64::from_le_bytes(data[ph + 8..ph + 16].try_into().unwrap_or([0; 8])) as usize;
+        let p_filesz =
+            u64::from_le_bytes(data[ph + 32..ph + 40].try_into().unwrap_or([0; 8])) as usize;
         if p_type == PT_NULL && p_filesz > 0 {
             hash_off = p_offset;
             hash_size = p_filesz;
@@ -146,21 +141,15 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
         if off + 20 > seg.len() {
             break;
         }
-        let version = u32::from_le_bytes(
-            seg[off..off + 4].try_into().unwrap_or([0; 4])
-        );
-        let common_sz = u32::from_le_bytes(
-            seg[off + 4..off + 8].try_into().unwrap_or([0; 4])
-        ) as usize;
-        let qti_sz = u32::from_le_bytes(
-            seg[off + 8..off + 12].try_into().unwrap_or([0; 4])
-        ) as usize;
-        let oem_sz = u32::from_le_bytes(
-            seg[off + 12..off + 16].try_into().unwrap_or([0; 4])
-        ) as usize;
-        let hash_tbl_sz = u32::from_le_bytes(
-            seg[off + 16..off + 20].try_into().unwrap_or([0; 4])
-        ) as usize;
+        let version = u32::from_le_bytes(seg[off..off + 4].try_into().unwrap_or([0; 4]));
+        let common_sz =
+            u32::from_le_bytes(seg[off + 4..off + 8].try_into().unwrap_or([0; 4])) as usize;
+        let qti_sz =
+            u32::from_le_bytes(seg[off + 8..off + 12].try_into().unwrap_or([0; 4])) as usize;
+        let oem_sz =
+            u32::from_le_bytes(seg[off + 12..off + 16].try_into().unwrap_or([0; 4])) as usize;
+        let hash_tbl_sz =
+            u32::from_le_bytes(seg[off + 16..off + 20].try_into().unwrap_or([0; 4])) as usize;
 
         if (1..=10).contains(&version)
             && common_sz <= 0x1000
@@ -185,10 +174,14 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
 
     // Read OEM metadata
     let common_sz = u32::from_le_bytes(
-        seg[header_off + 4..header_off + 8].try_into().unwrap_or([0; 4])
+        seg[header_off + 4..header_off + 8]
+            .try_into()
+            .unwrap_or([0; 4]),
     ) as usize;
     let qti_sz = u32::from_le_bytes(
-        seg[header_off + 8..header_off + 12].try_into().unwrap_or([0; 4])
+        seg[header_off + 8..header_off + 12]
+            .try_into()
+            .unwrap_or([0; 4]),
     ) as usize;
     let oem_off = header_off + 36 + common_sz + qti_sz;
 
@@ -196,15 +189,9 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
         return ArbInfo::unknown("OEM metadata offset out of bounds");
     }
 
-    let oem_major = u32::from_le_bytes(
-        seg[oem_off..oem_off + 4].try_into().unwrap_or([0; 4])
-    );
-    let oem_minor = u32::from_le_bytes(
-        seg[oem_off + 4..oem_off + 8].try_into().unwrap_or([0; 4])
-    );
-    let arb = u32::from_le_bytes(
-        seg[oem_off + 8..oem_off + 12].try_into().unwrap_or([0; 4])
-    );
+    let oem_major = u32::from_le_bytes(seg[oem_off..oem_off + 4].try_into().unwrap_or([0; 4]));
+    let oem_minor = u32::from_le_bytes(seg[oem_off + 4..oem_off + 8].try_into().unwrap_or([0; 4]));
+    let arb = u32::from_le_bytes(seg[oem_off + 8..oem_off + 12].try_into().unwrap_or([0; 4]));
 
     let fname = path
         .file_name()
@@ -268,12 +255,12 @@ pub fn extract_arb_from_xbl(xbl_path: &Path) -> ArbInfo {
         return extract_arb_from_xbl_config(xbl_path);
     }
     if let Some(parent) = xbl_path.parent()
-        && let Some(config) = find_xbl_config(parent) {
-            return extract_arb_from_xbl_config(&config);
-        }
+        && let Some(config) = find_xbl_config(parent)
+    {
+        return extract_arb_from_xbl_config(&config);
+    }
     ArbInfo::unknown("xbl_config.img not found next to xbl.img")
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -300,5 +287,4 @@ mod tests {
             .enforced()
         );
     }
-
 }

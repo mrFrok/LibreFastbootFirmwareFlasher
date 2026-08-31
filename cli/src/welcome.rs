@@ -7,7 +7,10 @@ pub fn print() {
     println!("  ███████╗██║     ██║     ██║     ");
     println!("  ╚══════╝╚═╝     ╚═╝     ╚═╝     ");
     println!();
-    println!("  LibreFastbootFirmwareFlasher  v{}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "  LibreFastbootFirmwareFlasher  v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("  Flash Android firmware via fastboot — free, open, no bloat.");
     println!();
     println!("  Quick start:");

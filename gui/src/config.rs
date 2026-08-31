@@ -12,12 +12,21 @@ pub struct Config {
     pub output_dir: Option<String>,
 }
 
-fn default_lang() -> String { "en".to_string() }
-fn default_theme() -> String { "dark".to_string() }
+fn default_lang() -> String {
+    "en".to_string()
+}
+fn default_theme() -> String {
+    "dark".to_string()
+}
 
 impl Default for Config {
     fn default() -> Self {
-        Self { scale: 1.0, lang: default_lang(), theme: default_theme(), output_dir: None }
+        Self {
+            scale: 1.0,
+            lang: default_lang(),
+            theme: default_theme(),
+            output_dir: None,
+        }
     }
 }
 
@@ -39,7 +48,9 @@ pub fn load_config() -> Config {
 }
 
 pub fn save_config(config: &Config) {
-    if let Some(d) = config_path().parent() { let _ = std::fs::create_dir_all(d); }
+    if let Some(d) = config_path().parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
     if let Ok(s) = serde_json::to_string_pretty(config) {
         let _ = std::fs::write(config_path(), s);
     }
@@ -52,7 +63,8 @@ pub fn save_scale(scale: f32) {
 }
 
 pub fn get_output_dir() -> PathBuf {
-    let dir = load_config().output_dir
+    let dir = load_config()
+        .output_dir
         .filter(|p| Path::new(p).is_absolute())
         .map(PathBuf::from)
         .unwrap_or_else(|| {

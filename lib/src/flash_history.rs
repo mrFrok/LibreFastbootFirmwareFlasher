@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlashHistoryEntry {
@@ -48,11 +48,14 @@ pub fn append_entry(entry: &FlashHistoryEntry) -> std::io::Result<()> {
 
 pub fn load_history() -> Vec<FlashHistoryEntry> {
     let path = history_path();
-    if !path.exists() { return Vec::new(); }
+    if !path.exists() {
+        return Vec::new();
+    }
     std::fs::read_to_string(&path)
         .ok()
         .map(|content| {
-            content.lines()
+            content
+                .lines()
                 .filter_map(|line| serde_json::from_str(line).ok())
                 .collect()
         })

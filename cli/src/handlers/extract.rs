@@ -13,7 +13,11 @@ pub fn run(
     list_only: bool,
 ) -> i32 {
     if !zip.exists() {
-        eprintln!("{} {}", "✗".red().bold(), format!("File not found: {}", zip.display()).red());
+        eprintln!(
+            "{} {}",
+            "✗".red().bold(),
+            format!("File not found: {}", zip.display()).red()
+        );
         return 1;
     }
 

@@ -4,15 +4,24 @@ use lfff_lib::device::{list_adb_devices, list_fastboot_devices, run_pre_flash_ch
 use crate::output::print_check_report;
 
 pub fn run(check: bool, serial: Option<&str>) -> i32 {
-    println!("\n{}", "── Connected devices ────────────────────────────────────".dimmed());
+    println!(
+        "\n{}",
+        "── Connected devices ────────────────────────────────────".dimmed()
+    );
 
     let fb_serials = list_fastboot_devices();
     let adb_serials = list_adb_devices();
 
     if fb_serials.is_empty() && adb_serials.is_empty() {
         println!("  {}", "No devices found via fastboot or adb.".yellow());
-        println!("  {}", "Make sure USB debugging or fastboot mode is enabled.".dimmed());
-        println!("{}\n", "────────────────────────────────────────────────────────".dimmed());
+        println!(
+            "  {}",
+            "Make sure USB debugging or fastboot mode is enabled.".dimmed()
+        );
+        println!(
+            "{}\n",
+            "────────────────────────────────────────────────────────".dimmed()
+        );
         return 1;
     }
 
@@ -22,7 +31,10 @@ pub fn run(check: bool, serial: Option<&str>) -> i32 {
     for s in &adb_serials {
         println!("  {} {}", "adb".blue().bold(), s);
     }
-    println!("{}\n", "────────────────────────────────────────────────────────".dimmed());
+    println!(
+        "{}\n",
+        "────────────────────────────────────────────────────────".dimmed()
+    );
 
     if check {
         println!("Running pre-flash checks …\n");

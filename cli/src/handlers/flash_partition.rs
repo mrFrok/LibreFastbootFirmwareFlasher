@@ -33,9 +33,18 @@ pub fn run(
                                 eprintln!(
                                     "{} {}",
                                     "✗".red().bold(),
-                                    format!("Partition '{}' not found in {}", part_name, dir.display()).red()
+                                    format!(
+                                        "Partition '{}' not found in {}",
+                                        part_name,
+                                        dir.display()
+                                    )
+                                    .red()
                                 );
-                                eprintln!("  {} {}", "Available:".dimmed(), format!("{:?}", available).dimmed());
+                                eprintln!(
+                                    "  {} {}",
+                                    "Available:".dimmed(),
+                                    format!("{:?}", available).dimmed()
+                                );
                                 return 1;
                             }
                         }
@@ -44,7 +53,11 @@ pub fn run(
                         eprintln!(
                             "{} {}",
                             "✗".red().bold(),
-                            format!("'{}' is not a .img file and --firmware-dir is not set.", img).red()
+                            format!(
+                                "'{}' is not a .img file and --firmware-dir is not set.",
+                                img
+                            )
+                            .red()
                         );
                         return 1;
                     }
