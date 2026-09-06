@@ -62,7 +62,9 @@ fn cli_extract_nonexistent_file() {
     let output = assert.get_output();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("not found") || stdout.contains("File not found") || output.status.code() != Some(0),
+        stdout.contains("not found")
+            || stdout.contains("File not found")
+            || output.status.code() != Some(0),
         "Expected error for nonexistent file"
     );
 }
@@ -74,7 +76,9 @@ fn cli_flash_nonexistent_directory() {
     let output = assert.get_output();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Not a directory") || stdout.contains("not found") || output.status.code() != Some(0),
+        stdout.contains("Not a directory")
+            || stdout.contains("not found")
+            || output.status.code() != Some(0),
         "Expected error for nonexistent directory"
     );
 }
@@ -102,7 +106,9 @@ fn cli_arb_no_args() {
     let output = assert.get_output();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Provide either") || stdout.contains("xbl_config") || output.status.code() != Some(0),
+        stdout.contains("Provide either")
+            || stdout.contains("xbl_config")
+            || output.status.code() != Some(0),
         "Expected error or usage hint"
     );
 }
@@ -122,11 +128,7 @@ fn cli_verbose_flag() {
     let assert = cmd.args(["--verbose", "deps", "--check"]).assert();
     let output = assert.get_output();
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !stderr.contains("panicked"),
-        "CLI panicked: {}",
-        stderr
-    );
+    assert!(!stderr.contains("panicked"), "CLI panicked: {}", stderr);
 }
 
 #[test]
@@ -134,7 +136,12 @@ fn cli_download_nonexistent_output() {
     let mut cmd = Command::cargo_bin("lfff").unwrap();
     // Will fail because URL is invalid, but should not panic. Smoke-test only.
     let _ = cmd
-        .args(["download", "https://invalid.example.com/firmware.zip", "-o", "/nonexistent/dir"])
+        .args([
+            "download",
+            "https://invalid.example.com/firmware.zip",
+            "-o",
+            "/nonexistent/dir",
+        ])
         .assert();
 }
 
@@ -192,4 +199,43 @@ fn cli_devices_help() {
     let output = assert.get_output();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("List connected devices"));
+}
+
+#[test]
+fn cli_completion_emits_script() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd.args(["completion", "bash"]).assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("_lfff"));
+}
+
+/// The script is piped straight into the shell, so stdout must carry nothing
+/// but the script itself — logging goes to stderr.
+#[test]
+fn cli_completion_stdout_is_only_the_script() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd
+        .args(["--verbose", "completion", "fish"])
+        .assert()
+        .success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("__fish_lfff"));
+    assert!(
+        !stdout.contains("DEBUG"),
+        "log output leaked into the completion script"
+    );
+}
+
+#[test]
+fn cli_completion_requires_a_shell() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    cmd.args(["completion"]).assert().failure();
+}
+
+#[test]
+fn cli_completion_rejects_unknown_shell() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    cmd.args(["completion", "tcsh"]).assert().failure();
 }

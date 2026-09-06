@@ -16,12 +16,6 @@ use std::process;
 fn main() {
     let cli = Cli::parse();
 
-    // Before handling cli.command, to prevent log in script
-    if let Some(Commands::Completion { shell }) = &cli.command {
-        let mut cmd = Cli::command();
-        handlers::complete::handle_completion(&mut cmd, shell.as_deref());
-    }
-
     let log_level = if cli.verbose { "debug" } else { "warn" };
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -29,6 +23,7 @@ fn main() {
                 .with_default_directive(log_level.parse().unwrap())
                 .from_env_lossy(),
         )
+        .with_writer(std::io::stderr)
         .without_time()
         .init();
 
@@ -37,7 +32,7 @@ fn main() {
             welcome::print();
             0
         }
-        Some(Commands::Completion { .. }) => unreachable!(),
+        Some(Commands::Completion { shell }) => handlers::complete::run(&mut Cli::command(), shell),
 
         Some(Commands::Deps { check, ref tools }) => handlers::deps::run(check, tools),
 
