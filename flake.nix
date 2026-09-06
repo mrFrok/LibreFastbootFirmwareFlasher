@@ -12,7 +12,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
         lib = pkgs.lib;
 
-        version = "2.7.1";
+        version = "2.7.2";
         isLinux = pkgs.stdenv.hostPlatform.isLinux;
         arch = if pkgs.stdenv.hostPlatform.isAarch64 then "aarch64" else "x86_64";
         os = if pkgs.stdenv.hostPlatform.isDarwin then "macos" else "linux";
