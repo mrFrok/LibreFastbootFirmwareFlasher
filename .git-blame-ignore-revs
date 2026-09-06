@@ -1,0 +1,8 @@
+# Revisions that only move code around, never change it. `git blame` skips
+# them so the reformat does not take authorship of every line in the tree.
+#
+# GitHub applies this file automatically. Locally, enable it once with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: apply cargo fmt to entire codebase (#11)
+27eb26dbfd75ecaa9c0ae656a3e2e51815c23430
