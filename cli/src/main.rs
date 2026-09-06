@@ -7,11 +7,11 @@ mod handlers;
 mod output;
 mod welcome;
 
-use std::process;
-
+use clap::CommandFactory;
 use clap::Parser;
 use cli::{Cli, Commands};
 use lfff_lib::flasher::FirmwareSource;
+use std::process;
 
 fn main() {
     let cli = Cli::parse();
@@ -23,6 +23,7 @@ fn main() {
                 .with_default_directive(log_level.parse().unwrap())
                 .from_env_lossy(),
         )
+        .with_writer(std::io::stderr)
         .without_time()
         .init();
 
@@ -31,6 +32,7 @@ fn main() {
             welcome::print();
             0
         }
+        Some(Commands::Completion { shell }) => handlers::complete::run(&mut Cli::command(), shell),
 
         Some(Commands::Deps { check, ref tools }) => handlers::deps::run(check, tools),
 

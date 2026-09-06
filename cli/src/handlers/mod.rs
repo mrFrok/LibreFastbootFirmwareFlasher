@@ -1,4 +1,5 @@
 pub mod arb;
+pub mod complete;
 pub mod deps;
 pub mod devices;
 pub mod download;

@@ -200,3 +200,42 @@ fn cli_devices_help() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("List connected devices"));
 }
+
+#[test]
+fn cli_completion_emits_script() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd.args(["completion", "bash"]).assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("_lfff"));
+}
+
+/// The script is piped straight into the shell, so stdout must carry nothing
+/// but the script itself — logging goes to stderr.
+#[test]
+fn cli_completion_stdout_is_only_the_script() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    let assert = cmd
+        .args(["--verbose", "completion", "fish"])
+        .assert()
+        .success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("__fish_lfff"));
+    assert!(
+        !stdout.contains("DEBUG"),
+        "log output leaked into the completion script"
+    );
+}
+
+#[test]
+fn cli_completion_requires_a_shell() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    cmd.args(["completion"]).assert().failure();
+}
+
+#[test]
+fn cli_completion_rejects_unknown_shell() {
+    let mut cmd = Command::cargo_bin("lfff").unwrap();
+    cmd.args(["completion", "tcsh"]).assert().failure();
+}

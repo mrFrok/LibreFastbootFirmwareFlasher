@@ -17,6 +17,8 @@ lfff-lib = { path = "../lib" }
   colored = "3"
   indicatif = "0.18"
   zip = { version = "8", default-features = false, features = ["deflate"] }
+clap_complete = "4.6.9"
+clap_complete_nushell = "4.6.2"
 
 [dev-dependencies]
 assert_cmd = "2"

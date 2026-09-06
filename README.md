@@ -110,8 +110,18 @@ export LFFF_PAYLOAD_DUMPER=/path/to/payload_dumper
 | `devices` | List fastboot/adb devices | `lfff devices --check` |
 | `arb` | Compare ARB: firmware vs device | `lfff arb --firmware-dir ./fw` |
 | `deps [tool..]` | Install missing dependencies | `lfff deps` / `lfff deps --check` |
+| `completion <shell>` | Emit a shell completion script | `lfff completion zsh` |
 
 Full flag reference: `lfff <command> --help`.
+
+**Shell completions** — the script goes to stdout, so install it wherever your
+shell looks for one. Supported: bash, zsh, fish, powershell, elvish, nushell.
+
+```bash
+lfff completion bash > ~/.local/share/bash-completion/completions/lfff
+lfff completion zsh  > ~/.zfunc/_lfff            # with ~/.zfunc on $fpath
+lfff completion fish > ~/.config/fish/completions/lfff.fish
+```
 
 **Flash flow:**
 
