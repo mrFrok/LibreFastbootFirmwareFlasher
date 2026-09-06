@@ -54,7 +54,9 @@ fn main() {
             list,
         ),
 
-        Some(Commands::Devices { check, ref serial }) => handlers::devices::run(check, serial.as_deref()),
+        Some(Commands::Devices { check, ref serial }) => {
+            handlers::devices::run(check, serial.as_deref())
+        }
 
         Some(Commands::Arb {
             ref xbl,

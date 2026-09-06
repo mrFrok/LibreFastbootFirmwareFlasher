@@ -185,15 +185,25 @@ fn detect_pkg_manager() -> Option<String> {
     }
 
     for pm in &[
-        "pacman", "apt", "apt-get", "dnf", "zypper", "emerge",
-        "xbps-install", "apk", "brew",
+        "pacman",
+        "apt",
+        "apt-get",
+        "dnf",
+        "zypper",
+        "emerge",
+        "xbps-install",
+        "apk",
+        "brew",
     ] {
         if which::which(pm).is_ok() {
-            return Some(match *pm {
-                "apt-get" => "apt",
-                "xbps-install" => "xbps",
-                other => other,
-            }.to_string());
+            return Some(
+                match *pm {
+                    "apt-get" => "apt",
+                    "xbps-install" => "xbps",
+                    other => other,
+                }
+                .to_string(),
+            );
         }
     }
 
@@ -675,7 +685,7 @@ fn install_via_pkg_manager(tools: &[&str], pm: &str, on_log: &dyn Fn(String)) ->
     }
 
     let mut cmd = install_cmd(pm);
-    
+
     // nix profile requires full attribute path: nixpkgs#package-name
     let final_packages: Vec<String>;
     let pkg_refs: Vec<&str> = if pm == "nix-profile" {
@@ -684,7 +694,7 @@ fn install_via_pkg_manager(tools: &[&str], pm: &str, on_log: &dyn Fn(String)) ->
     } else {
         packages
     };
-    
+
     cmd.extend(pkg_refs.iter());
 
     let sc = sudo_cmd();
@@ -915,7 +925,10 @@ pub fn install_dependencies(
     }
 
     // Reboot notice for rpm-ostree layering
-    let needs_reboot = report.results.iter().any(|r| r.error.contains("rpm-ostree"));
+    let needs_reboot = report
+        .results
+        .iter()
+        .any(|r| r.error.contains("rpm-ostree"));
     if needs_reboot {
         on_log("  ⚠  Packages layered via rpm-ostree.".into());
         on_log("     Reboot to make them available in PATH.".into());

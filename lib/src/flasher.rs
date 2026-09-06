@@ -122,8 +122,11 @@ pub fn is_mediatek_build(images: &HashMap<String, PathBuf>) -> bool {
     }
     // Qualcomm always has xbl or xbl_config; MediaTek doesn't
     let has_xbl = images.keys().any(|k| {
-        k.eq_ignore_ascii_case("xbl") || k.eq_ignore_ascii_case("xbl.img")
-            || k.as_bytes().windows(10).any(|w| w.eq_ignore_ascii_case(b"xbl_config"))
+        k.eq_ignore_ascii_case("xbl")
+            || k.eq_ignore_ascii_case("xbl.img")
+            || k.as_bytes()
+                .windows(10)
+                .any(|w| w.eq_ignore_ascii_case(b"xbl_config"))
     });
     !has_xbl
 }
@@ -271,9 +274,10 @@ pub fn detect_mode(serial: Option<&str>) -> DeviceMode {
                 continue;
             }
             if let Some(s) = serial
-                && parts[0] != s {
-                    continue;
-                }
+                && parts[0] != s
+            {
+                continue;
+            }
             if parts[1] == "fastbootd" {
                 return DeviceMode::Fastbootd;
             }
@@ -287,10 +291,12 @@ pub fn detect_mode(serial: Option<&str>) -> DeviceMode {
     if rc == 0 {
         for line in out.lines().skip(1) {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 && parts[1] == "device"
-                && (serial.is_none() || Some(parts[0]) == serial) {
-                    return DeviceMode::System;
-                }
+            if parts.len() >= 2
+                && parts[1] == "device"
+                && (serial.is_none() || Some(parts[0]) == serial)
+            {
+                return DeviceMode::System;
+            }
         }
     }
 
@@ -367,9 +373,10 @@ fn parse_fastboot_getvar(output: &str, key: &str) -> Option<String> {
     for line in output.lines() {
         let line = line.trim().trim_start_matches("(bootloader)").trim();
         if let Some((k, v)) = line.split_once(':')
-            && k.trim() == key {
-                return Some(v.trim().to_string());
-            }
+            && k.trim() == key
+        {
+            return Some(v.trim().to_string());
+        }
     }
     None
 }
@@ -489,7 +496,10 @@ pub fn wait_for_fastbootd_status(serial: Option<&str>, timeout: u64) -> Fastboot
         }
         if last_log.elapsed().as_secs() >= 5 {
             let remaining = (deadline - Instant::now()).as_secs();
-            info!("Waiting for fastbootd/userspace fastboot ... ({}s left)", remaining);
+            info!(
+                "Waiting for fastbootd/userspace fastboot ... ({}s left)",
+                remaining
+            );
             last_log = Instant::now();
         }
         thread::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS));
@@ -503,7 +513,12 @@ fn wait_for_fastboot(serial: Option<&str>, timeout: u64) -> bool {
 
 /// Poll until a device appears in either bootloader or fastbootd mode.
 pub fn wait_for_any_fastboot(serial: Option<&str>, timeout: u64) -> bool {
-    wait_for_mode(serial, timeout, &|m| m == "fastboot" || m == "fastbootd", "fastboot/fastbootd")
+    wait_for_mode(
+        serial,
+        timeout,
+        &|m| m == "fastboot" || m == "fastbootd",
+        "fastboot/fastbootd",
+    )
 }
 
 /// Wait until the device disappears from `fastboot devices` (i.e. it actually
@@ -596,7 +611,9 @@ fn flash_partition_inner(
     // Scale the timeout with the image size so a large image on a slow (but
     // passing) cable is never killed mid-write — killing fastboot mid-flash
     // corrupts the partition being written.
-    let size_mb = fs::metadata(image_path).map(|m| m.len() / (1024 * 1024)).unwrap_or(0);
+    let size_mb = fs::metadata(image_path)
+        .map(|m| m.len() / (1024 * 1024))
+        .unwrap_or(0);
     let timeout_secs = FLASH_BASE_TIMEOUT_SECS + size_mb / FLASH_MIN_SPEED_MB_S;
 
     let mut args: Vec<String> = Vec::new();
@@ -664,7 +681,10 @@ pub fn wipe_super_with_log(serial: Option<&str>, super_names: &[String], on_log:
         base_args.push(s.into());
     }
 
-    on_log(format!("Preparing {} super partition(s) ...", super_names.len()));
+    on_log(format!(
+        "Preparing {} super partition(s) ...",
+        super_names.len()
+    ));
     let base_len = base_args.len();
 
     for base in super_names {
@@ -762,7 +782,9 @@ pub fn collect_images(firmware_dir: &Path) -> HashMap<String, PathBuf> {
 pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
     fn is_ignored_file(name: &str) -> bool {
         let lower = name.to_lowercase();
-        if lower == "vendor_ramdump.img" { return false; }
+        if lower == "vendor_ramdump.img" {
+            return false;
+        }
         lower.ends_with("-debug.img")
             || lower.ends_with("-test-harness.img")
             || lower.contains("-test")
@@ -794,7 +816,11 @@ pub fn collect_images_from_source(dir: &Path) -> HashMap<String, PathBuf> {
     entries.sort();
 
     for img in entries {
-        let mut stem = img.file_stem().unwrap_or_default().to_string_lossy().to_lowercase();
+        let mut stem = img
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
         for suffix in &["_a", "_b"] {
             if stem.ends_with(suffix) {
                 stem = stem[..stem.len() - suffix.len()].to_string();
@@ -857,7 +883,10 @@ pub fn run_flash_single(
         Some(s) => s.to_vec(),
         None if is_super && !dry_run => match get_active_slot(serial) {
             Some(s) => {
-                on_log(format!("  Dynamic partition — flashing active slot '{}' only", s));
+                on_log(format!(
+                    "  Dynamic partition — flashing active slot '{}' only",
+                    s
+                ));
                 vec![s]
             }
             None => {
@@ -865,7 +894,9 @@ pub fn run_flash_single(
                     "✗ Could not detect the active slot — refusing to flash dynamic partition '{}'.",
                     part_name
                 ));
-                on_log("  Check that the device is in fastbootd, or pass --slot explicitly.".into());
+                on_log(
+                    "  Check that the device is in fastbootd, or pass --slot explicitly.".into(),
+                );
                 return session;
             }
         },
@@ -877,7 +908,10 @@ pub fn run_flash_single(
         .map(|m| m.len() as f64 / 1024.0 / 1024.0)
         .unwrap_or(0.0);
 
-    on_log(format!("\n── Flash single partition: {} ──────────────────", part_name));
+    on_log(format!(
+        "\n── Flash single partition: {} ──────────────────",
+        part_name
+    ));
     on_log(format!(
         "  Image     : {}  ({:.1} MB)",
         image_path.file_name().unwrap_or_default().to_string_lossy(),
@@ -978,7 +1012,10 @@ fn flash_partition_with_log(
         None => flash_partition(image_path, partition, slot, serial),
     };
     if result.success {
-        on_log(format!("{}_{} OK ({:.1}s)", partition, slot, result.duration_s));
+        on_log(format!(
+            "{}_{} OK ({:.1}s)",
+            partition, slot, result.duration_s
+        ));
     } else {
         on_log(format!("{}_{} FAILED", partition, slot));
     }
@@ -1058,7 +1095,10 @@ fn flash_batch_with_log(
                     break;
                 }
                 FailureAction::Abort => {
-                    on_log(format!("Flash aborted due to {}_{} failure", partition, slot));
+                    on_log(format!(
+                        "Flash aborted due to {}_{} failure",
+                        partition, slot
+                    ));
                     return BatchOutcome::Aborted;
                 }
             }
@@ -1094,7 +1134,10 @@ pub fn run_flash_session_with_log(
 
     if images.is_empty() {
         if source.is_source() {
-            on_log(format!("No flashable .img files found in source build directory: {}", firmware_dir.display()));
+            on_log(format!(
+                "No flashable .img files found in source build directory: {}",
+                firmware_dir.display()
+            ));
         } else {
             on_log(format!("No .img files found in {}", firmware_dir.display()));
         }
@@ -1110,16 +1153,30 @@ pub fn run_flash_session_with_log(
         .filter(|s| !s.is_empty())
         .collect();
     if !skip_list.is_empty() {
-        on_log(format!("User-specified partitions to skip: {}", skip_list.join(", ")));
+        on_log(format!(
+            "User-specified partitions to skip: {}",
+            skip_list.join(", ")
+        ));
     }
 
     // Filter skipped partitions
-    let filtered: HashMap<String, PathBuf> = images.into_iter().filter(|(name, _)| {
-        if skip_xbl_abl && is_xbl_abl(name) { on_log(format!("Skipping {} (xbl/abl excluded)", name)); false }
-        else if skip_preloader && is_preloader(name) { on_log(format!("Skipping {} (preloader excluded)", name)); false }
-        else if skip_list.contains(&name.to_lowercase()) { on_log(format!("Skipping {} (user excluded)", name)); false }
-        else { true }
-    }).collect();
+    let filtered: HashMap<String, PathBuf> = images
+        .into_iter()
+        .filter(|(name, _)| {
+            if skip_xbl_abl && is_xbl_abl(name) {
+                on_log(format!("Skipping {} (xbl/abl excluded)", name));
+                false
+            } else if skip_preloader && is_preloader(name) {
+                on_log(format!("Skipping {} (preloader excluded)", name));
+                false
+            } else if skip_list.contains(&name.to_lowercase()) {
+                on_log(format!("Skipping {} (user excluded)", name));
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
 
     if filtered.is_empty() {
         on_log("No images to flash after filtering — aborting".into());
@@ -1166,13 +1223,20 @@ pub fn run_flash_session_with_log(
         let mut sorted: Vec<&&str> = fastbootd_images.keys().collect();
         sorted.sort();
         for name in sorted {
-            let mode = if is_super_partition(name) { "fastbootd, active slot" } else { "fastbootd, both slots" };
+            let mode = if is_super_partition(name) {
+                "fastbootd, active slot"
+            } else {
+                "fastbootd, both slots"
+            };
             on_log(format!("[dry-run] would flash: {} ({})", name, mode));
         }
         let mut sorted_bl: Vec<&&str> = bootloader_images.keys().collect();
         sorted_bl.sort();
         for name in sorted_bl {
-            on_log(format!("[dry-run] would flash: {} (bootloader, both slots)", name));
+            on_log(format!(
+                "[dry-run] would flash: {} (bootloader, both slots)",
+                name
+            ));
         }
         on_log("[dry-run] No partitions were flashed".into());
         session.end_reason = Some("DryRun".into());
@@ -1196,7 +1260,10 @@ pub fn run_flash_session_with_log(
         let active_slot = match get_active_slot(serial) {
             Some(s) => s,
             None => {
-                on_log("Could not detect the active slot (fastboot getvar current-slot failed).".into());
+                on_log(
+                    "Could not detect the active slot (fastboot getvar current-slot failed)."
+                        .into(),
+                );
                 on_log("Refusing to flash: dynamic partitions written to the wrong slot make the device unbootable. Check that the device is in fastbootd and try again.".into());
                 session.aborted = true;
                 session.end_reason = Some("SlotDetectFailed".into());
@@ -1222,7 +1289,8 @@ pub fn run_flash_session_with_log(
 
         on_log(format!(
             "Stage 1/2: fastbootd — {} non-super × 2 slots, {} super × 1 slot",
-            non_super_imgs.len(), super_imgs.len()
+            non_super_imgs.len(),
+            super_imgs.len()
         ));
 
         // Non-super → both slots
@@ -1231,8 +1299,16 @@ pub fn run_flash_session_with_log(
 
         for slot in SLOTS {
             match flash_batch_with_log(
-                &sorted_non_super, slot, serial, total_ops, &mut done_ops,
-                &cancel, &mut session, on_log, on_progress, on_failure,
+                &sorted_non_super,
+                slot,
+                serial,
+                total_ops,
+                &mut done_ops,
+                &cancel,
+                &mut session,
+                on_log,
+                on_progress,
+                on_failure,
             ) {
                 BatchOutcome::Done => {}
                 BatchOutcome::Cancelled => {
@@ -1258,8 +1334,16 @@ pub fn run_flash_session_with_log(
             sorted_super.sort_by_key(|(k, _)| *k);
 
             match flash_batch_with_log(
-                &sorted_super, &active_slot, serial, total_ops, &mut done_ops,
-                &cancel, &mut session, on_log, on_progress, on_failure,
+                &sorted_super,
+                &active_slot,
+                serial,
+                total_ops,
+                &mut done_ops,
+                &cancel,
+                &mut session,
+                on_log,
+                on_progress,
+                on_failure,
             ) {
                 BatchOutcome::Done => {}
                 BatchOutcome::Cancelled => {
@@ -1276,7 +1360,11 @@ pub fn run_flash_session_with_log(
         }
 
         let elapsed = flash_start.elapsed().as_secs();
-        on_log(format!("fastbootd stage complete in {}m{:02}s", elapsed / 60, elapsed % 60));
+        on_log(format!(
+            "fastbootd stage complete in {}m{:02}s",
+            elapsed / 60,
+            elapsed % 60
+        ));
     }
 
     // -- Stage 2: bootloader (Snapdragon only) --
@@ -1302,14 +1390,25 @@ pub fn run_flash_session_with_log(
         let total_ops2 = bootloader_images.len() * 2;
         let mut done_ops2 = 0usize;
         let flash_start2 = std::time::Instant::now();
-        on_log(format!("Stage 2/2: bootloader — {} partitions × 2 slots", bootloader_images.len()));
+        on_log(format!(
+            "Stage 2/2: bootloader — {} partitions × 2 slots",
+            bootloader_images.len()
+        ));
 
         let mut sorted_bl: Vec<(&str, &PathBuf)> = bootloader_images.into_iter().collect();
         sorted_bl.sort_by_key(|(k, _)| *k);
         for slot in SLOTS {
             match flash_batch_with_log(
-                &sorted_bl, slot, serial, total_ops2, &mut done_ops2,
-                &cancel, &mut session, on_log, on_progress, on_failure,
+                &sorted_bl,
+                slot,
+                serial,
+                total_ops2,
+                &mut done_ops2,
+                &cancel,
+                &mut session,
+                on_log,
+                on_progress,
+                on_failure,
             ) {
                 BatchOutcome::Done => {}
                 BatchOutcome::Cancelled => {
@@ -1326,7 +1425,11 @@ pub fn run_flash_session_with_log(
         }
 
         let elapsed2 = flash_start2.elapsed().as_secs();
-        on_log(format!("Stage 2 complete in {}m{:02}s", elapsed2 / 60, elapsed2 % 60));
+        on_log(format!(
+            "Stage 2 complete in {}m{:02}s",
+            elapsed2 / 60,
+            elapsed2 % 60
+        ));
     }
 
     session.end_reason = Some("Completed".into());

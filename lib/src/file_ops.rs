@@ -12,7 +12,10 @@ pub fn is_safe_path(path: &Path) -> bool {
             Component::ParentDir => {
                 return false;
             }
-            Component::Prefix(_) | Component::RootDir | Component::Normal(_) | Component::CurDir => {}
+            Component::Prefix(_)
+            | Component::RootDir
+            | Component::Normal(_)
+            | Component::CurDir => {}
         }
     }
     true

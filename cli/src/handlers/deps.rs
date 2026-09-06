@@ -9,7 +9,12 @@ pub fn run(check: bool, tools: &[String]) -> i32 {
         println!("{}", "✓ All dependencies are ready".green().bold());
         0
     } else {
-        eprintln!("{}", "✗ Some dependencies are missing — see report above".red().bold());
+        eprintln!(
+            "{}",
+            "✗ Some dependencies are missing — see report above"
+                .red()
+                .bold()
+        );
         1
     }
 }

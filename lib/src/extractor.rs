@@ -13,8 +13,8 @@ use anyhow::{Context, Result};
 use tracing::{debug, info};
 
 use crate::arb::{ArbInfo, extract_arb_from_xbl, find_xbl_config};
-use crate::utils::verify_sha256;
 use crate::file_ops::safe_move;
+use crate::utils::verify_sha256;
 
 // ---------------------------------------------------------------------------
 // Partition grouping (OnePlus / Qualcomm)
@@ -125,12 +125,15 @@ fn move_into_groups(images: &[PathBuf], base: &Path) -> Result<HashMap<String, V
         let group = resolve_group(&stem);
         let dest_dir = base.join(group);
         fs::create_dir_all(&dest_dir)?;
-        let file_name = img.file_name().ok_or_else(|| anyhow::anyhow!("Image path has no filename: {}", img.display()))?;
+        let file_name = img
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Image path has no filename: {}", img.display()))?;
         let dest = dest_dir.join(file_name);
         if img.canonicalize().ok() != dest.canonicalize().ok() {
             // Use safe_move which prevents symlink attacks
-            safe_move(img, &dest)
-                .with_context(|| format!("Failed to move {} to {}", img.display(), dest.display()))?;
+            safe_move(img, &dest).with_context(|| {
+                format!("Failed to move {} to {}", img.display(), dest.display())
+            })?;
         }
         groups.entry(group.to_string()).or_default().push(dest);
     }
@@ -160,10 +163,14 @@ fn run_payload_dumper(
                 p.display(),
                 crate::deps::PDG_ENV_OVERRIDE
             ),
-            None => "No payload dumper found in $PATH. Install: cargo install payload_dumper".into(),
+            None => {
+                "No payload dumper found in $PATH. Install: cargo install payload_dumper".into()
+            }
         };
         tracing::error!("{}", hint);
-        if let Some(cb) = on_log { cb(format!("ERROR: {}", hint)); }
+        if let Some(cb) = on_log {
+            cb(format!("ERROR: {}", hint));
+        }
         return false;
     };
     let tool_name = tool
@@ -181,9 +188,10 @@ fn run_payload_dumper(
     let mut cmd = Command::new(&tool);
     cmd.arg("-o").arg(output);
     if let Some(parts) = partitions
-        && !parts.is_empty() {
-            cmd.arg(images_flag).arg(parts.join(","));
-        }
+        && !parts.is_empty()
+    {
+        cmd.arg(images_flag).arg(parts.join(","));
+    }
     cmd.arg(input);
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     debug!("Running: {:?}", cmd);
@@ -191,12 +199,16 @@ fn run_payload_dumper(
     let child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            if let Some(cb) = on_log { cb(format!("ERROR: failed to start {}: {}", tool.display(), e)); }
+            if let Some(cb) = on_log {
+                cb(format!("ERROR: failed to start {}: {}", tool.display(), e));
+            }
             return false;
         }
     };
 
-    if let Some(cb) = on_log { cb(format!("Running {}...", tool_name)); }
+    if let Some(cb) = on_log {
+        cb(format!("Running {}...", tool_name));
+    }
     let output_result = child.wait_with_output();
 
     fn strip_ansi(s: &str) -> String {
@@ -207,7 +219,9 @@ fn run_payload_dumper(
                 if chars.peek() == Some(&'[') {
                     chars.next();
                     for c in chars.by_ref() {
-                        if c.is_ascii_alphabetic() { break; }
+                        if c.is_ascii_alphabetic() {
+                            break;
+                        }
                     }
                 }
             } else {
@@ -218,10 +232,16 @@ fn run_payload_dumper(
     }
 
     fn is_noise(s: &str) -> bool {
-        if s.contains("[00:") { return true; }
-        if s.contains("\x1b") { return true; }
-        if s == "[" || s == "]" { return true; }
-        
+        if s.contains("[00:") {
+            return true;
+        }
+        if s.contains("\x1b") {
+            return true;
+        }
+        if s == "[" || s == "]" {
+            return true;
+        }
+
         (s.starts_with('*') || s.starts_with('-') || s.starts_with('\\') || s.starts_with('/'))
             && s.contains("Extracting partitions")
     }
@@ -236,27 +256,37 @@ fn run_payload_dumper(
                 let text = String::from_utf8_lossy(bytes);
                 for line in text.lines() {
                     let t = strip_ansi(line.trim());
-                    if !t.is_empty() && !is_noise(&t)
-                        && let Some(cb) = on_log { cb(t); shown += 1; }
+                    if !t.is_empty()
+                        && !is_noise(&t)
+                        && let Some(cb) = on_log
+                    {
+                        cb(t);
+                        shown += 1;
+                    }
                 }
             }
             if shown == 0 {
                 // payload_dumper wrote nothing useful — show a summary anyway
                 if let Some(cb) = on_log {
-                    cb(format!("{} finished (stdout: {} B, stderr: {} B, exit: {})",
-                        tool_name, stdout_bytes, stderr_bytes,
-                        if out.status.success() { "OK" } else { "FAIL" }));
+                    cb(format!(
+                        "{} finished (stdout: {} B, stderr: {} B, exit: {})",
+                        tool_name,
+                        stdout_bytes,
+                        stderr_bytes,
+                        if out.status.success() { "OK" } else { "FAIL" }
+                    ));
                 }
             }
             out.status.success()
         }
         Err(e) => {
-            if let Some(cb) = on_log { cb(format!("ERROR: {}", e)); }
+            if let Some(cb) = on_log {
+                cb(format!("ERROR: {}", e));
+            }
             false
         }
     }
 }
-
 
 /// Check if payload_dumper (Rust version) is available.
 /// It supports ZIP input directly, so we can skip payload.bin extraction.
@@ -459,7 +489,10 @@ pub fn extract_firmware_with_log(
                 Ok(d) => d,
                 Err(e) => {
                     tracing::error!("Cannot create temp dir: {}", e);
-                    return ExtractionResult::fail(output_dir, &format!("Cannot create temp dir: {}", e));
+                    return ExtractionResult::fail(
+                        output_dir,
+                        &format!("Cannot create temp dir: {}", e),
+                    );
                 }
             };
             let payload_tmp = tmp.path().join("payload.bin");
@@ -537,7 +570,9 @@ pub fn extract_firmware_with_log(
         fs::create_dir_all(&staging).ok();
         let f = match fs::File::open(&zip_path) {
             Ok(f) => f,
-            Err(e) => return ExtractionResult::fail(output_dir, &format!("Cannot open zip: {}", e)),
+            Err(e) => {
+                return ExtractionResult::fail(output_dir, &format!("Cannot open zip: {}", e));
+            }
         };
         let mut z = match zip::ZipArchive::new(f) {
             Ok(z) => z,

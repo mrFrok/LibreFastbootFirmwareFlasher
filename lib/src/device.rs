@@ -377,7 +377,8 @@ pub fn run_pre_flash_checks(serial: Option<&str>) -> PreFlashCheck {
             c.device_found = true;
             c.errors.push(
                 "Device found via ADB, but flashing requires fastboot/fastbootd mode. \
-                 Please reboot to bootloader (Vol Down + Power).".into(),
+                 Please reboot to bootloader (Vol Down + Power)."
+                    .into(),
             );
             return c;
         }

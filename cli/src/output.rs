@@ -294,7 +294,11 @@ fn offer_wipe(session: &FlashSession) {
     } else {
         println!(
             "  ✗ Wipe failed: {}",
-            if r.stderr.is_empty() { &r.stdout } else { &r.stderr }
+            if r.stderr.is_empty() {
+                &r.stdout
+            } else {
+                &r.stderr
+            }
         );
     }
     println!("────────────────────────────────────────────────────────\n");

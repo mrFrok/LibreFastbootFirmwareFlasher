@@ -92,14 +92,14 @@ fn extract_real_url(url: &str) -> String {
             .host_str()
             .map(|h| h.contains("4pda.to"))
             .unwrap_or(false)
-        {
-            for (k, v) in parsed.query_pairs() {
-                if k == "u" {
-                    info!("Unwrapped 4PDA redirect -> {}", v);
-                    return v.to_string();
-                }
+    {
+        for (k, v) in parsed.query_pairs() {
+            if k == "u" {
+                info!("Unwrapped 4PDA redirect -> {}", v);
+                return v.to_string();
             }
         }
+    }
     url.to_string()
 }
 
@@ -132,7 +132,10 @@ fn resolve_cdn(url: &str) -> Option<String> {
             return Some(cdn);
         }
     }
-    info!("No redirect found, using URL directly: {}", &url[..url.len().min(100)]);
+    info!(
+        "No redirect found, using URL directly: {}",
+        &url[..url.len().min(100)]
+    );
     Some(url.to_string())
 }
 
@@ -147,21 +150,22 @@ fn parse_link_expiry(cdn_url: &str) -> (u64, String) {
     if let Ok(parsed) = url::Url::parse(cdn_url) {
         let params: std::collections::HashMap<_, _> = parsed.query_pairs().collect();
         if let Some(ts_str) = params.get("e")
-            && let Ok(ts) = ts_str.parse::<u64>() {
-                if ts > now {
-                    let diff = ts - now;
-                    let h = diff / 3600;
-                    let m = (diff % 3600) / 60;
-                    let label = if h > 0 {
-                        format!("{}h {}m", h, m)
-                    } else {
-                        format!("{}m", m)
-                    };
-                    return (ts, label);
+            && let Ok(ts) = ts_str.parse::<u64>()
+        {
+            if ts > now {
+                let diff = ts - now;
+                let h = diff / 3600;
+                let m = (diff % 3600) / 60;
+                let label = if h > 0 {
+                    format!("{}h {}m", h, m)
                 } else {
-                    return (ts, "EXPIRED".into());
-                }
+                    format!("{}m", m)
+                };
+                return (ts, label);
+            } else {
+                return (ts, "EXPIRED".into());
             }
+        }
     }
     (0, String::new())
 }
@@ -175,14 +179,20 @@ fn parse_link_expiry(cdn_url: &str) -> (u64, String) {
 /// (note: no leading `[`, GID starts with `#`, DL value has no `/s`)
 fn parse_aria2c_progress(line: &str, expires_ts: u64) -> Option<DownloadProgress> {
     // Must look like a progress line: contains GID marker and percentage
-    if !line.contains('%') { return None; }
+    if !line.contains('%') {
+        return None;
+    }
 
     // Percentage — e.g. "(2%)"
     let percent = if let Some(start) = line.find('(') {
         if let Some(end) = line[start..].find('%') {
             line[start + 1..start + end].parse::<f32>().ok()
-        } else { None }
-    } else { None };
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     // DL speed — e.g. "DL:28MiB" or "DL:28MiB/s"
     let speed = if let Some(pos) = line.find("DL:") {
@@ -197,8 +207,11 @@ fn parse_aria2c_progress(line: &str, expires_ts: u64) -> Option<DownloadProgress
     // ETA — e.g. "ETA:4m37s]" or "ETA:22s"
     let eta = if let Some(pos) = line.find("ETA:") {
         let rest = &line[pos + 4..];
-        rest.split_whitespace().next().unwrap_or("")
-            .trim_end_matches(']').to_string()
+        rest.split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim_end_matches(']')
+            .to_string()
     } else {
         String::new()
     };
@@ -263,7 +276,9 @@ fn parse_sizes(line: &str) -> (String, String) {
 pub struct CancelToken(std::sync::Arc<std::sync::atomic::AtomicBool>);
 
 impl CancelToken {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
     /// Signal the download to stop.
     pub fn cancel(&self) {
         self.0.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -364,14 +379,16 @@ where
                             let trimmed = buf.trim().to_string();
                             if !trimmed.is_empty() {
                                 let p = if trimmed.contains("DL:")
-                                    || (trimmed.contains('%') && (trimmed.starts_with('#') || trimmed.starts_with("[#")))
+                                    || (trimmed.contains('%')
+                                        && (trimmed.starts_with('#') || trimmed.starts_with("[#")))
                                 {
-                                    parse_aria2c_progress(&trimmed, expires_ts)
-                                        .unwrap_or_else(|| DownloadProgress {
+                                    parse_aria2c_progress(&trimmed, expires_ts).unwrap_or_else(
+                                        || DownloadProgress {
                                             link_expires_ts: expires_ts,
                                             raw_line: trimmed.clone(),
                                             ..Default::default()
-                                        })
+                                        },
+                                    )
                                 } else {
                                     DownloadProgress {
                                         link_expires_ts: expires_ts,
@@ -480,9 +497,9 @@ fn build_aria2c_cmd(cdn_url: &str, output_dir: Option<&Path>, connections: u32) 
         .arg("-k")
         .arg("1M")
         .arg("--file-allocation=none")
-        .arg("--summary-interval=1")        // summary line every second to stderr
+        .arg("--summary-interval=1") // summary line every second to stderr
         .arg("--human-readable=true")
-        .arg("--console-log-level=notice")  // print [NOTICE] lines to stderr
+        .arg("--console-log-level=notice") // print [NOTICE] lines to stderr
         .arg("--show-console-readout=true") // force progress lines even when not a TTY
         .arg("--download-result=default");
 
@@ -558,7 +575,11 @@ mod tests {
         let url = format!("https://cdn.example.com/fw.zip?e={}&sig=abc", future_ts);
         let (ts, label) = parse_link_expiry(&url);
         assert_eq!(ts, future_ts);
-        assert!(label.contains('h'), "expected hours in label, got: {}", label);
+        assert!(
+            label.contains('h'),
+            "expected hours in label, got: {}",
+            label
+        );
     }
 
     #[test]
