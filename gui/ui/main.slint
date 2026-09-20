@@ -91,16 +91,18 @@ export component MainWindow inherits MaterialWindow {
     // and the rest stay on the background they are heading for: there is no new
     // accent to announce, and tinting them would make the switch shout.
     //
-    // Translucent so the sweep reads as tinted glass rather than a slab.
+    // Translucent so the sweep reads as tinted glass rather than a slab. At 0.6
+    // the swap underneath is faintly visible, which is the trade for seeing the
+    // interface through the wash.
     private property <color>  reveal-color:
           root.pending-kind == 4
             ? (root.is-dark ? LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).dark.primaryContainer
                             : LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).light.primaryContainer)
-              .with-alpha(0.85)
+              .with-alpha(0.6)
         : root.pending-kind == 2
             ? (root.pending-dark ? LfffScheme.schemes.dark.background
-                                 : LfffScheme.schemes.light.background).with-alpha(0.85)
-        : MaterialPalette.background.with-alpha(0.85);
+                                 : LfffScheme.schemes.light.background).with-alpha(0.6)
+        : MaterialPalette.background.with-alpha(0.6);
     animate reveal-p { duration: 420ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
 
     pure function as-scheme(i: int) -> AppScheme {
