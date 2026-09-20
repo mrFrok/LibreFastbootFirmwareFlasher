@@ -1,4 +1,52 @@
-import { MaterialPalette, SegmentedButton, IconButton } from "@material";
+import { MaterialPalette, IconButton } from "@material";
+
+// A segmented control in the library's visual language at desktop density.
+//
+// @material's SegmentedButton is fixed at a 40px minimum height with 24px of
+// padding per segment — a touch target. In a 48px utility bar that reads as
+// the loudest thing on screen, so this keeps the shape, the colours and the
+// hairline dividers, and drops the size to 28px.
+component CompactSegmented inherits Rectangle {
+    in property <[string]> labels;
+    in property <int> current-index;
+    in property <length> segment-width: 30px;
+    callback selected(int);
+
+    height: 28px;
+    width: root.segment-width * root.labels.length;
+    border-width: 1px;
+    border-radius: self.height / 2;
+    border-color: MaterialPalette.outline-variant;
+    clip: true;
+
+    HorizontalLayout {
+        for label[i] in root.labels: Rectangle {
+            background: i == root.current-index
+                ? MaterialPalette.secondary-container
+                : (touch.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent);
+            animate background { duration: 120ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+
+            if i > 0: Rectangle {
+                x: 0; width: 1px; height: 100%;
+                background: MaterialPalette.outline-variant;
+            }
+
+            Text {
+                text: label;
+                font-size: 11px; font-weight: 600;
+                color: i == root.current-index
+                    ? MaterialPalette.on-secondary-container
+                    : MaterialPalette.on-surface-variant;
+                horizontal-alignment: center; vertical-alignment: center;
+            }
+
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.selected(i); }
+            }
+        }
+    }
+}
 
 export component TopBar inherits Rectangle {
     in property <string> lang: "en";
@@ -9,8 +57,8 @@ export component TopBar inherits Rectangle {
     callback set-lang(string);
     callback toggle-theme();
 
-    // The scale steps, kept in one place so the index the segmented button
-    // reports and the factor the callback needs cannot drift apart.
+    // The scale steps, kept in one place so the index the control reports and
+    // the factor the callback needs cannot drift apart.
     private property <[float]> scales: [0.85, 1.0, 1.25, 1.5];
 
     height: 48px;
@@ -28,55 +76,26 @@ export component TopBar inherits Rectangle {
         // a manual `y` would be overridden by the layout.
         cross-axis-alignment: center;
 
-        // A SegmentedButton in all but name. The library pads each segment by
-        // 24px, which makes four of them ~270px — together with the language
-        // switch and the theme button that overflows the bar at the 700px
-        // minimum window width. Same shape, same colours, 8px padding, 160px.
-        Rectangle {
-            height: 40px;
-            width: 160px;
-            border-width: 1px;
-            border-radius: self.height / 2;
-            border-color: MaterialPalette.outline;
-            clip: true;
-
-            HorizontalLayout {
-                for item[i] in [{ label: "S" }, { label: "M" }, { label: "L" }, { label: "XL" }]:
-                Rectangle {
-                    background: root.ui-scale == root.scales[i]
-                        ? MaterialPalette.secondary-container
-                        : (touch.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent);
-                    animate background { duration: 120ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-
-                    if i > 0: Rectangle {
-                        x: 0; width: 1px; height: 100%;
-                        background: MaterialPalette.outline;
-                    }
-
-                    Text {
-                        text: item.label;
-                        font-size: 12px; font-weight: 600;
-                        color: root.ui-scale == root.scales[i]
-                            ? MaterialPalette.on-secondary-container
-                            : MaterialPalette.on-surface-variant;
-                        horizontal-alignment: center; vertical-alignment: center;
-                    }
-
-                    touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.set-scale(root.scales[i]); }
-                    }
-                }
-            }
+        CompactSegmented {
+            labels: ["S", "M", "L", "XL"];
+            current-index: root.ui-scale == root.scales[0] ? 0
+                         : root.ui-scale == root.scales[1] ? 1
+                         : root.ui-scale == root.scales[2] ? 2
+                         : 3;
+            selected(i) => { root.set-scale(root.scales[i]); }
         }
 
-        SegmentedButton {
-            items: [{ text: "EN" }, { text: "RU" }];
+        CompactSegmented {
+            labels: ["EN", "RU"];
+            segment-width: 34px;
             current-index: root.lang == "en" ? 0 : 1;
-            index-changed(index) => { root.set-lang(index == 0 ? "en" : "ru"); }
+            selected(i) => { root.set-lang(i == 0 ? "en" : "ru"); }
         }
 
+        // `inline` drops IconButton from a 40px touch target to an 18px icon,
+        // which is the only way the library's own button fits this bar.
         IconButton {
+            inline: true;
             icon: root.is-dark
                 ? @image-url("../icons/sun.svg")
                 : @image-url("../icons/moon.svg");
