@@ -83,11 +83,16 @@
             --prefix PATH : ${pkgs.lib.makeBinPath runtimeTools}
         '';
 
+        # Skia source for skia-bindings, which cannot fetch it itself inside the
+        # nix sandbox. The revision is not free to choose: it must be the exact
+        # commit skia-bindings expects, i.e. the `skia-bindings/skia` submodule
+        # of rust-skia at the tag matching the resolved skia-safe version
+        # (slint 1.18 → skia-safe 0.153.3 → rust-skia 0.153.3 → this commit).
         skiaSrc = pkgs.fetchFromGitHub {
           owner = "rust-skia";
           repo = "skia";
-          rev = "m142-0.89.1";
-          hash = "sha256-J7mBQ124/dODxX6MsuMW1NHizCMATAqdSzwxpP2afgk=";
+          rev = "61e7ca4e99062cdd0ab69445d5963fb3365778f6";
+          hash = "sha256-xKCkvQoTAMlLvKdVzzSxTST6kER4kRUIDjvTRZ9z72o=";
         };
 
         commonRustArgs = {

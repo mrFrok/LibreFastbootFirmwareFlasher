@@ -83,7 +83,7 @@ export component LogView inherits Rectangle {
         running: false;
         triggered => {
             self.running = false;
-            sv.viewport-y = -(sv.viewport-height - sv.visible-height);
+            sv.content-y = -(sv.content-height - sv.visible-height);
         }
     }
 
