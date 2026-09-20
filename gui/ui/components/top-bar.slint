@@ -70,7 +70,10 @@ export component TopBar inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 16px; padding-right: 12px;
+        padding-left: 16px;
+        // Extra right padding so the theme button's tooltip, which is centred on
+        // it, is not clipped by the window edge.
+        padding-right: 24px;
         alignment: end; spacing: 8px;
         // Children keep their preferred height and sit centred in the 48px bar;
         // a manual `y` would be overridden by the layout.
