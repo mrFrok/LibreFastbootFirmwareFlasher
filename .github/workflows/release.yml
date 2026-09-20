@@ -366,10 +366,12 @@ jobs:
         with:
           path: src
 
+      # A deploy key rather than a PAT: it is scoped to this one repository,
+      # cannot touch anything else on the account, and does not expire.
       - uses: actions/checkout@v4
         with:
           repository: mrFrok/homebrew-lfff
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           path: tap
 
       - name: Point the formula at the new release
