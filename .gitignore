@@ -29,3 +29,6 @@ _staging/
 
 # Claude Code memory
 .claude/
+
+# Python bytecode from scripts/
+__pycache__/

@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - 'v*'
+  # Re-point the packaging at a release that already exists, without cutting a
+  # new tag. Only the jobs below `release` run.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Released version to point the packaging at, e.g. 2.8.0'
+        required: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -11,6 +18,7 @@ env:
 jobs:
   build-cli:
     name: CLI — ${{ matrix.name }}
+    if: github.event_name == 'push'
     strategy:
       matrix:
         include:
@@ -61,6 +69,7 @@ jobs:
 
   build-gui:
     name: GUI — ${{ matrix.name }}
+    if: github.event_name == 'push'
     strategy:
       matrix:
         include:
@@ -151,8 +160,71 @@ jobs:
           name: gui-${{ matrix.name }}
           path: dist/lfff-gui-${{ matrix.name }}.tar.gz*
 
-  release:
+
+  package-appimage:
+    name: AppImage — ${{ matrix.arch }}
     needs: [build-cli, build-gui]
+    if: github.event_name == 'push'
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            os: ubuntu-latest
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-linux-${{ matrix.arch }}'
+          path: artifacts
+          merge-multiple: true
+
+      - name: Assemble the AppDir
+        run: |
+          set -euo pipefail
+          mkdir -p AppDir/usr/bin
+          tar xzf artifacts/lfff-gui-linux-${{ matrix.arch }}.tar.gz -C AppDir/usr/bin
+          tar xzf artifacts/lfff-linux-${{ matrix.arch }}.tar.gz     -C AppDir/usr/bin
+          chmod +x AppDir/usr/bin/lfff-gui AppDir/usr/bin/lfff
+
+      - name: Build the AppImage
+        env:
+          # No FUSE on the runners, so the tools unpack themselves instead.
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          base=https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous
+          curl -fsSLo linuxdeploy "$base/linuxdeploy-${ARCH}.AppImage"
+          curl -fsSLo linuxdeploy-plugin-appimage \
+            "https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-${ARCH}.AppImage"
+          chmod +x linuxdeploy linuxdeploy-plugin-appimage
+          export PATH="$PWD:$PATH"
+          # linuxdeploy matches the icon to the desktop file's Icon= key.
+          ./linuxdeploy \
+            --appdir AppDir \
+            --executable AppDir/usr/bin/lfff-gui \
+            --desktop-file lfff-gui.desktop \
+            --icon-file lfff-gui.svg \
+            --output appimage
+          mkdir -p dist
+          mv ./*.AppImage "dist/lfff-gui-linux-${ARCH}.AppImage"
+          cd dist
+          sha256sum "lfff-gui-linux-${ARCH}.AppImage" > "lfff-gui-linux-${ARCH}.AppImage.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage-${{ matrix.arch }}
+          path: dist/lfff-gui-linux-${{ matrix.arch }}.AppImage*
+
+  release:
+    needs: [build-cli, build-gui, package-appimage]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -170,3 +242,185 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+
+  # ---------------------------------------------------------------------------
+  # Downstream packaging. Each of these points a package manager at the release
+  # that was just published, so none of them can run before the assets exist —
+  # the checksums are read from the `.sha256` sidecars uploaded above.
+  #
+  # `needs: release` with `always()` is what lets a manual dispatch skip the
+  # build jobs and re-run only this half for a release that already exists.
+  # ---------------------------------------------------------------------------
+
+  packaging-nix:
+    name: Packaging — flake.nix
+    needs: release
+    if: always() && (needs.release.result == 'success' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+
+    steps:
+      # The tag itself can never carry these hashes — they only exist once the
+      # binaries are built — so the update lands on main, which is what
+      # `nix run github:mrFrok/LibreFastbootFirmwareFlasher` follows.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Point the in-repo packaging at the new release
+        env:
+          APP_ID: io.github.mrFrok.LibreFastbootFirmwareFlasher
+        run: |
+          python3 scripts/update-packaging.py --version "$VERSION" \
+            --flake flake.nix \
+            --flatpak "packaging/flatpak/$APP_ID.yml" \
+            --metainfo "packaging/flatpak/$APP_ID.metainfo.xml"
+
+      - name: Commit
+        run: |
+          if git diff --quiet; then
+            echo "already up to date"
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "chore(packaging): point at ${VERSION#v}"
+          git push
+
+  packaging-aur:
+    name: Packaging — AUR
+    needs: release
+    if: always() && (needs.release.result == 'success' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    # .SRCINFO is generated by makepkg, which only exists on Arch.
+    container: archlinux:base-devel
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm --needed git openssh python
+
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Authenticate to the AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          install -dm700 "$HOME/.ssh"
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$HOME/.ssh/aur"
+          chmod 600 "$HOME/.ssh/aur"
+          # Pinned, not keyscanned: trust-on-first-use in CI trusts whatever
+          # answers, which defeats the point of checking a host key at all.
+          printf '%s\n' \
+            'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' \
+            > "$HOME/.ssh/known_hosts"
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          git config --global --add safe.directory '*'
+
+          git clone ssh://aur@aur.archlinux.org/lfff.git     aur-lfff
+          git clone ssh://aur@aur.archlinux.org/lfff-bin.git aur-lfff-bin
+
+          python3 src/scripts/update-packaging.py --version "$VERSION" \
+            --aur-src aur-lfff/PKGBUILD --aur-bin aur-lfff-bin/PKGBUILD
+
+          # makepkg refuses to run as root, even just to print .SRCINFO.
+          useradd -m builder
+          chown -R builder aur-lfff aur-lfff-bin
+
+          for dir in aur-lfff aur-lfff-bin; do (
+            cd "$dir"
+            sudo -u builder makepkg --printsrcinfo > .SRCINFO
+            if git diff --quiet; then
+              echo "$dir already up to date"
+              exit 0
+            fi
+            # Keep whoever has been maintaining the package as the committer.
+            git config user.name  "$(git log -1 --format='%an')"
+            git config user.email "$(git log -1 --format='%ae')"
+            # Named paths only: a `git add -A` here would sweep in makepkg's
+            # downloads and build output.
+            git commit -m "Update to ${VERSION#v}" -- PKGBUILD .SRCINFO
+            git push
+          ); done
+
+  packaging-homebrew:
+    name: Packaging — Homebrew
+    needs: release
+    if: always() && (needs.release.result == 'success' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - uses: actions/checkout@v4
+        with:
+          repository: mrFrok/homebrew-lfff
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Point the formula at the new release
+        run: |
+          python3 src/scripts/update-packaging.py --version "$VERSION" \
+            --formula tap/Formula/lfff.rb
+
+      - name: Commit
+        working-directory: tap
+        run: |
+          if git diff --quiet; then
+            echo "formula already up to date"
+            exit 0
+          fi
+          git config user.name  "$(git log -1 --format='%an')"
+          git config user.email "$(git log -1 --format='%ae')"
+          git commit -m "lfff ${VERSION#v}" -- Formula/lfff.rb
+          git push
+
+  packaging-flatpak:
+    name: Packaging — Flatpak
+    needs: [release, packaging-nix]
+    if: always() && needs.packaging-nix.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+      APP_ID: io.github.mrFrok.LibreFastbootFirmwareFlasher
+
+    steps:
+      # packaging-nix has already committed the repointed manifest to main.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Build the bundle
+        run: |
+          set -euo pipefail
+          flatpak-builder --user --disable-rofiles-fuse --force-clean \
+            --repo=repo build "packaging/flatpak/${APP_ID}.yml"
+          flatpak build-bundle repo "lfff-gui-linux-x86_64.flatpak" "$APP_ID"
+          sha256sum "lfff-gui-linux-x86_64.flatpak" > "lfff-gui-linux-x86_64.flatpak.sha256"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${VERSION#v}" \
+            lfff-gui-linux-x86_64.flatpak \
+            lfff-gui-linux-x86_64.flatpak.sha256 --clobber

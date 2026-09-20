@@ -25,3 +25,5 @@ jobs:
         run: cargo clippy -p lfff-lib -p lfff-cli --all-targets -- -D warnings
       - name: Tests
         run: cargo test -p lfff-lib -p lfff-cli
+      - name: Packaging script tests
+        run: python3 scripts/test_update_packaging.py

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.mrFrok.LibreFastbootFirmwareFlasher</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+
+  <name>Libre Fastboot Firmware Flasher</name>
+  <summary>Flash Android firmware over fastboot</summary>
+
+  <description>
+    <p>
+      LFFF flashes full firmware on OnePlus, OPPO and Realme devices with a
+      Qualcomm SoC and an A/B partition layout. It handles the whole pipeline:
+      OTA download and extraction, pre-flash checks, Anti-Rollback protection,
+      dynamic super partitions, A/B slot management and modem flashing.
+    </p>
+    <p>
+      fastboot, adb, aria2 and payload-dumper-rust are bundled, so nothing has
+      to be installed alongside it. Flashing still needs the usual udev rules
+      on the host for the device to be reachable over USB.
+    </p>
+    <p>MediaTek devices flash entirely through fastbootd and have no Anti-Rollback protection.</p>
+  </description>
+
+  <launchable type="desktop-id">io.github.mrFrok.LibreFastbootFirmwareFlasher.desktop</launchable>
+
+  <url type="homepage">https://github.com/mrFrok/LibreFastbootFirmwareFlasher</url>
+  <url type="bugtracker">https://github.com/mrFrok/LibreFastbootFirmwareFlasher/issues</url>
+  <url type="donation">https://boosty.to/mrfrok/donate</url>
+  <url type="vcs-browser">https://github.com/mrFrok/LibreFastbootFirmwareFlasher</url>
+
+  <developer id="io.github.mrfrok">
+    <name>mrFrok</name>
+  </developer>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/screenshot.png</image>
+      <caption>Flashing firmware to a connected device</caption>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>Utility</category>
+    <category>System</category>
+  </categories>
+
+  <keywords>
+    <keyword>android</keyword>
+    <keyword>fastboot</keyword>
+    <keyword>firmware</keyword>
+    <keyword>flash</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="2.8.0" date="2026-09-20"/>
+  </releases>
+</component>

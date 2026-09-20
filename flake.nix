@@ -124,8 +124,8 @@
             # different layout, so darwin falls back to the source build.
             url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
             hash = {
-              x86_64 = "sha256-cqXFb5dPeBaEK4SW892qRnoC0B7JxkFdU/QidZ26KNI=";
-              aarch64 = "sha256-2y5dO4XyDO2ZlU9KetAxDgsmwmuJYuLcroS3VECl6xU=";
+              x86_64 = "sha256-WAfwmPNFeO6ACRtStRx6PnBRpslwK2ZZxdSNtOlz8PU=";
+              aarch64 = "sha256-TLVy8YorwnxywoyjXP9I5c+aPguTXsR2LGE1hWDzQMY=";
             }.${arch};
           };
 
@@ -162,8 +162,8 @@
           src = pkgs.fetchurl {
             url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-linux-${arch}.tar.gz";
             hash = {
-              x86_64 = "sha256-5tR+ZwG+FSFSbTqAYsDU8+PUeT69YD4upxqzjWvQ+sU=";
-              aarch64 = "sha256-iuzYvGJ34xv6PzdRA93hqTKYtL/ecHzQrOSmh3qakRY=";
+              x86_64 = "sha256-YPZbDKuusA3HCp6N6D+8OqFwwAyO4PYxVyOgpx7disg=";
+              aarch64 = "sha256-6DIOqNIoX0CtiTR8IKeSzrJ6CWD+Yf5c3YKLJ8eRTAI=";
             }.${arch};
           };
 
@@ -195,7 +195,10 @@
 
         lfff-gui = pkgs.rustPlatform.buildRustPackage (commonRustArgs // {
           pname = "lfff-gui";
-          cargoBuildFlags = [ "--package" "lfff-gui" ];
+          # lfff-cli too: this derivation installs both binaries, and lfff-gui
+          # does not depend on lfff-cli, so building only the GUI leaves no
+          # target/release/lfff for postInstall to pick up.
+          cargoBuildFlags = [ "--package" "lfff-gui" "--package" "lfff-cli" ];
           postInstall = ''
             install -Dm755 target/release/lfff $out/bin/lfff
             install -Dm644 lfff-gui.desktop $out/share/applications/lfff-gui.desktop

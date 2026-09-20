@@ -1,0 +1,97 @@
+# Flatpak build for the LFFF GUI.
+#
+# The app itself is the prebuilt release binary rather than a source build:
+# compiling Slint + Skia inside flatpak-builder would take the better part of
+# an hour per release for a binary CI has already produced. `scripts/update-
+# packaging.py --flatpak` repoints the urls and sha256s below at each release.
+#
+# The external tools LFFF shells out to are bundled, because a sandboxed app
+# cannot see the host's fastboot, adb or aria2c. This is what makes the flatpak
+# meaningfully different from the tarball: it is self-contained.
+#
+# x86_64 only. Google ships no aarch64 platform-tools, so an arm64 build would
+# have no fastboot to talk to the phone with.
+app-id: io.github.mrFrok.LibreFastbootFirmwareFlasher
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: lfff-gui
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Raw USB access. fastboot and adb talk to the phone directly, so without
+  # this the app starts and then sees no devices at all — there is no narrower
+  # flatpak permission that covers arbitrary USB.
+  - --device=all
+  # OTA downloads.
+  - --share=network
+  # Firmware archives are large and live wherever the user put them.
+  - --filesystem=home
+
+modules:
+  - name: android-tools
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 adb fastboot -t /app/bin
+    sources:
+      - type: archive
+        url: https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip
+        sha256: d230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1
+        strip-components: 1
+
+  - name: payload-dumper-rust
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 payload_dumper -t /app/bin
+    sources:
+      - type: archive
+        url: https://github.com/rhythmcache/payload-dumper-rust/releases/download/payload-dumper-rust-v0.8.4/payload_dumper-linux-x86_64.zip
+        sha256: d2a7cf4d8ef4daa73ebd34e0c6f77eb6c116a1745a1b31ad897e9ce2b2f54151
+        # The archive holds payload_dumper next to sha256sum.txt, so there is
+        # no single top-level directory to strip.
+        strip-components: 0
+
+  - name: aria2
+    buildsystem: autotools
+    config-opts:
+      - --disable-nls
+      - --disable-static
+      - --without-gnutls
+      - --with-openssl
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /share/man
+    sources:
+      - type: archive
+        url: https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0.tar.xz
+        sha256: 60a420ad7085eb616cb6e2bdf0a7206d68ff3d37fb5a956dc44242eb2f79b66b
+
+  - name: lfff
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 lfff-gui -t /app/bin
+      - install -Dm755 lfff -t /app/bin
+      - install -Dm644 lfff-gui.svg /app/share/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg
+      # The desktop file and icon have to be named after the app id.
+      - desktop-file-edit --set-icon=${FLATPAK_ID} lfff-gui.desktop
+      - install -Dm644 lfff-gui.desktop /app/share/applications/${FLATPAK_ID}.desktop
+      - install -Dm644 ${FLATPAK_ID}.metainfo.xml -t /app/share/metainfo
+    sources:
+      - type: archive
+        url: https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v2.8.0/lfff-gui-linux-x86_64.tar.gz
+        sha256: 5807f098f34578ee80091b52b51c7a3e7051a6c9702b6659c5d48db4e973f0f5
+        strip-components: 0
+      - type: archive
+        url: https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v2.8.0/lfff-linux-x86_64.tar.gz
+        sha256: 60f65b0cabaeb00dc70a9e8de83fbc3aa170c00c8ee0f6315723a0a71edd8ac8
+        strip-components: 0
+      - type: file
+        path: ../../lfff-gui.desktop
+      - type: file
+        path: ../../lfff-gui.svg
+      - type: file
+        path: io.github.mrFrok.LibreFastbootFirmwareFlasher.metainfo.xml
