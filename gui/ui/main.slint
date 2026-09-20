@@ -58,6 +58,15 @@ export component MainWindow inherits MaterialWindow {
     callback save-scheme(int);
     callback save-translucent(bool);
 
+    // Full-screen wipe, shared by the scale, theme and language switches: fade
+    // to an opaque sheet, change the thing underneath while it cannot be seen,
+    // fade back. `overlay-dark` is set per transition rather than bound to
+    // `is-dark`, so a theme switch can fade *to the destination colour* and
+    // read as a cross-fade instead of a flash of the old theme.
+    private property <bool>   overlay-dark: true;
+    private property <bool>   pending-dark: true;
+    private property <string> pending-lang: "en";
+
     // Page transition
     private property <float> page-opacity: 0.0;
     private property <length> page-x: 0px;
@@ -84,6 +93,7 @@ export component MainWindow inherits MaterialWindow {
 
     changed pending-scale => {
         if pending-scale > 0 {
+            overlay-dark = is-dark;
             effect-opacity = 1;
             scale-timer.running = true;
         }
@@ -95,6 +105,30 @@ export component MainWindow inherits MaterialWindow {
         triggered => {
             self.running = false;
             root.apply-pending-scale();
+            root.effect-opacity = 0;
+        }
+    }
+
+    theme-timer := Timer {
+        // Just past the 300ms wipe, so the switch happens while the sheet is
+        // fully opaque and nothing of it shows.
+        interval: 330ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.is-dark = root.pending-dark;
+            root.save-theme(root.is-dark);
+            root.effect-opacity = 0;
+        }
+    }
+
+    lang-timer := Timer {
+        interval: 330ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.lang = root.pending-lang;
+            root.save-lang(root.lang);
             root.effect-opacity = 0;
         }
     }
@@ -251,8 +285,21 @@ export component MainWindow inherits MaterialWindow {
                 set-translucent(t) => { root.translucent = t; root.save-translucent(t); }
                 ui-scale: root.ui-scale;
                 set-scale(v) => { root.set-scale(v); root.ui-scale = v; }
-                set-lang(l) => { root.lang = l; root.save-lang(l); }
-                toggle-theme => { root.is-dark = !root.is-dark; root.save-theme(root.is-dark); }
+                set-lang(l) => {
+                    if l != root.lang {
+                        root.pending-lang = l;
+                        root.overlay-dark = root.is-dark;
+                        root.effect-opacity = 1;
+                        lang-timer.running = true;
+                    }
+                }
+                toggle-theme => {
+                    root.pending-dark = !root.is-dark;
+                    // Fade to where we are going, not where we are.
+                    root.overlay-dark = root.pending-dark;
+                    root.effect-opacity = 1;
+                    theme-timer.running = true;
+                }
             }
 
             // ── Pages ─────────────────────────────────────────────────────────
@@ -541,8 +588,10 @@ export component MainWindow inherits MaterialWindow {
         z: 200;
         width: 100%;
         height: 100%;
-        background: root.is-dark ? #000000 : #ffffff;
+        background: root.overlay-dark ? #000000 : #ffffff;
+        // `effect-opacity` is already animated on the root; animating the bound
+        // property again chains the two and stretches the wipe well past the
+        // 300ms the timers are written against.
         opacity: root.effect-opacity;
-        animate opacity { duration: 300ms; easing: ease-in-out; }
     }
 }
