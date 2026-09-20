@@ -183,6 +183,16 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # linuxdeploy resolves what to bundle with ldd, so the GUI's runtime
+      # libraries have to be present here even though nothing is compiled.
+      - name: Install the runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libxkbcommon0 libfontconfig1 libfreetype6 libgl1 libegl1 \
+            libwayland-client0 libwayland-cursor0 libwayland-egl1 \
+            libx11-6 libxcursor1 libxi6 libxrandr2 libxcb1 libdbus-1-3
+
       - name: Assemble the AppDir
         run: |
           set -euo pipefail
