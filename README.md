@@ -13,6 +13,8 @@ CLI + GUI — single static binary, no Python, no bloat. Built with [Slint](http
 
 [Installation](#installation) · [Quick Start](#quick-start) · [CLI Commands](#cli-commands) · [Tested Devices](#tested-devices) · [Development](#development)
 
+![Screenshot](screenshot.png)
+
 </div>
 
 ---
