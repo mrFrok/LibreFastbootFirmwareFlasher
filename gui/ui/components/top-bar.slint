@@ -1,4 +1,5 @@
 import { MaterialPalette, IconButton } from "@material";
+import { Tr } from "../globals/tr.slint";
 
 // A segmented control in the library's visual language at desktop density.
 //
@@ -78,7 +79,7 @@ export component TopBar inherits Rectangle {
     private property <[float]> scales: [0.85, 1.0, 1.25, 1.5];
     // Each scheme's own dark-mode primary, so the swatch names the colour.
     private property <[color]> swatches: [#66B2FF, #ADC6FF, #00C7BF, #7EC16D, #E39C40, #F68792, #BA98F6];
-    private property <[string]> scheme-names: ["Blue", "Indigo", "Teal", "Green", "Amber", "Rose", "Violet"];
+
 
     height: 48px;
     background: MaterialPalette.surface-container;
@@ -147,7 +148,7 @@ export component TopBar inherits Rectangle {
 
                     VerticalLayout {
                         padding: 4px;
-                        for name[i] in root.scheme-names: Rectangle {
+                        for name[i] in Tr.scheme-names: Rectangle {
                             height: 30px;
                             border-radius: 8px;
                             background: i == root.scheme
@@ -194,7 +195,7 @@ export component TopBar inherits Rectangle {
                                 padding-left: 10px; padding-right: 10px; spacing: 10px;
                                 cross-axis-alignment: center;
                                 Text {
-                                    text: root.lang == "ru" ? "Прозрачность" : "Translucent";
+                                    text: Tr.translucent;
                                     font-size: 12px;
                                     color: root.translucent
                                         ? MaterialPalette.on-secondary-container

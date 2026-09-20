@@ -197,4 +197,10 @@ export global Tr {
     out property <string> preloader-skip-hint: lang == "ru"
         ? "⚠ Пропуск preloader может помочь установить новую прошивку, если стандартный метод не срабатывает, но также может сделать устройство неработоспособным"
         : "⚠ Skipping preloader may help flash new firmware when the standard method fails, but may also render the device unbootable";
+
+    // Colour scheme names, and the translucency toggle next to them.
+    out property <[string]> scheme-names: lang == "ru"
+        ? ["Синяя", "Индиго", "Бирюзовая", "Зелёная", "Янтарная", "Розовая", "Фиолетовая"]
+        : ["Blue", "Indigo", "Teal", "Green", "Amber", "Rose", "Violet"];
+    out property <string> translucent: lang == "ru" ? "Прозрачность" : "Translucent";
 }
