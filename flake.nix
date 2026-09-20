@@ -98,7 +98,16 @@
         commonRustArgs = {
           pname = "lfff";
           inherit version;
-          src = ./.;
+          # A plain `./.` copies the whole working tree into the store whenever
+          # the git tree is dirty — .gitignore is not consulted, only .git is
+          # skipped. With a 30 GB `target/` that is a 30 GB copy per build, and
+          # the tree goes dirty on its own the first time nix writes flake.lock.
+          src = lib.cleanSourceWith {
+            src = ./.;
+            filter = path: type:
+              let base = baseNameOf (toString path); in
+              !(type == "directory" && (base == "target" || base == "firmwares"));
+          };
           cargoLock.lockFile = ./Cargo.lock;
           nativeBuildInputs = with pkgs; [ pkg-config cmake makeWrapper installShellFiles python3 gn ninja ];
           buildInputs = runtimeDeps;
