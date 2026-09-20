@@ -58,14 +58,27 @@ export component MainWindow inherits MaterialWindow {
     callback save-scheme(int);
     callback save-translucent(bool);
 
-    // Full-screen wipe, shared by the scale, theme and language switches: fade
-    // to an opaque sheet, change the thing underneath while it cannot be seen,
-    // fade back. `overlay-dark` is set per transition rather than bound to
-    // `is-dark`, so a theme switch can fade *to the destination colour* and
-    // read as a cross-fade instead of a flash of the old theme.
-    private property <bool>   overlay-dark: true;
-    private property <bool>   pending-dark: true;
+    // Scale and language hide their change behind a sheet in the UI's own
+    // background colour: the content dissolves into the window rather than the
+    // lights going out.
     private property <string> pending-lang: "en";
+
+    // The theme gets a circular reveal from the toggle instead. A sheet cannot
+    // work here: fading to the destination colour makes the second half of the
+    // transition invisible (white sheet over a light theme), and fading to the
+    // old one is just a flash. A circle of the *new* background growing over
+    // the old theme is the change itself, visible the whole way.
+    private property <bool>   pending-dark: true;
+    private property <bool>   reveal-on: false;
+    private property <length> reveal-d: 0px;
+    private property <length> reveal-cx: 0px;
+    private property <length> reveal-cy: 0px;
+    private property <color>  reveal-color: root.pending-dark
+        ? LfffScheme.schemes.dark.background
+        : LfffScheme.schemes.light.background;
+    // Zero duration on the way back, so resetting the circle after the swap is
+    // instant rather than a visible shrink.
+    animate reveal-d { duration: root.reveal-on ? 420ms : 0ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
 
     // Page transition
     private property <float> page-opacity: 0.0;
@@ -93,7 +106,6 @@ export component MainWindow inherits MaterialWindow {
 
     changed pending-scale => {
         if pending-scale > 0 {
-            overlay-dark = is-dark;
             effect-opacity = 1;
             scale-timer.running = true;
         }
@@ -110,15 +122,16 @@ export component MainWindow inherits MaterialWindow {
     }
 
     theme-timer := Timer {
-        // Just past the 300ms wipe, so the switch happens while the sheet is
-        // fully opaque and nothing of it shows.
-        interval: 330ms;
+        // Just past the 420ms expansion, so the swap happens under a circle
+        // that already covers the window.
+        interval: 450ms;
         running: false;
         triggered => {
             self.running = false;
             root.is-dark = root.pending-dark;
             root.save-theme(root.is-dark);
-            root.effect-opacity = 0;
+            root.reveal-on = false;
+            root.reveal-d = 0px;
         }
     }
 
@@ -288,16 +301,20 @@ export component MainWindow inherits MaterialWindow {
                 set-lang(l) => {
                     if l != root.lang {
                         root.pending-lang = l;
-                        root.overlay-dark = root.is-dark;
                         root.effect-opacity = 1;
                         lang-timer.running = true;
                     }
                 }
                 toggle-theme => {
                     root.pending-dark = !root.is-dark;
-                    // Fade to where we are going, not where we are.
-                    root.overlay-dark = root.pending-dark;
-                    root.effect-opacity = 1;
+                    // Grow from the toggle itself, top right.
+                    root.reveal-cx = root.width - 36px;
+                    root.reveal-cy = 24px;
+                    root.reveal-on = true;
+                    // Twice the window diagonal covers it from any corner.
+                    root.reveal-d = 2 * Math.sqrt(
+                        (root.width / 1px) * (root.width / 1px)
+                        + (root.height / 1px) * (root.height / 1px)) * 1px;
                     theme-timer.running = true;
                 }
             }
@@ -588,10 +605,21 @@ export component MainWindow inherits MaterialWindow {
         z: 200;
         width: 100%;
         height: 100%;
-        background: root.overlay-dark ? #000000 : #ffffff;
+        background: MaterialPalette.background;
         // `effect-opacity` is already animated on the root; animating the bound
         // property again chains the two and stretches the wipe well past the
         // 300ms the timers are written against.
         opacity: root.effect-opacity;
+    }
+
+    Rectangle {
+        z: 201;
+        visible: root.reveal-d > 0px;
+        x: root.reveal-cx - root.reveal-d / 2;
+        y: root.reveal-cy - root.reveal-d / 2;
+        width: root.reveal-d;
+        height: root.reveal-d;
+        border-radius: root.reveal-d / 2;
+        background: root.reveal-color;
     }
 }
