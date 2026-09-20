@@ -28,25 +28,43 @@ export component TopBar inherits Rectangle {
         // a manual `y` would be overridden by the layout.
         cross-axis-alignment: center;
 
-        // Kept hand-rolled: M3 segments are ~67px each, so four of them plus the
-        // language switch and the theme button overflow the top bar at the
-        // 700px minimum window width. This fits in 120px.
-        HorizontalLayout {
-            spacing: 2px;
-            for item[i] in [{ label: "S" }, { label: "M" }, { label: "L" }, { label: "XL" }]:
-            TouchArea {
-                width: 30px; height: 30px;
-                clicked => { root.set-scale(root.scales[i]); }
+        // A SegmentedButton in all but name. The library pads each segment by
+        // 24px, which makes four of them ~270px — together with the language
+        // switch and the theme button that overflows the bar at the 700px
+        // minimum window width. Same shape, same colours, 8px padding, 160px.
+        Rectangle {
+            height: 40px;
+            width: 160px;
+            border-width: 1px;
+            border-radius: self.height / 2;
+            border-color: MaterialPalette.outline;
+            clip: true;
+
+            HorizontalLayout {
+                for item[i] in [{ label: "S" }, { label: "M" }, { label: "L" }, { label: "XL" }]:
                 Rectangle {
-                    border-radius: 5px;
                     background: root.ui-scale == root.scales[i]
-                        ? MaterialPalette.primary
-                        : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent);
-                    animate background { duration: 80ms; }
+                        ? MaterialPalette.secondary-container
+                        : (touch.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent);
+                    animate background { duration: 120ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+
+                    if i > 0: Rectangle {
+                        x: 0; width: 1px; height: 100%;
+                        background: MaterialPalette.outline;
+                    }
+
                     Text {
-                        text: item.label; font-size: 11px; font-weight: 600;
-                        color: root.ui-scale == root.scales[i] ? MaterialPalette.on-primary : MaterialPalette.on-surface-variant;
+                        text: item.label;
+                        font-size: 12px; font-weight: 600;
+                        color: root.ui-scale == root.scales[i]
+                            ? MaterialPalette.on-secondary-container
+                            : MaterialPalette.on-surface-variant;
                         horizontal-alignment: center; vertical-alignment: center;
+                    }
+
+                    touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.set-scale(root.scales[i]); }
                     }
                 }
             }
