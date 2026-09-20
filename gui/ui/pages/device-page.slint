@@ -1,9 +1,8 @@
-import { FilledButton, HorizontalDivider, MaterialPalette, OutlineButton, TonalButton } from "@material";
+import { ActionChip, FilledButton, HorizontalDivider, MaterialPalette, OutlineButton, TonalButton } from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
 import { DeviceInfo, LogEntry } from "../structs.slint";
 import { DeviceBanner } from "../components/buttons.slint";
-import { Chip } from "../components/cards.slint";
 import { LogView } from "../components/log-view.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
@@ -147,10 +146,10 @@ export component DevicePage {
                 { label: Tr.reboot-bootloader,  target: "adb-bootloader"  },
                 { label: Tr.reboot-fastbootd,   target: "adb-fastboot"    },
                 { label: Tr.reboot-system,      target: "adb-reboot"      },
-            ]: Chip {
+            ]: ActionChip {
                 horizontal-stretch: 1;
                 text: item.label;
-                chip-clicked => { root.reboot-to(item.target); }
+                clicked => { root.reboot-to(item.target); }
             }
         }
 
@@ -164,10 +163,10 @@ export component DevicePage {
                 { label: Tr.reboot-bootloader,  target: "fb-bootloader"  },
                 { label: Tr.reboot-fastbootd,   target: "fb-fastboot"    },
                 { label: Tr.reboot-system,      target: "fb-reboot"      },
-            ]: Chip {
+            ]: ActionChip {
                 horizontal-stretch: 1;
                 text: item.label;
-                chip-clicked => { root.reboot-to(item.target); }
+                clicked => { root.reboot-to(item.target); }
             }
         }
 
