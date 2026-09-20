@@ -19,8 +19,8 @@ export component NavItem inherits TouchArea {
         background: selected
             ? MaterialPalette.secondary-container
             : transparent;
-        animate background { duration: 250ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
-        animate border-radius, y { duration: 350ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+        animate background { duration: 250ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+        animate border-radius, y { duration: 350ms; easing: spring; }
 
         // State layer overlay
         Rectangle {
@@ -80,7 +80,7 @@ export component AboutLink inherits TouchArea {
         border-color: root.has-hover
             ? MaterialPalette.outline
             : MaterialPalette.outline-variant;
-        animate border-radius, y { duration: 350ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+        animate border-radius, y { duration: 350ms; easing: spring; }
         animate background { duration: 150ms; }
         animate border-color { duration: 150ms; }
 
@@ -91,7 +91,7 @@ export component AboutLink inherits TouchArea {
                 border-radius: root.has-hover ? 12px : 16px;
                 background: MaterialPalette.tertiary-container;
                 y: (parent.height - 32px) / 2;
-                animate border-radius { duration: 350ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+                animate border-radius { duration: 350ms; easing: spring; }
                 Image {
                     source: icon;
                     width: 16px; height: 16px;

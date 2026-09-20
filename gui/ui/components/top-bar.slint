@@ -28,13 +28,28 @@ export component TopBar inherits Rectangle {
         // a manual `y` would be overridden by the layout.
         cross-axis-alignment: center;
 
-        SegmentedButton {
-            items: [{ text: "S" }, { text: "M" }, { text: "L" }, { text: "XL" }];
-            current-index: root.ui-scale == root.scales[0] ? 0
-                         : root.ui-scale == root.scales[1] ? 1
-                         : root.ui-scale == root.scales[2] ? 2
-                         : 3;
-            index-changed(index) => { root.set-scale(root.scales[index]); }
+        // Kept hand-rolled: M3 segments are ~67px each, so four of them plus the
+        // language switch and the theme button overflow the top bar at the
+        // 700px minimum window width. This fits in 120px.
+        HorizontalLayout {
+            spacing: 2px;
+            for item[i] in [{ label: "S" }, { label: "M" }, { label: "L" }, { label: "XL" }]:
+            TouchArea {
+                width: 30px; height: 30px;
+                clicked => { root.set-scale(root.scales[i]); }
+                Rectangle {
+                    border-radius: 5px;
+                    background: root.ui-scale == root.scales[i]
+                        ? MaterialPalette.primary
+                        : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : transparent);
+                    animate background { duration: 80ms; }
+                    Text {
+                        text: item.label; font-size: 11px; font-weight: 600;
+                        color: root.ui-scale == root.scales[i] ? MaterialPalette.on-primary : MaterialPalette.on-surface-variant;
+                        horizontal-alignment: center; vertical-alignment: center;
+                    }
+                }
+            }
         }
 
         SegmentedButton {

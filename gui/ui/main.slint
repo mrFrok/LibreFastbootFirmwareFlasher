@@ -73,7 +73,7 @@ export component MainWindow inherits MaterialWindow {
     }
 
     animate page-opacity { duration: 250ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-    animate page-x       { duration: 350ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1.0); }
+    animate page-x       { duration: 350ms; easing: spring; }
     animate effect-opacity { duration: 300ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
 
     changed pending-scale => {

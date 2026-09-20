@@ -58,7 +58,7 @@ export component BackButton {
             background: ta.pressed
                 ? MaterialPalette.surface-container-highest
                 : ta.has-hover ? MaterialPalette.surface-container-high : transparent;
-            animate border-radius, y { duration: 350ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            animate border-radius, y { duration: 350ms; easing: spring; }
             animate background { duration: 120ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
             Image {
                 source: @image-url("../icons/arrow_back.svg");
@@ -79,12 +79,12 @@ export component DeviceBanner inherits Rectangle {
     background: device.connected
         ? MaterialPalette.primary-container
         : MaterialPalette.error-container;
-    animate background { duration: 200ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
     border-width: 1px;
     border-color: device.connected
         ? MaterialPalette.primary
         : MaterialPalette.error;
-    animate border-color { duration: 200ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    animate border-color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
 
     HorizontalLayout { padding-left: 14px; padding-right: 14px; spacing: 10px;
         // Device icon container
