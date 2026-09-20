@@ -267,6 +267,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_lang(config.lang.as_str().into());
     ui.set_is_dark(config.theme == "dark");
     ui.set_scheme(config.scheme);
+    ui.set_translucent(config.translucent);
 
     let (ctx, crx) = mpsc::channel::<Cmd>();
     let (mtx, mrx) = mpsc::channel::<WMsg>();

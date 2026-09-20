@@ -12,6 +12,9 @@ pub struct Config {
     /// 2 = glass (translucent). Matches `AppScheme` in globals/lfff-scheme.slint.
     #[serde(default)]
     pub scheme: i32,
+    /// Alpha-blended surfaces, for compositors that blur behind windows.
+    #[serde(default)]
+    pub translucent: bool,
     #[serde(default)]
     pub output_dir: Option<String>,
 }
@@ -30,6 +33,7 @@ impl Default for Config {
             lang: default_lang(),
             theme: default_theme(),
             scheme: 0,
+            translucent: false,
             output_dir: None,
         }
     }

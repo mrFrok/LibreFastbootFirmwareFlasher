@@ -65,15 +65,20 @@ export component TopBar inherits Rectangle {
     in property <bool> is-dark: true;
     in property <float> ui-scale: 1.0;
     in property <int> scheme: 0;
+    in property <bool> translucent: false;
 
     callback set-scale(float);
     callback set-lang(string);
     callback toggle-theme();
     callback set-scheme(int);
+    callback set-translucent(bool);
 
     // The scale steps, kept in one place so the index the control reports and
     // the factor the callback needs cannot drift apart.
     private property <[float]> scales: [0.85, 1.0, 1.25, 1.5];
+    // Each scheme's own dark-mode primary, so the swatch names the colour.
+    private property <[color]> swatches: [#66B2FF, #ADC6FF, #00C7BF, #7EC16D, #E39C40, #F68792, #BA98F6];
+    private property <[string]> scheme-names: ["Blue", "Indigo", "Teal", "Green", "Amber", "Rose", "Violet"];
 
     height: 48px;
     background: MaterialPalette.surface-container;
@@ -100,14 +105,118 @@ export component TopBar inherits Rectangle {
             selected(i) => { root.set-scale(root.scales[i]); }
         }
 
-        // Swatch = each scheme's dark-mode primary; the third is drawn with
-        // alpha because that scheme is the translucent one.
-        CompactSegmented {
-            labels: ["", "", ""];
-            swatches: [#66B2FF, #ADC6FF, #66B2FF80];
-            segment-width: 26px;
-            current-index: root.scheme;
-            selected(i) => { root.set-scheme(i); }
+        // A dropdown rather than a row of dots: seven colours plus the
+        // translucency toggle do not fit a 48px bar side by side. @material's
+        // own DropDownMenu wraps a text field with a 56px minimum height, which
+        // is taller than the bar, so this is a PopupWindow.
+        Rectangle {
+            height: 28px; width: 40px;
+            border-radius: self.height / 2;
+            border-width: 1px;
+            border-color: MaterialPalette.outline-variant;
+            background: scheme-touch.has-hover
+                ? MaterialPalette.on-surface.with-alpha(0.08) : transparent;
+            animate background { duration: 120ms; }
+
+            Rectangle {
+                width: 14px; height: 14px;
+                border-radius: self.width / 2;
+                background: root.swatches[root.scheme];
+                border-width: root.translucent ? 2px : 1px;
+                border-color: MaterialPalette.outline-variant;
+                opacity: root.translucent ? 0.55 : 1.0;
+            }
+
+            scheme-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { scheme-menu.show(); }
+            }
+
+            scheme-menu := PopupWindow {
+                x: -132px;
+                y: parent.height + 6px;
+                width: 172px;
+                height: 8px + 30px * 7 + 9px + 30px;
+                close-policy: close-on-click-outside;
+
+                Rectangle {
+                    background: MaterialPalette.surface-container-high;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: MaterialPalette.outline-variant;
+
+                    VerticalLayout {
+                        padding: 4px;
+                        for name[i] in root.scheme-names: Rectangle {
+                            height: 30px;
+                            border-radius: 8px;
+                            background: i == root.scheme
+                                ? MaterialPalette.secondary-container
+                                : (row.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent);
+
+                            HorizontalLayout {
+                                padding-left: 10px; padding-right: 10px; spacing: 10px;
+                                cross-axis-alignment: center;
+                                Rectangle {
+                                    width: 14px; height: 14px;
+                                    border-radius: self.width / 2;
+                                    background: root.swatches[i];
+                                    border-width: 1px;
+                                    border-color: MaterialPalette.outline-variant;
+                                }
+                                Text {
+                                    text: name;
+                                    font-size: 12px;
+                                    color: i == root.scheme
+                                        ? MaterialPalette.on-secondary-container
+                                        : MaterialPalette.on-surface;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+
+                            row := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.set-scheme(i); }
+                            }
+                        }
+
+                        Rectangle { height: 1px; background: MaterialPalette.outline-variant; }
+
+                        Rectangle {
+                            height: 30px;
+                            border-radius: 8px;
+                            background: root.translucent
+                                ? MaterialPalette.secondary-container
+                                : (glass-row.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent);
+
+                            HorizontalLayout {
+                                padding-left: 10px; padding-right: 10px; spacing: 10px;
+                                cross-axis-alignment: center;
+                                Text {
+                                    text: root.lang == "ru" ? "Прозрачность" : "Translucent";
+                                    font-size: 12px;
+                                    color: root.translucent
+                                        ? MaterialPalette.on-secondary-container
+                                        : MaterialPalette.on-surface;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                                if root.translucent: Image {
+                                    source: @image-url("../icons/check.svg");
+                                    width: 14px; height: 14px;
+                                    colorize: MaterialPalette.on-secondary-container;
+                                }
+                            }
+
+                            glass-row := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.set-translucent(!root.translucent); }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         CompactSegmented {

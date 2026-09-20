@@ -43,8 +43,10 @@ export component MainWindow inherits MaterialWindow {
     in-out property <int>  page: 0;
     in-out property <string>  lang: "en";
     in-out property <bool>  is-dark: true;
-    // 0 = blue (LFFF), 1 = indigo (@material default), 2 = glass (translucent)
+    // Index into AppScheme: 0 blue, 1 indigo, 2 teal, 3 green, 4 amber,
+    // 5 rose, 6 violet. Translucency is independent of the colour.
     in-out property <int>   scheme: 0;
+    in-out property <bool>  translucent: false;
     in-out property <float> ui-scale: 1.0;
     in-out property <float> pending-scale: 0;
     in-out property <float> effect-opacity: 0;
@@ -54,6 +56,7 @@ export component MainWindow inherits MaterialWindow {
     callback save-lang(string);
     callback save-theme(bool);
     callback save-scheme(int);
+    callback save-translucent(bool);
 
     // Page transition
     private property <float> page-opacity: 0.0;
@@ -167,8 +170,13 @@ export component MainWindow inherits MaterialWindow {
     // re-runs this.
     function apply-scheme() {
         LfffScheme.current = root.scheme == 1 ? AppScheme.indigo
-                           : root.scheme == 2 ? AppScheme.glass
+                           : root.scheme == 2 ? AppScheme.teal
+                           : root.scheme == 3 ? AppScheme.green
+                           : root.scheme == 4 ? AppScheme.amber
+                           : root.scheme == 5 ? AppScheme.rose
+                           : root.scheme == 6 ? AppScheme.violet
                            : AppScheme.blue;
+        LfffScheme.translucent = root.translucent;
         MaterialPalette.schemes = LfffScheme.schemes;
     }
 
@@ -178,6 +186,7 @@ export component MainWindow inherits MaterialWindow {
         Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light;
     }
     changed scheme => { root.apply-scheme(); }
+    changed translucent => { root.apply-scheme(); }
     changed lang => { Tr.lang = lang; }
     changed is-dark => { Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
     changed confirm-action => {
@@ -238,6 +247,8 @@ export component MainWindow inherits MaterialWindow {
                 is-dark: root.is-dark;
                 scheme: root.scheme;
                 set-scheme(i) => { root.scheme = i; root.save-scheme(i); }
+                translucent: root.translucent;
+                set-translucent(t) => { root.translucent = t; root.save-translucent(t); }
                 ui-scale: root.ui-scale;
                 set-scale(v) => { root.set-scale(v); root.ui-scale = v; }
                 set-lang(l) => { root.lang = l; root.save-lang(l); }

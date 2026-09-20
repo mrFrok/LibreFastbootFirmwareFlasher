@@ -634,6 +634,12 @@ pub fn register_callbacks(
         save_config(&config);
     });
 
+    ui.on_save_translucent(|t| {
+        let mut config = load_config();
+        config.translucent = t;
+        save_config(&config);
+    });
+
     ui.on_save_theme(|d| {
         let mut config = load_config();
         config.theme = if d {
