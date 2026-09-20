@@ -1,7 +1,7 @@
 // LibreFastbootFirmwareFlasher — Material Design 3 GUI (Slint built-in material)
 
 import { Palette } from "std-widgets.slint";
-import { MaterialPalette } from "@material";
+import { MaterialPalette, MaterialWindow } from "@material";
 import { Tr } from "globals/tr.slint";
 import { LfffScheme } from "globals/lfff-scheme.slint";
 import { ConfirmAction } from "globals/confirm-action.slint";
@@ -31,7 +31,7 @@ import { PreloaderWarningDialog } from "dialogs/preloader-warning-dialog.slint";
 import { UpdateDialog } from "dialogs/update-dialog.slint";
 import { WarningDialog } from "dialogs/all.slint";
 
-export component MainWindow inherits Window {
+export component MainWindow inherits MaterialWindow {
     title: "LibreFastbootFirmwareFlasher";
     icon: @image-url("icons/logo_icon.svg");
     preferred-width: 1000px;
