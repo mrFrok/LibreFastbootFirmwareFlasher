@@ -3007,7 +3007,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lfff-cli"
-version = "2.7.2"
+version = "2.8.0"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -3023,7 +3023,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-gui"
-version = "2.7.2"
+version = "2.8.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -3041,7 +3041,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-lib"
-version = "2.7.2"
+version = "2.8.0"
 dependencies = [
  "anyhow",
  "dirs",
