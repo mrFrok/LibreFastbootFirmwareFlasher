@@ -1,6 +1,5 @@
-import { MaterialPalette } from "@material";
+import { FilledButton, MaterialPalette, OutlineButton, TextButton } from "@material";
 import { Tr } from "../globals/tr.slint";
-import { FilledButton, OutlinedButton, TextButton } from "../components/buttons.slint";
 import { ScrollView } from "std-widgets.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
@@ -89,7 +88,7 @@ export component FlashFailureDialog {
                         text: Tr.abort;
                         clicked => { root.abort(); }
                     }
-                    if !root.is-session-error: OutlinedButton {
+                    if !root.is-session-error: OutlineButton {
                         text: Tr.retry;
                         clicked => { root.retry(); }
                     }

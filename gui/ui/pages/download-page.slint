@@ -1,9 +1,9 @@
 import { Palette } from "std-widgets.slint";
-import { MaterialPalette } from "@material";
+import { FilledButton, MaterialPalette, OutlineButton } from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
 import { DeviceInfo, LogEntry } from "../structs.slint";
-import { FilledButton, OutlinedButton, HorizontalDivider, LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
+import { HorizontalDivider, LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
 import { LogView } from "../components/log-view.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
@@ -41,7 +41,7 @@ export component DownloadPage {
         Text { text: Tr.output-dir; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
         HorizontalLayout { spacing: 8px; height: 44px;
             PathField { path: root.output-dir; horizontal-stretch: 1; }
-            OutlinedButton {
+            OutlineButton {
                 min-width: 90px;
                 text: Tr.browse;
                 clicked => { root.browse-output-dir(); }
@@ -85,7 +85,7 @@ export component DownloadPage {
                 }
             }
 
-            OutlinedButton {
+            OutlineButton {
                 min-width: 90px;
                 text: Tr.paste;
                 clicked => { root.paste-clipboard(); }
@@ -98,7 +98,7 @@ export component DownloadPage {
                 clicked => { root.download-firmware(root.download-url); }
             }
 
-            if root.is-downloading: OutlinedButton {
+            if root.is-downloading: OutlineButton {
                 min-width: 110px;
                 text: Tr.cancel;
                 clicked => { root.cancel-download(); }
@@ -123,7 +123,7 @@ export component DownloadPage {
         HorizontalLayout { spacing: 8px; height: 44px;
             PathField { path: root.firmware-path; horizontal-stretch: 1; }
 
-            OutlinedButton {
+            OutlineButton {
                 min-width: 110px;
                 text: Tr.select-zip;
                 clicked => { root.browse-firmware(); }

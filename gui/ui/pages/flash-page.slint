@@ -1,8 +1,8 @@
-import { MaterialPalette } from "@material";
+import { FilledButton, MaterialPalette, OutlineButton } from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
 import { DeviceInfo, LogEntry } from "../structs.slint";
-import { FilledButton, OutlinedButton, LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
+import { LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
 import { LogView } from "../components/log-view.slint";
 
 export component FlashPage {
@@ -77,19 +77,19 @@ export component FlashPage {
 
         if root.flash-source-mode == 0: HorizontalLayout { spacing: 8px;
             PathField { path: root.firmware-path; horizontal-stretch: 1; }
-            OutlinedButton { text: Tr.select-folder; enabled: !root.is-flashing; clicked => { root.browse-folder(); } }
-            OutlinedButton { text: Tr.find-phone;    enabled: !root.is-flashing; clicked => { root.check-device(); } }
+            OutlineButton { text: Tr.select-folder; enabled: !root.is-flashing; clicked => { root.browse-folder(); } }
+            OutlineButton { text: Tr.find-phone;    enabled: !root.is-flashing; clicked => { root.check-device(); } }
         }
 
         if root.flash-source-mode == 1: VerticalLayout { spacing: 8px;
             HorizontalLayout { spacing: 8px;
                 PathField { path: root.source-dir; horizontal-stretch: 1; }
-                OutlinedButton {
+                OutlineButton {
                     text: Tr.src-select;
                     enabled: !root.is-flashing;
                     clicked => { root.browse-source-dir(); }
                 }
-                OutlinedButton { text: Tr.find-phone; enabled: !root.is-flashing; clicked => { root.check-device(); } }
+                OutlineButton { text: Tr.find-phone; enabled: !root.is-flashing; clicked => { root.check-device(); } }
             }
             Rectangle {
                 height: 28px; border-radius: 8px; border-width: 1px;
@@ -208,7 +208,7 @@ export component FlashPage {
                 enabled: !root.is-flashing && root.source-dir != "" && root.source-image-count > 0 && root.device.connected;
                 clicked => { root.start-flash-from-source(); }
             }
-            if root.is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
+            if root.is-flashing: OutlineButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
         }
 
         LogView { entries: root.flash-log; vertical-stretch: 1; export-status: root.flash-export-status; export-log => { root.export-flash-log(); } }

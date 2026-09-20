@@ -1,8 +1,8 @@
-import { MaterialPalette } from "@material";
+import { FilledButton, MaterialPalette, OutlineButton } from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
 import { DeviceInfo, LogEntry } from "../structs.slint";
-import { FilledButton, OutlinedButton, LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
+import { LinearProgressIndicator, PathField, DeviceBanner } from "../components/buttons.slint";
 import { LogView } from "../components/log-view.slint";
 
 export component PartitionPage {
@@ -34,8 +34,8 @@ export component PartitionPage {
 
         HorizontalLayout { spacing: 8px;
             PathField { path: root.single-image-path; horizontal-stretch: 1; }
-            OutlinedButton { text: ".img";        clicked => { root.browse-single-image(); } }
-            OutlinedButton { text: Tr.find-phone; clicked => { root.check-device(); } }
+            OutlineButton { text: ".img";        clicked => { root.browse-single-image(); } }
+            OutlineButton { text: Tr.find-phone; clicked => { root.check-device(); } }
         }
 
         HorizontalLayout { spacing: 8px; height: 20px;
@@ -125,7 +125,7 @@ export component PartitionPage {
                 enabled: !root.is-flashing && root.single-image-path != "" && root.device.connected && root.partition-name != "";
                 clicked => { root.show-partition-reboot-choice(); }
             }
-            if root.is-flashing: OutlinedButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
+            if root.is-flashing: OutlineButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
         }
 
         LogView { entries: root.partition-log; vertical-stretch: 1; export-status: root.partition-export-status; export-log => { root.export-partition-log(); } }

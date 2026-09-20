@@ -1,8 +1,8 @@
-import { MaterialPalette } from "@material";
+import { FilledButton, MaterialPalette, OutlineButton, TonalButton } from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
 import { DeviceInfo, LogEntry } from "../structs.slint";
-import { FilledButton, OutlinedButton, FilledTonalButton, HorizontalDivider, DeviceBanner } from "../components/buttons.slint";
+import { HorizontalDivider, DeviceBanner } from "../components/buttons.slint";
 import { Chip } from "../components/cards.slint";
 import { LogView } from "../components/log-view.slint";
 import { StatusColors } from "../globals/status-colors.slint";
@@ -63,8 +63,8 @@ export component DevicePage {
 
         Rectangle { height: 8px; }
         HorizontalLayout { spacing: 8px;
-            OutlinedButton { text: Tr.find-device;  horizontal-stretch: 1; clicked => { root.check-device(); } }
-            OutlinedButton { text: Tr.check-deps;   horizontal-stretch: 1; clicked => { root.check-deps(); } }
+            OutlineButton { text: Tr.find-device;  horizontal-stretch: 1; clicked => { root.check-device(); } }
+            OutlineButton { text: Tr.check-deps;   horizontal-stretch: 1; clicked => { root.check-deps(); } }
             FilledButton  { text: Tr.install-deps; horizontal-stretch: 1; clicked => { root.install-deps(); } }
         }
 
@@ -80,7 +80,7 @@ export component DevicePage {
                 vertical-alignment: center;
             }
             Rectangle { horizontal-stretch: 1; }
-            FilledTonalButton {
+            TonalButton {
                 text: Tr.run-test;
                 enabled: root.test-step == 0 || root.test-step >= 5 || root.test-step < 0;
                 clicked => { root.run-driver-test(); }

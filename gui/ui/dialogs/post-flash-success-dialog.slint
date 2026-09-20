@@ -1,6 +1,5 @@
-import { MaterialPalette } from "@material";
+import { FilledButton, MaterialPalette, OutlineButton, TextButton } from "@material";
 import { Tr } from "../globals/tr.slint";
-import { FilledButton, OutlinedButton, TextButton } from "../components/buttons.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
 export component PostFlashSuccessDialog {
@@ -48,7 +47,7 @@ export component PostFlashSuccessDialog {
                     text: Tr.wipe-data-reboot;
                     clicked => { root.wipe-and-reboot(); }
                 }
-                OutlinedButton {
+                OutlineButton {
                     text: Tr.reboot;
                     clicked => { root.reboot(); }
                 }
