@@ -1,6 +1,7 @@
-import { MaterialPalette } from "../globals/material-palette.slint";
+import { MaterialPalette } from "@material";
 import { Tr } from "../globals/tr.slint";
 import { FilledButton, TextButton } from "../components/buttons.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 
 export component PreloaderWarningDialog {
     in property <bool> show;
@@ -28,11 +29,11 @@ export component PreloaderWarningDialog {
 
             VerticalLayout { padding: 28px; spacing: 12px;
                 HorizontalLayout { spacing: 12px;
-                    Text { text: "⚠"; font-size: 24px; color: MaterialPalette.warning; vertical-alignment: center; }
+                    Text { text: "⚠"; font-size: 24px; color: StatusColors.warning; vertical-alignment: center; }
                     Text {
                         text: Tr.preloader-warning-title;
                         font-size: 18px; font-weight: 700;
-                        color: MaterialPalette.warning; vertical-alignment: center;
+                        color: StatusColors.warning; vertical-alignment: center;
                     }
                 }
                 Text {
@@ -47,7 +48,7 @@ export component PreloaderWarningDialog {
                 VerticalLayout { spacing: 6px;
                     Text {
                         text: Tr.preloader-skip-hint;
-                        font-size: 12px; color: MaterialPalette.warning; wrap: word-wrap;
+                        font-size: 12px; color: StatusColors.warning; wrap: word-wrap;
                     }
                     TouchArea {
                         height: 24px;

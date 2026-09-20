@@ -1,7 +1,8 @@
 import { Palette, ScrollView } from "std-widgets.slint";
-import { MaterialPalette } from "../globals/material-palette.slint";
+import { MaterialPalette } from "@material";
 import { HorizontalDivider } from "../components/buttons.slint";
 import { FlashHistoryItem } from "../structs.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 
 export component HistoryPage {
     in property <string> lang;
@@ -112,12 +113,12 @@ export component HistoryPage {
                                             x: (parent.width - 80px) / 2;
                                             y: (parent.height - 22px) / 2;
                                             width: 80px; height: 22px; border-radius: 6px;
-                                            background: item.result == "OK" ? MaterialPalette.success-container
-                                                      : item.result == "Aborted" ? MaterialPalette.warning-container
+                                            background: item.result == "OK" ? StatusColors.success-container
+                                                      : item.result == "Aborted" ? StatusColors.warning-container
                                                       : MaterialPalette.error-container;
                                             border-width: 1px;
-                                            border-color: item.result == "OK" ? MaterialPalette.success.with-alpha(0.3)
-                                                      : item.result == "Aborted" ? MaterialPalette.warning.with-alpha(0.3)
+                                            border-color: item.result == "OK" ? StatusColors.success.with-alpha(0.3)
+                                                      : item.result == "Aborted" ? StatusColors.warning.with-alpha(0.3)
                                                       : MaterialPalette.error.with-alpha(0.3);
                                             Text {
                                                 text: item.result == "OK"
@@ -127,8 +128,8 @@ export component HistoryPage {
                                                         : root.status-failed;
                                                 font-size: 10px; font-weight: 700;
                                                 horizontal-alignment: center; vertical-alignment: center;
-                                                color: item.result == "OK" ? MaterialPalette.on-success-container
-                                                     : item.result == "Aborted" ? MaterialPalette.on-warning-container
+                                                color: item.result == "OK" ? StatusColors.on-success-container
+                                                     : item.result == "Aborted" ? StatusColors.on-warning-container
                                                      : MaterialPalette.on-error-container;
                                             }
                                         }

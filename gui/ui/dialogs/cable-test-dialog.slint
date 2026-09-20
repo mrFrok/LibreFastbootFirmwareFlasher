@@ -1,6 +1,7 @@
-import { MaterialPalette } from "../globals/material-palette.slint";
+import { MaterialPalette } from "@material";
 import { Tr } from "../globals/tr.slint";
 import { FilledButton, TextButton, LinearProgressIndicator } from "../components/buttons.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 
 export component CableTestDialog {
     in property <bool> show;
@@ -40,7 +41,7 @@ export component CableTestDialog {
                 Text {
                     text: root.cable-test-status;
                     font-size: 13px;
-                    color: root.cable-test-passed ? MaterialPalette.success : MaterialPalette.on-surface-variant;
+                    color: root.cable-test-passed ? StatusColors.success : MaterialPalette.on-surface-variant;
                     wrap: word-wrap;
                     min-height: 40px;
                 }

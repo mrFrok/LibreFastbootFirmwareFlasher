@@ -1,7 +1,8 @@
 import { Palette, ScrollView, Button } from "std-widgets.slint";
-import { MaterialPalette } from "../globals/material-palette.slint";
+import { MaterialPalette } from "@material";
 import { Tr } from "../globals/tr.slint";
 import { LogEntry } from "../structs.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 
 export component LogView inherits Rectangle {
     in property <[LogEntry]> entries;
@@ -28,7 +29,7 @@ export component LogView inherits Rectangle {
         if export-status != "": Text {
             text: export-status;
             font-size: 12px;
-            color: MaterialPalette.success;
+            color: StatusColors.success;
         }
         if entries.length == 0: Text {
             text: Tr.log-empty;
@@ -51,16 +52,16 @@ export component LogView inherits Rectangle {
                     Rectangle {
                         width: 32px; height: 16px; border-radius: 4px;
                         background: e.level == "error"   ? MaterialPalette.error-container
-                                  : e.level == "success" ? MaterialPalette.success-container
-                                  : e.level == "warn"    ? MaterialPalette.warning-container
+                                  : e.level == "success" ? StatusColors.success-container
+                                  : e.level == "warn"    ? StatusColors.warning-container
                                   : MaterialPalette.primary-container;
                         Text {
                             text: e.level == "error" ? "ERR" : e.level == "success" ? " OK" : e.level == "warn" ? "WRN" : "INF";
                             font-size: 10px; font-weight: 700; font-family: "monospace";
                             horizontal-alignment: center; vertical-alignment: center;
                             color: e.level == "error"   ? MaterialPalette.on-error-container
-                                 : e.level == "success" ? MaterialPalette.on-success-container
-                                 : e.level == "warn"    ? MaterialPalette.on-warning-container
+                                 : e.level == "success" ? StatusColors.on-success-container
+                                 : e.level == "warn"    ? StatusColors.on-warning-container
                                  : MaterialPalette.on-primary-container;
                         }
                     }

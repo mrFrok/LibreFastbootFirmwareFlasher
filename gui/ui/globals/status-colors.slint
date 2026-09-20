@@ -1,0 +1,29 @@
+// Status colours that Material 3 has no role for.
+//
+// M3 defines error, but nothing for "warning" or "success", and LFFF needs both:
+// a flash step can finish, warn, or fail, and the log colours each differently.
+// These follow the same container/on-container shape as the M3 error role so
+// they sit naturally next to `MaterialPalette.error` at the call site.
+//
+// Also carries the shadow tint used by the card elevation. The library's
+// `MaterialPalette.shadow` is opaque; these are alpha-blended, which is what
+// the existing cards were tuned against.
+
+import { Palette } from "std-widgets.slint";
+
+export global StatusColors {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    out property <color> warning:              root.dark ? #FFD07F : #C27A00;
+    out property <color> on-warning:           root.dark ? #3D2600 : #FFFFFF;
+    out property <color> warning-container:    root.dark ? #5C3A00 : #FFF0D6;
+    out property <color> on-warning-container: root.dark ? #FFF0D6 : #3D2600;
+
+    out property <color> success:              root.dark ? #7FDF7F : #006E1C;
+    out property <color> on-success:           root.dark ? #00390F : #FFFFFF;
+    out property <color> success-container:    root.dark ? #005313 : #95F5A5;
+    out property <color> on-success-container: root.dark ? #95F5A5 : #00390F;
+
+    out property <color> drop-shadow:          root.dark ? #00000060 : #00000030;
+    out property <color> drop-shadow-heavy:    root.dark ? #00000080 : #00000050;
+}

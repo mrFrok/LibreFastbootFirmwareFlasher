@@ -1,7 +1,8 @@
-import { MaterialPalette } from "../globals/material-palette.slint";
+import { MaterialPalette } from "@material";
 import { Tr } from "../globals/tr.slint";
 import { FilledButton, OutlinedButton, TextButton } from "../components/buttons.slint";
 import { ScrollView } from "std-widgets.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 
 export component FlashFailureDialog {
     in property <bool> show;
@@ -33,7 +34,7 @@ export component FlashFailureDialog {
 
             VerticalLayout { padding: 24px; spacing: 14px;
                 HorizontalLayout { spacing: 10px;
-                    Text { text: "⚠"; font-size: 22px; color: MaterialPalette.warning; vertical-alignment: center; }
+                    Text { text: "⚠"; font-size: 22px; color: StatusColors.warning; vertical-alignment: center; }
                     Text {
                         text: Tr.flash-error-title;
                         font-size: 17px; font-weight: 700;

@@ -1,6 +1,7 @@
-import { MaterialPalette } from "../globals/material-palette.slint";
+import { MaterialPalette } from "@material";
 import { Tr } from "../globals/tr.slint";
 import { FilledButton, TextButton } from "../components/buttons.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 
 // Mandatory flash-method selection: the flash flow cannot continue until the
 // user explicitly picks Snapdragon or MediaTek, and only the "Continue"
@@ -143,7 +144,7 @@ export component FlashMethodDialog {
                     Text {
                         text: Tr.flash-method-hint;
                         font-size: 12px;
-                        color: MaterialPalette.warning;
+                        color: StatusColors.warning;
                         wrap: word-wrap;
                     }
 

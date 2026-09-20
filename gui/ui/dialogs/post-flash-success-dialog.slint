@@ -1,6 +1,7 @@
-import { MaterialPalette } from "../globals/material-palette.slint";
+import { MaterialPalette } from "@material";
 import { Tr } from "../globals/tr.slint";
 import { FilledButton, OutlinedButton, TextButton } from "../components/buttons.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 
 export component PostFlashSuccessDialog {
     in property <bool> show;
@@ -29,12 +30,12 @@ export component PostFlashSuccessDialog {
                     Image {
                         source: @image-url("../icons/check.svg");
                         width: 22px; height: 22px;
-                        colorize: MaterialPalette.success;
+                        colorize: StatusColors.success;
                         y: (parent.height - 22px) / 2;
                     }
                     Text {
                         text: Tr.flash-complete;
-                        font-size: 18px; font-weight: 700; color: MaterialPalette.success;
+                        font-size: 18px; font-weight: 700; color: StatusColors.success;
                     }
                 }
                 Text {

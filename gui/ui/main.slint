@@ -1,8 +1,9 @@
 // LibreFastbootFirmwareFlasher — Material Design 3 GUI (Slint built-in material)
 
 import { Palette } from "std-widgets.slint";
-import { MaterialPalette } from "globals/material-palette.slint";
+import { MaterialPalette } from "@material";
 import { Tr } from "globals/tr.slint";
+import { LfffScheme } from "globals/lfff-scheme.slint";
 import { ConfirmAction } from "globals/confirm-action.slint";
 import { DeviceInfo, LogEntry, FlashHistoryItem } from "structs.slint";
 import { Sidebar } from "components/sidebar.slint";
@@ -156,7 +157,13 @@ export component MainWindow inherits Window {
     in-out property <string>  flash-fail-error: "";
     in-out property <string>  fastbootd-fallback-detail: "";
 
-    init => { Tr.lang = lang; Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
+    // LfffScheme must be handed to the library palette here: a global cannot
+    // bind another global's `in` property declaratively.
+    init => {
+        Tr.lang = lang;
+        MaterialPalette.schemes = LfffScheme.schemes;
+        Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light;
+    }
     changed lang => { Tr.lang = lang; }
     changed is-dark => { Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
     changed confirm-action => {
