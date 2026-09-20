@@ -1,5 +1,5 @@
-import { Palette, ScrollView, Button } from "std-widgets.slint";
-import { MaterialPalette } from "@material";
+import { Palette, ScrollView } from "std-widgets.slint";
+import { MaterialPalette, TonalButton } from "@material";
 import { Tr } from "../globals/tr.slint";
 import { LogEntry } from "../structs.slint";
 import { StatusColors } from "../globals/status-colors.slint";
@@ -21,7 +21,7 @@ export component LogView inherits Rectangle {
                 color: MaterialPalette.on-surface;
                 horizontal-stretch: 1;
             }
-            Button {
+            TonalButton {
                 text: Tr.export-log;
                 clicked => { export-log(); }
             }
