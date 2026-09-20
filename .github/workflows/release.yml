@@ -398,9 +398,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    container:
-      image: bilelmoussaoui/flatpak-github-actions:freedesktop-25.08
-      options: --privileged
     env:
       VERSION: ${{ inputs.version || github.ref_name }}
       APP_ID: io.github.mrFrok.LibreFastbootFirmwareFlasher
@@ -410,6 +407,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+
+      # Installed here rather than pulled as a prebuilt action container: the
+      # published ones stop at freedesktop 24.08, and this keeps the runtime
+      # version a decision of the manifest rather than of someone's image tag.
+      - name: Install flatpak and the runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y flatpak flatpak-builder
+          # Read from the manifest, so the two cannot drift apart.
+          runtime=$(sed -n "s/^runtime-version: *'\([^']*\)'.*/\1/p" \
+            "packaging/flatpak/$APP_ID.yml")
+          [ -n "$runtime" ] || { echo "no runtime-version in the manifest"; exit 1; }
+          echo "runtime: $runtime"
+          flatpak remote-add --user --if-not-exists \
+            flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub \
+            "org.freedesktop.Platform//$runtime" "org.freedesktop.Sdk//$runtime"
 
       - name: Build the bundle
         run: |
