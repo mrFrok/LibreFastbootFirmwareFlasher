@@ -617,7 +617,6 @@ pub fn register_callbacks(
                         scale_factor: s,
                     });
                 ui.set_pending_scale(0.0);
-                ui.set_effect_opacity(0.0);
             }
         }
     });

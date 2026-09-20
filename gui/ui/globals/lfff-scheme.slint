@@ -23,17 +23,19 @@ export global LfffScheme {
     in property <bool> translucent: false;
 
     out property <MaterialSchemes> schemes:
-        root.translucent ? root.glassify(root.opaque) : root.opaque;
+        root.translucent ? root.glassify(root.scheme-of(root.current)) : root.scheme-of(root.current);
 
-    property <MaterialSchemes> opaque:
-          root.current == AppScheme.blue ? root.blue-scheme
-        : root.current == AppScheme.indigo ? root.indigo-scheme
-        : root.current == AppScheme.teal ? root.teal-scheme
-        : root.current == AppScheme.green ? root.green-scheme
-        : root.current == AppScheme.amber ? root.amber-scheme
-        : root.current == AppScheme.rose ? root.rose-scheme
-        : root.current == AppScheme.violet ? root.violet-scheme
-        : root.blue-scheme;
+    // The colour a scheme *would* have, so a transition can paint itself in the
+    // destination before actually switching to it.
+    public pure function scheme-of(a: AppScheme) -> MaterialSchemes {
+        return a == AppScheme.indigo ? root.indigo-scheme
+             : a == AppScheme.teal   ? root.teal-scheme
+             : a == AppScheme.green  ? root.green-scheme
+             : a == AppScheme.amber  ? root.amber-scheme
+             : a == AppScheme.rose   ? root.rose-scheme
+             : a == AppScheme.violet ? root.violet-scheme
+             : root.blue-scheme;
+    }
 
     pure function glassify(s: MaterialSchemes) -> MaterialSchemes {
         return {

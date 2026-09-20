@@ -49,7 +49,6 @@ export component MainWindow inherits MaterialWindow {
     in-out property <bool>  translucent: false;
     in-out property <float> ui-scale: 1.0;
     in-out property <float> pending-scale: 0;
-    in-out property <float> effect-opacity: 0;
 
     callback set-scale(float);
     callback apply-pending-scale();
@@ -58,31 +57,98 @@ export component MainWindow inherits MaterialWindow {
     callback save-scheme(int);
     callback save-translucent(bool);
 
-    // Scale and language hide their change behind a sheet in the UI's own
-    // background colour: the content dissolves into the window rather than the
-    // lights going out.
-    private property <string> pending-lang: "en";
-
-    // The theme gets a circular reveal from the toggle instead. A sheet cannot
-    // work here: fading to the destination colour makes the second half of the
-    // transition invisible (white sheet over a light theme), and fading to the
-    // old one is just a flash. A circle of the *new* background growing over
-    // the old theme is the change itself, visible the whole way.
+    // One transition for every switch that repaints the whole window: scale,
+    // light/dark, language and colour scheme. A circle of the destination
+    // colour grows from the control that was clicked until it covers the
+    // window; the change is applied underneath, then the circle is hidden.
+    //
+    // The growth is started from a root-level `changed` handler rather than
+    // from the child's callback. That is how the scale transition was already
+    // written, and it is the difference that made the first attempts at a theme
+    // animation do nothing.
+    //
+    // kind: 1 scale, 2 light/dark, 3 language, 4 colour scheme
+    private property <int>    pending-kind: 0;
     private property <bool>   pending-dark: true;
+    private property <string> pending-lang: "en";
+    private property <int>    pending-scheme: 0;
+    private property <bool>   pending-translucent: false;
+    in-out property <int>     transition-request: 0;
+
     // Progress rather than a diameter, with visibility as a separate flag: the
     // circle has to snap back to nothing after the swap, and hiding it is
     // instant where animating a length back to zero is not.
-    private property <bool>  reveal-visible: false;
-    private property <float> reveal-p: 0.0;
+    private property <bool>   reveal-visible: false;
+    private property <float>  reveal-p: 0.0;
     private property <length> reveal-cx: 0px;
     private property <length> reveal-cy: 0px;
     private property <length> reveal-max: 2 * Math.sqrt(
         (root.width / 1px) * (root.width / 1px)
         + (root.height / 1px) * (root.height / 1px)) * 1px;
-    private property <color>  reveal-color: root.pending-dark
-        ? LfffScheme.schemes.dark.background
-        : LfffScheme.schemes.light.background;
+    private property <color>  reveal-color:
+          root.pending-kind == 2
+            ? (root.pending-dark ? LfffScheme.schemes.dark.background
+                                 : LfffScheme.schemes.light.background)
+        : root.pending-kind == 4
+            ? (root.is-dark ? LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).dark.background
+                            : LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).light.background)
+        : MaterialPalette.background;
     animate reveal-p { duration: 420ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+
+    pure function as-scheme(i: int) -> AppScheme {
+        return i == 1 ? AppScheme.indigo
+             : i == 2 ? AppScheme.teal
+             : i == 3 ? AppScheme.green
+             : i == 4 ? AppScheme.amber
+             : i == 5 ? AppScheme.rose
+             : i == 6 ? AppScheme.violet
+             : AppScheme.blue;
+    }
+
+    // Each switch grows from roughly its own place in the top bar.
+    function start-transition(kind: int, cx: length) {
+        root.pending-kind = kind;
+        root.reveal-cx = cx;
+        root.reveal-cy = 24px;
+        root.transition-request += 1;
+    }
+
+    changed transition-request => {
+        root.reveal-visible = true;
+        root.reveal-p = 1.0;
+        transition-timer.running = true;
+    }
+
+    transition-timer := Timer {
+        // Just past the 420ms expansion, so the swap lands under a circle that
+        // already covers the window.
+        interval: 450ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            if root.pending-kind == 1 { root.apply-pending-scale(); }
+            if root.pending-kind == 2 {
+                root.is-dark = root.pending-dark;
+                root.save-theme(root.is-dark);
+            }
+            if root.pending-kind == 3 {
+                root.lang = root.pending-lang;
+                root.save-lang(root.lang);
+            }
+            if root.pending-kind == 4 {
+                root.scheme = root.pending-scheme;
+                root.translucent = root.pending-translucent;
+                root.save-scheme(root.scheme);
+                root.save-translucent(root.translucent);
+            }
+            root.reveal-visible = false;
+            root.reveal-p = 0.0;
+        }
+    }
+
+    changed pending-scale => {
+        if pending-scale > 0 { root.start-transition(1, root.width - 250px); }
+    }
 
     // Page transition
     private property <float> page-opacity: 0.0;
@@ -106,49 +172,6 @@ export component MainWindow inherits MaterialWindow {
 
     animate page-opacity { duration: 250ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
     animate page-x       { duration: 350ms; easing: spring; }
-    animate effect-opacity { duration: 300ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-
-    changed pending-scale => {
-        if pending-scale > 0 {
-            effect-opacity = 1;
-            scale-timer.running = true;
-        }
-    }
-
-    scale-timer := Timer {
-        interval: 350ms;
-        running: false;
-        triggered => {
-            self.running = false;
-            root.apply-pending-scale();
-            root.effect-opacity = 0;
-        }
-    }
-
-    theme-timer := Timer {
-        // Just past the 420ms expansion, so the swap happens under a circle
-        // that already covers the window.
-        interval: 450ms;
-        running: false;
-        triggered => {
-            self.running = false;
-            root.is-dark = root.pending-dark;
-            root.save-theme(root.is-dark);
-            root.reveal-visible = false;
-            root.reveal-p = 0.0;
-        }
-    }
-
-    lang-timer := Timer {
-        interval: 330ms;
-        running: false;
-        triggered => {
-            self.running = false;
-            root.lang = root.pending-lang;
-            root.save-lang(root.lang);
-            root.effect-opacity = 0;
-        }
-    }
 
     // State
     in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—", is-fastboot-mode: false };
@@ -297,26 +320,30 @@ export component MainWindow inherits MaterialWindow {
                 lang: root.lang;
                 is-dark: root.is-dark;
                 scheme: root.scheme;
-                set-scheme(i) => { root.scheme = i; root.save-scheme(i); }
+                set-scheme(i) => {
+                    if i != root.scheme {
+                        root.pending-scheme = i;
+                        root.pending-translucent = root.translucent;
+                        root.start-transition(4, root.width - 162px);
+                    }
+                }
                 translucent: root.translucent;
-                set-translucent(t) => { root.translucent = t; root.save-translucent(t); }
+                set-translucent(t) => {
+                    root.pending-scheme = root.scheme;
+                    root.pending-translucent = t;
+                    root.start-transition(4, root.width - 162px);
+                }
                 ui-scale: root.ui-scale;
                 set-scale(v) => { root.set-scale(v); root.ui-scale = v; }
                 set-lang(l) => {
                     if l != root.lang {
                         root.pending-lang = l;
-                        root.effect-opacity = 1;
-                        lang-timer.running = true;
+                        root.start-transition(3, root.width - 100px);
                     }
                 }
                 toggle-theme => {
                     root.pending-dark = !root.is-dark;
-                    // Grow from the toggle itself, top right.
-                    root.reveal-cx = root.width - 36px;
-                    root.reveal-cy = 24px;
-                    root.reveal-visible = true;
-                    root.reveal-p = 1.0;
-                    theme-timer.running = true;
+                    root.start-transition(2, root.width - 41px);
                 }
             }
 
@@ -600,17 +627,6 @@ export component MainWindow inherits MaterialWindow {
         update-body: root.update-body;
         cancel => { root.show-update-dialog = false; }
         download => { root.open-update-url(); }
-    }
-
-    Rectangle {
-        z: 200;
-        width: 100%;
-        height: 100%;
-        background: MaterialPalette.background;
-        // `effect-opacity` is already animated on the root; animating the bound
-        // property again chains the two and stretches the wipe well past the
-        // 300ms the timers are written against.
-        opacity: root.effect-opacity;
     }
 
     Rectangle {
