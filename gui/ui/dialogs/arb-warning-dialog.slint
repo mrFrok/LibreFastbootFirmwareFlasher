@@ -3,6 +3,11 @@ import { Tr } from "../globals/tr.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
 export component ArbWarningDialog {
+    // A dialog is a full-window overlay: without this the root sizes itself
+    // to the card, and the scrim below covers only the card's own bounds
+    // instead of dimming the app behind it.
+    width: 100%;
+    height: 100%;
     in property <bool> show;
     in property <string> lang: "en";
     in property <int> arb-warning-version: 0;
@@ -15,7 +20,7 @@ export component ArbWarningDialog {
         visible: show;
         opacity: show ? 1.0 : 0.0;
         animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 110; background: MaterialPalette.scrim; width: 100%; height: 100%; TouchArea { }
+        z: 110; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
 
         VerticalLayout { alignment: center;
         HorizontalLayout { alignment: center;

@@ -55,6 +55,21 @@ brew tap mrFrok/lfff
 brew install lfff
 ```
 
+**Flatpak (Linux x86_64)**
+```bash
+flatpak install lfff-gui-linux-x86_64.flatpak   # from the release page
+```
+
+Bundles fastboot, adb, aria2 and payload-dumper, so `lfff deps` is not needed.
+It still needs the usual udev rules on the host for the device to show up.
+
+**AppImage (Linux)**
+```bash
+chmod +x lfff-gui-linux-x86_64.AppImage && ./lfff-gui-linux-x86_64.AppImage
+```
+
+Ships the GUI and the CLI; external tools come from the host, via `lfff deps`.
+
 **Nix / NixOS**
 ```bash
 # Install GUI (default)
@@ -174,6 +189,10 @@ LibreFastbootFirmwareFlasher/
 ├── lfff-gui.desktop
 ├── lfff-gui.svg
 ├── install.sh
+├── packaging/
+│   └── flatpak/             # manifest + AppStream metadata
+├── scripts/
+│   └── update-packaging.py  # repoints flake/AUR/Homebrew/Flatpak at a release
 ├── lib/
 │   └── src/
 │       ├── lib.rs

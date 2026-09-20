@@ -1,8 +1,14 @@
 import { ScrollView } from "std-widgets.slint";
 import { FilledButton, MaterialPalette, TextButton } from "@material";
 import { Tr } from "../globals/tr.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 
 export component UpdateDialog {
+    // A dialog is a full-window overlay: without this the root sizes itself
+    // to the card, and the scrim below covers only the card's own bounds
+    // instead of dimming the app behind it.
+    width: 100%;
+    height: 100%;
     in property <bool> show;
     in property <string> lang: "en";
     in property <string> update-version: "";
@@ -16,7 +22,7 @@ export component UpdateDialog {
         opacity: show ? 1.0 : 0.0;
         animate opacity { duration: 200ms; easing: ease-in-out; }
         width: 100%; height: 100%;
-        background: MaterialPalette.scrim;
+        background: StatusColors.scrim;
         TouchArea { }
 
         VerticalLayout { alignment: center;

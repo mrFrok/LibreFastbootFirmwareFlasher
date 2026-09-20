@@ -24,6 +24,12 @@ export global StatusColors {
     out property <color> success-container:    root.dark ? #005313 : #95F5A5;
     out property <color> on-success-container: root.dark ? #95F5A5 : #00390F;
 
+    // M3 puts the dialog scrim at 32% black, a value tuned for a light UI. The
+    // dark scheme has little headroom below its near-black background, so the
+    // same 32% barely reads as a dim; it takes roughly twice that. The
+    // library's `MaterialPalette.scrim` is the raw colour, with no alpha.
+    out property <color> scrim:                root.dark ? #0000008C : #00000052;
+
     out property <color> drop-shadow:          root.dark ? #00000060 : #00000030;
     out property <color> drop-shadow-heavy:    root.dark ? #00000080 : #00000050;
 }

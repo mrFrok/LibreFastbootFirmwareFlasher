@@ -3,6 +3,11 @@ import { Tr } from "../globals/tr.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
 export component PostFlashSuccessDialog {
+    // A dialog is a full-window overlay: without this the root sizes itself
+    // to the card, and the scrim below covers only the card's own bounds
+    // instead of dimming the app behind it.
+    width: 100%;
+    height: 100%;
     in property <bool> show;
     in property <string> lang: "en";
 
@@ -14,7 +19,7 @@ export component PostFlashSuccessDialog {
         visible: show;
         opacity: show ? 1.0 : 0.0;
         animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        z: 100; background: MaterialPalette.scrim; width: 100%; height: 100%; TouchArea { }
+        z: 100; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
 
         Rectangle {
             x: (parent.width - 460px) / 2;
