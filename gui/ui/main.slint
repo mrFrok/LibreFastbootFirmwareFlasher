@@ -85,17 +85,22 @@ export component MainWindow inherits MaterialWindow {
     private property <length> reveal-max: 2 * Math.sqrt(
         (root.width / 1px) * (root.width / 1px)
         + (root.height / 1px) * (root.height / 1px)) * 1px;
-    // primaryContainer rather than background: every scheme's background is the
-    // same near-neutral #141416, so a circle painted in it looked like plain
-    // dimming and said nothing about the colour being switched to.
+    // Only the scheme switch is tinted, and it uses primaryContainer because
+    // every scheme's `background` is the same near-neutral #141416 — a circle
+    // painted in that said nothing about the colour being moved to. Light/dark
+    // and the rest stay on the background they are heading for: there is no new
+    // accent to announce, and tinting them would make the switch shout.
+    //
+    // Translucent so the sweep reads as tinted glass rather than a slab.
     private property <color>  reveal-color:
-          root.pending-kind == 2
-            ? (root.pending-dark ? LfffScheme.schemes.dark.primaryContainer
-                                 : LfffScheme.schemes.light.primaryContainer)
-        : root.pending-kind == 4
+          root.pending-kind == 4
             ? (root.is-dark ? LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).dark.primaryContainer
                             : LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).light.primaryContainer)
-        : MaterialPalette.primary-container;
+              .with-alpha(0.85)
+        : root.pending-kind == 2
+            ? (root.pending-dark ? LfffScheme.schemes.dark.background
+                                 : LfffScheme.schemes.light.background).with-alpha(0.85)
+        : MaterialPalette.background.with-alpha(0.85);
     animate reveal-p { duration: 420ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
 
     pure function as-scheme(i: int) -> AppScheme {
