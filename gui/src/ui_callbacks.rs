@@ -628,6 +628,12 @@ pub fn register_callbacks(
         save_config(&config);
     });
 
+    ui.on_save_scheme(|i| {
+        let mut config = load_config();
+        config.scheme = i;
+        save_config(&config);
+    });
+
     ui.on_save_theme(|d| {
         let mut config = load_config();
         config.theme = if d {

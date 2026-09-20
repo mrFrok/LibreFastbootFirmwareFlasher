@@ -8,6 +8,10 @@ pub struct Config {
     pub lang: String,
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// Colour scheme index: 0 = blue (LFFF), 1 = indigo (@material default),
+    /// 2 = glass (translucent). Matches `AppScheme` in globals/lfff-scheme.slint.
+    #[serde(default)]
+    pub scheme: i32,
     #[serde(default)]
     pub output_dir: Option<String>,
 }
@@ -25,6 +29,7 @@ impl Default for Config {
             scale: 1.0,
             lang: default_lang(),
             theme: default_theme(),
+            scheme: 0,
             output_dir: None,
         }
     }

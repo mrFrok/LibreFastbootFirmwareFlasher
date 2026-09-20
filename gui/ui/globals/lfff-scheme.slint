@@ -1,21 +1,34 @@
-// LFFF's own colours, expressed as a Material 3 scheme.
+// Colour schemes, switchable while the app runs.
 //
-// The @material palette drives every component from `MaterialPalette.schemes`,
-// an `in` property, so the library's plumbing can be adopted without adopting
-// its default indigo. 36 of the 49 roles below are the values LFFF already
-// used; the rest are the library defaults, and none of those are referenced by
-// our markup (`shadow` and the twelve `*Fixed` roles).
+// @material drives every component from `MaterialPalette.schemes`, and that is
+// an `in` property, so a scheme is just a value to hand it. This is the only
+// way to change the look at runtime: a Slint *style* is fixed at compile time.
 //
-// Applied in main.slint's `init`, since a global cannot bind another global's
-// `in` property declaratively.
+// Generated alongside the migration; see the commit that introduced it for how
+// the role values were derived.
 
 import { MaterialSchemes } from "@material";
 
+export enum AppScheme { blue, indigo, glass }
+
 export global LfffScheme {
-    out property <MaterialSchemes> schemes: {
+    in property <AppScheme> current: AppScheme.blue;
+
+    // The window background carries alpha in `glass`, which is what makes the
+    // window itself translucent. Blur behind it is the compositor's job — Slint
+    // has no API for it.
+    out property <bool> translucent: root.current == AppScheme.glass;
+
+    out property <MaterialSchemes> schemes:
+          root.current == AppScheme.indigo ? root.indigo-scheme
+        : root.current == AppScheme.glass  ? root.glass-scheme
+        : root.blue-scheme;
+
+    // LFFF's own colours.
+    property <MaterialSchemes> blue-scheme: {
         light: {
             primary: #0066CC,
-            surfaceTint: #0066CC,  // = primary
+            surfaceTint: #0066CC,
             onPrimary: #ffffff,
             primaryContainer: #D6E8FF,
             onPrimaryContainer: #002D5C,
@@ -31,31 +44,31 @@ export global LfffScheme {
             onError: #FFFFFF,
             errorContainer: #FFDAD6,
             onErrorContainer: #410002,
-            background: #FDFBFF,  // = surface
-            onBackground: #1C1B1F,  // = onSurface
+            background: #FDFBFF,
+            onBackground: #1C1B1F,
             surface: #FDFBFF,
             onSurface: #1C1B1F,
             surfaceVariant: #E8E0EB,
             onSurfaceVariant: #49454F,
             outline: #79747E,
             outlineVariant: #CAC4D0,
-            shadow: #000000,  // library default
+            shadow: #000000,
             scrim: #00000052,
             inverseSurface: #313033,
             inverseOnSurface: #F4EFF4,
             inversePrimary: #66B2FF,
-            primaryFixed: #D8E2FF,  // library default
-            onPrimaryFixed: #001A42,  // library default
-            primaryFixedDim: #ADC6FF,  // library default
-            onPrimaryFixedVariant: #2B4678,  // library default
-            secondaryFixed: #DBE2F9,  // library default
-            onSecondaryFixed: #141B2C,  // library default
-            secondaryFixedDim: #BFC6DC,  // library default
-            onSecondaryFixedVariant: #3F4759,  // library default
-            tertiaryFixed: #FCD7FB,  // library default
-            onTertiaryFixed: #29132D,  // library default
-            tertiaryFixedDim: #DEBCDF,  // library default
-            onTertiaryFixedVariant: #583E5B,  // library default
+            primaryFixed: #D8E2FF,
+            onPrimaryFixed: #001A42,
+            primaryFixedDim: #ADC6FF,
+            onPrimaryFixedVariant: #2B4678,
+            secondaryFixed: #DBE2F9,
+            onSecondaryFixed: #141B2C,
+            secondaryFixedDim: #BFC6DC,
+            onSecondaryFixedVariant: #3F4759,
+            tertiaryFixed: #FCD7FB,
+            onTertiaryFixed: #29132D,
+            tertiaryFixedDim: #DEBCDF,
+            onTertiaryFixedVariant: #583E5B,
             surfaceDim: #F5F2F8,
             surfaceBright: #FFFFFF,
             surfaceContainerLowest: #FFFFFF,
@@ -66,7 +79,7 @@ export global LfffScheme {
         },
         dark: {
             primary: #66B2FF,
-            surfaceTint: #66B2FF,  // = primary
+            surfaceTint: #66B2FF,
             onPrimary: #002D5C,
             primaryContainer: #004A8C,
             onPrimaryContainer: #D6E8FF,
@@ -82,31 +95,31 @@ export global LfffScheme {
             onError: #690005,
             errorContainer: #93000A,
             onErrorContainer: #FFDAD6,
-            background: #141416,  // = surface
-            onBackground: #E6E1E6,  // = onSurface
+            background: #141416,
+            onBackground: #E6E1E6,
             surface: #141416,
             onSurface: #E6E1E6,
             surfaceVariant: #2A2A2C,
             onSurfaceVariant: #C6C4C8,
             outline: #8E8E93,
             outlineVariant: #444649,
-            shadow: #000000,  // library default
+            shadow: #000000,
             scrim: #00000000,
             inverseSurface: #E6E1E6,
             inverseOnSurface: #1C1B1F,
             inversePrimary: #0066CC,
-            primaryFixed: #D8E2FF,  // library default
-            onPrimaryFixed: #001A42,  // library default
-            primaryFixedDim: #ADC6FF,  // library default
-            onPrimaryFixedVariant: #2B4678,  // library default
-            secondaryFixed: #DBE2F9,  // library default
-            onSecondaryFixed: #141B2C,  // library default
-            secondaryFixedDim: #BFC6DC,  // library default
-            onSecondaryFixedVariant: #3F4759,  // library default
-            tertiaryFixed: #FCD7FB,  // library default
-            onTertiaryFixed: #29132D,  // library default
-            tertiaryFixedDim: #DEBCDF,  // library default
-            onTertiaryFixedVariant: #583E5B,  // library default
+            primaryFixed: #D8E2FF,
+            onPrimaryFixed: #001A42,
+            primaryFixedDim: #ADC6FF,
+            onPrimaryFixedVariant: #2B4678,
+            secondaryFixed: #DBE2F9,
+            onSecondaryFixed: #141B2C,
+            secondaryFixedDim: #BFC6DC,
+            onSecondaryFixedVariant: #3F4759,
+            tertiaryFixed: #FCD7FB,
+            onTertiaryFixed: #29132D,
+            tertiaryFixedDim: #DEBCDF,
+            onTertiaryFixedVariant: #583E5B,
             surfaceDim: #101012,
             surfaceBright: #1C1C1E,
             surfaceContainerLowest: #0E0E10,
@@ -114,6 +127,219 @@ export global LfffScheme {
             surfaceContainer: #1C1C1E,
             surfaceContainerHigh: #28282A,
             surfaceContainerHighest: #323234,
+        },
+    };
+
+    // @material's defaults, for a look that is plain Material rather than LFFF.
+    property <MaterialSchemes> indigo-scheme: {
+        light: {
+            primary: #445E91,
+            surfaceTint: #445E91,
+            onPrimary: #FFFFFF,
+            primaryContainer: #D8E2FF,
+            onPrimaryContainer: #001A42,
+            secondary: #575E71,
+            onSecondary: #FFFFFF,
+            secondaryContainer: #DBE2F9,
+            onSecondaryContainer: #141B2C,
+            tertiary: #715573,
+            onTertiary: #FFFFFF,
+            tertiaryContainer: #FCD7FB,
+            onTertiaryContainer: #29132D,
+            error: #BA1A1A,
+            onError: #FFFFFF,
+            errorContainer: #FFDAD6,
+            onErrorContainer: #410002,
+            background: #F9F9FF,
+            onBackground: #1A1B20,
+            surface: #F9F9FF,
+            onSurface: #1A1B20,
+            surfaceVariant: #E1E2EC,
+            onSurfaceVariant: #44474F,
+            outline: #75777F,
+            outlineVariant: #C4C6D0,
+            shadow: #000000,
+            scrim: #000000,
+            inverseSurface: #2F3036,
+            inverseOnSurface: #F0F0F7,
+            inversePrimary: #ADC6FF,
+            primaryFixed: #D8E2FF,
+            onPrimaryFixed: #001A42,
+            primaryFixedDim: #ADC6FF,
+            onPrimaryFixedVariant: #2B4678,
+            secondaryFixed: #DBE2F9,
+            onSecondaryFixed: #141B2C,
+            secondaryFixedDim: #BFC6DC,
+            onSecondaryFixedVariant: #3F4759,
+            tertiaryFixed: #FCD7FB,
+            onTertiaryFixed: #29132D,
+            tertiaryFixedDim: #DEBCDF,
+            onTertiaryFixedVariant: #583E5B,
+            surfaceDim: #D9D9E0,
+            surfaceBright: #F6F6FF,
+            surfaceContainerLowest: #FFFFFF,
+            surfaceContainerLow: #F3F3FA,
+            surfaceContainer: #EEEDF4,
+            surfaceContainerHigh: #E8E7EF,
+            surfaceContainerHighest: #E2E2E9,
+        },
+        dark: {
+            primary: #ADC6FF,
+            surfaceTint: #ADC6FF,
+            onPrimary: #112F60,
+            primaryContainer: #2B4678,
+            onPrimaryContainer: #D8E2FF,
+            secondary: #BFC6DC,
+            onSecondary: #293041,
+            secondaryContainer: #3F4759,
+            onSecondaryContainer: #DBE2F9,
+            tertiary: #DEBCDF,
+            onTertiary: #402843,
+            tertiaryContainer: #583E5B,
+            onTertiaryContainer: #FCD7FB,
+            error: #FFB4AB,
+            onError: #690005,
+            errorContainer: #93000A,
+            onErrorContainer: #FFDAD6,
+            background: #111318,
+            onBackground: #E2E2E9,
+            surface: #111318,
+            onSurface: #E2E2E9,
+            surfaceVariant: #44474F,
+            onSurfaceVariant: #C4C6D0,
+            outline: #8E9099,
+            outlineVariant: #44474F,
+            shadow: #000000,
+            scrim: #000000,
+            inverseSurface: #E2E2E9,
+            inverseOnSurface: #2F3036,
+            inversePrimary: #445E91,
+            primaryFixed: #D8E2FF,
+            onPrimaryFixed: #001A42,
+            primaryFixedDim: #ADC6FF,
+            onPrimaryFixedVariant: #2B4678,
+            secondaryFixed: #DBE2F9,
+            onSecondaryFixed: #141B2C,
+            secondaryFixedDim: #BFC6DC,
+            onSecondaryFixedVariant: #3F4759,
+            tertiaryFixed: #FCD7FB,
+            onTertiaryFixed: #29132D,
+            tertiaryFixedDim: #DEBCDF,
+            onTertiaryFixedVariant: #583E5B,
+            surfaceDim: #111318,
+            surfaceBright: #37393E,
+            surfaceContainerLowest: #0C0E13,
+            surfaceContainerLow: #1A1B20,
+            surfaceContainer: #1E1F25,
+            surfaceContainerHigh: #282A2F,
+            surfaceContainerHighest: #33353A,
+        },
+    };
+
+    // LFFF's colours with the surface family alpha-blended, for compositors
+    // that blur behind translucent windows.
+    property <MaterialSchemes> glass-scheme: {
+        light: {
+            primary: #0066CC,
+            surfaceTint: #0066CC,
+            onPrimary: #ffffff,
+            primaryContainer: #D6E8FF,
+            onPrimaryContainer: #002D5C,
+            secondary: #5B7DB1,
+            onSecondary: #ffffff,
+            secondaryContainer: #DAE6FA,
+            onSecondaryContainer: #152F52,
+            tertiary: #E67300,
+            onTertiary: #ffffff,
+            tertiaryContainer: #FFE8CC,
+            onTertiaryContainer: #4D2600,
+            error: #BA1A1A,
+            onError: #FFFFFF,
+            errorContainer: #FFDAD6,
+            onErrorContainer: #410002,
+            background: #FDFBFFA6,
+            onBackground: #1C1B1F,
+            surface: #FDFBFFA6,
+            onSurface: #1C1B1F,
+            surfaceVariant: #E8E0EB,
+            onSurfaceVariant: #49454F,
+            outline: #79747E,
+            outlineVariant: #CAC4D0,
+            shadow: #000000,
+            scrim: #00000052,
+            inverseSurface: #313033,
+            inverseOnSurface: #F4EFF4,
+            inversePrimary: #66B2FF,
+            primaryFixed: #D8E2FF,
+            onPrimaryFixed: #001A42,
+            primaryFixedDim: #ADC6FF,
+            onPrimaryFixedVariant: #2B4678,
+            secondaryFixed: #DBE2F9,
+            onSecondaryFixed: #141B2C,
+            secondaryFixedDim: #BFC6DC,
+            onSecondaryFixedVariant: #3F4759,
+            tertiaryFixed: #FCD7FB,
+            onTertiaryFixed: #29132D,
+            tertiaryFixedDim: #DEBCDF,
+            onTertiaryFixedVariant: #583E5B,
+            surfaceDim: #F5F2F8A6,
+            surfaceBright: #FFFFFFB8,
+            surfaceContainerLowest: #FFFFFFC4,
+            surfaceContainerLow: #F7F2FAC4,
+            surfaceContainer: #F3EDF7C4,
+            surfaceContainerHigh: #ECE6F0C4,
+            surfaceContainerHighest: #E6E0E9C4,
+        },
+        dark: {
+            primary: #66B2FF,
+            surfaceTint: #66B2FF,
+            onPrimary: #002D5C,
+            primaryContainer: #004A8C,
+            onPrimaryContainer: #D6E8FF,
+            secondary: #9DBCF3,
+            onSecondary: #152F52,
+            secondaryContainer: #28436E,
+            onSecondaryContainer: #DAE6FA,
+            tertiary: #FFB366,
+            onTertiary: #4D2600,
+            tertiaryContainer: #6B3600,
+            onTertiaryContainer: #FFE8CC,
+            error: #FFB4AB,
+            onError: #690005,
+            errorContainer: #93000A,
+            onErrorContainer: #FFDAD6,
+            background: #141416A6,
+            onBackground: #E6E1E6,
+            surface: #141416A6,
+            onSurface: #E6E1E6,
+            surfaceVariant: #2A2A2C,
+            onSurfaceVariant: #C6C4C8,
+            outline: #8E8E93,
+            outlineVariant: #444649,
+            shadow: #000000,
+            scrim: #00000000,
+            inverseSurface: #E6E1E6,
+            inverseOnSurface: #1C1B1F,
+            inversePrimary: #0066CC,
+            primaryFixed: #D8E2FF,
+            onPrimaryFixed: #001A42,
+            primaryFixedDim: #ADC6FF,
+            onPrimaryFixedVariant: #2B4678,
+            secondaryFixed: #DBE2F9,
+            onSecondaryFixed: #141B2C,
+            secondaryFixedDim: #BFC6DC,
+            onSecondaryFixedVariant: #3F4759,
+            tertiaryFixed: #FCD7FB,
+            onTertiaryFixed: #29132D,
+            tertiaryFixedDim: #DEBCDF,
+            onTertiaryFixedVariant: #583E5B,
+            surfaceDim: #101012A6,
+            surfaceBright: #1C1C1EB8,
+            surfaceContainerLowest: #0E0E10C4,
+            surfaceContainerLow: #141416C4,
+            surfaceContainer: #1C1C1EC4,
+            surfaceContainerHigh: #28282AC4,
+            surfaceContainerHighest: #323234C4,
         },
     };
 }

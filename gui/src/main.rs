@@ -266,6 +266,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_app_version(env!("CARGO_PKG_VERSION").into());
     ui.set_lang(config.lang.as_str().into());
     ui.set_is_dark(config.theme == "dark");
+    ui.set_scheme(config.scheme);
 
     let (ctx, crx) = mpsc::channel::<Cmd>();
     let (mtx, mrx) = mpsc::channel::<WMsg>();

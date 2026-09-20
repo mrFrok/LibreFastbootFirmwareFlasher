@@ -3,7 +3,7 @@
 import { Palette } from "std-widgets.slint";
 import { MaterialPalette, MaterialWindow } from "@material";
 import { Tr } from "globals/tr.slint";
-import { LfffScheme } from "globals/lfff-scheme.slint";
+import { LfffScheme, AppScheme } from "globals/lfff-scheme.slint";
 import { ConfirmAction } from "globals/confirm-action.slint";
 import { DeviceInfo, LogEntry, FlashHistoryItem } from "structs.slint";
 import { Sidebar } from "components/sidebar.slint";
@@ -43,6 +43,8 @@ export component MainWindow inherits MaterialWindow {
     in-out property <int>  page: 0;
     in-out property <string>  lang: "en";
     in-out property <bool>  is-dark: true;
+    // 0 = blue (LFFF), 1 = indigo (@material default), 2 = glass (translucent)
+    in-out property <int>   scheme: 0;
     in-out property <float> ui-scale: 1.0;
     in-out property <float> pending-scale: 0;
     in-out property <float> effect-opacity: 0;
@@ -51,6 +53,7 @@ export component MainWindow inherits MaterialWindow {
     callback apply-pending-scale();
     callback save-lang(string);
     callback save-theme(bool);
+    callback save-scheme(int);
 
     // Page transition
     private property <float> page-opacity: 0.0;
@@ -159,11 +162,22 @@ export component MainWindow inherits MaterialWindow {
 
     // LfffScheme must be handed to the library palette here: a global cannot
     // bind another global's `in` property declaratively.
+    // The scheme has to be pushed into the library palette by hand: a global
+    // cannot bind another global's `in` property declaratively, so every change
+    // re-runs this.
+    function apply-scheme() {
+        LfffScheme.current = root.scheme == 1 ? AppScheme.indigo
+                           : root.scheme == 2 ? AppScheme.glass
+                           : AppScheme.blue;
+        MaterialPalette.schemes = LfffScheme.schemes;
+    }
+
     init => {
         Tr.lang = lang;
-        MaterialPalette.schemes = LfffScheme.schemes;
+        root.apply-scheme();
         Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light;
     }
+    changed scheme => { root.apply-scheme(); }
     changed lang => { Tr.lang = lang; }
     changed is-dark => { Palette.color-scheme = is-dark ? ColorScheme.dark : ColorScheme.light; }
     changed confirm-action => {
@@ -222,6 +236,8 @@ export component MainWindow inherits MaterialWindow {
             TopBar {
                 lang: root.lang;
                 is-dark: root.is-dark;
+                scheme: root.scheme;
+                set-scheme(i) => { root.scheme = i; root.save-scheme(i); }
                 ui-scale: root.ui-scale;
                 set-scale(v) => { root.set-scale(v); root.ui-scale = v; }
                 set-lang(l) => { root.lang = l; root.save-lang(l); }

@@ -8,6 +8,10 @@ import { MaterialPalette, IconButton } from "@material";
 // hairline dividers, and drops the size to 28px.
 component CompactSegmented inherits Rectangle {
     in property <[string]> labels;
+    // When set, segments show a colour dot instead of a label. Used for the
+    // scheme picker, where a swatch says more than a word and needs no
+    // translation.
+    in property <[color]> swatches;
     in property <int> current-index;
     in property <length> segment-width: 30px;
     callback selected(int);
@@ -31,13 +35,21 @@ component CompactSegmented inherits Rectangle {
                 background: MaterialPalette.outline-variant;
             }
 
-            Text {
+            if root.swatches.length == 0: Text {
                 text: label;
                 font-size: 11px; font-weight: 600;
                 color: i == root.current-index
                     ? MaterialPalette.on-secondary-container
                     : MaterialPalette.on-surface-variant;
                 horizontal-alignment: center; vertical-alignment: center;
+            }
+
+            if root.swatches.length > 0: Rectangle {
+                width: 12px; height: 12px;
+                border-radius: self.width / 2;
+                background: root.swatches[i];
+                border-width: 1px;
+                border-color: MaterialPalette.outline-variant;
             }
 
             touch := TouchArea {
@@ -52,10 +64,12 @@ export component TopBar inherits Rectangle {
     in property <string> lang: "en";
     in property <bool> is-dark: true;
     in property <float> ui-scale: 1.0;
+    in property <int> scheme: 0;
 
     callback set-scale(float);
     callback set-lang(string);
     callback toggle-theme();
+    callback set-scheme(int);
 
     // The scale steps, kept in one place so the index the control reports and
     // the factor the callback needs cannot drift apart.
@@ -71,8 +85,6 @@ export component TopBar inherits Rectangle {
 
     HorizontalLayout {
         padding-left: 16px;
-        // Extra right padding so the theme button's tooltip, which is centred on
-        // it, is not clipped by the window edge.
         padding-right: 24px;
         alignment: end; spacing: 8px;
         // Children keep their preferred height and sit centred in the 48px bar;
@@ -86,6 +98,16 @@ export component TopBar inherits Rectangle {
                          : root.ui-scale == root.scales[2] ? 2
                          : 3;
             selected(i) => { root.set-scale(root.scales[i]); }
+        }
+
+        // Swatch = each scheme's dark-mode primary; the third is drawn with
+        // alpha because that scheme is the translucent one.
+        CompactSegmented {
+            labels: ["", "", ""];
+            swatches: [#66B2FF, #ADC6FF, #66B2FF80];
+            segment-width: 26px;
+            current-index: root.scheme;
+            selected(i) => { root.set-scheme(i); }
         }
 
         CompactSegmented {
