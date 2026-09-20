@@ -96,13 +96,13 @@ export component TopBar inherits Rectangle {
         }
 
         // `inline` drops IconButton from a 40px touch target to an 18px icon,
-        // which is the only way the library's own button fits this bar.
+        // which is the only way the library's own button fits this bar. No
+        // tooltip: centred on a button this close to the edge it gets clipped.
         IconButton {
             inline: true;
             icon: root.is-dark
                 ? @image-url("../icons/sun.svg")
                 : @image-url("../icons/moon.svg");
-            tooltip: root.lang == "ru" ? "Сменить тему" : "Toggle theme";
             clicked => { root.toggle-theme(); }
         }
     }
