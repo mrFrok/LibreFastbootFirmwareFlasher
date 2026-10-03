@@ -27,3 +27,27 @@ jobs:
         run: cargo test -p lfff-lib -p lfff-cli
       - name: Packaging script tests
         run: python3 scripts/test_update_packaging.py
+
+  slint-format:
+    runs-on: ubuntu-latest
+    env:
+      # Same version as the slint dependency: the formatter's output can
+      # change between releases. Bump the two together.
+      SLINT_VERSION: 1.18.0
+      SLINT_LSP_SHA256: 7a8dffd76e91a6061e516dee23feffdba4053cbe982faa14ab2651f55f269c60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install slint-lsp
+        run: |
+          curl -fsSLo slint-lsp.tar.gz \
+            "https://github.com/slint-ui/slint/releases/download/v$SLINT_VERSION/slint-lsp-linux.tar.gz"
+          echo "$SLINT_LSP_SHA256  slint-lsp.tar.gz" | sha256sum -c -
+          tar xzf slint-lsp.tar.gz -C "$RUNNER_TEMP"
+      # gui/material-* is vendored upstream code and stays as shipped.
+      - name: Check .slint formatting
+        run: |
+          find gui/ui -name '*.slint' -exec "$RUNNER_TEMP/slint-lsp/slint-lsp" format -i {} +
+          if ! git diff --exit-code -- gui/ui; then
+            echo "::error::.slint files are not formatted. Run: slint-lsp format -i <file>.slint"
+            exit 1
+          fi
