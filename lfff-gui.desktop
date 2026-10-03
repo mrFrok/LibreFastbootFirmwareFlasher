@@ -9,6 +9,6 @@ Exec=lfff-gui
 Icon=lfff-gui
 Terminal=false
 Type=Application
-Categories=Utility;System;
+Categories=Utility;
 Keywords=android;fastboot;firmware;flash;oneplus;realme;oppo;
 StartupNotify=true

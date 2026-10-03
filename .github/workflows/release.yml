@@ -263,9 +263,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
-            libxkbcommon0 libfontconfig1 libfreetype6 libgl1 libegl1 \
+            libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1 \
+            libfontconfig1 libfreetype6 libgl1 libegl1 \
             libwayland-client0 libwayland-cursor0 libwayland-egl1 \
-            libx11-6 libxcursor1 libxi6 libxrandr2 libxcb1 libdbus-1-3
+            libx11-6 libx11-xcb1 libxcursor1 libxi6 libxrandr2 libxcb1 libdbus-1-3 \
+            librsvg2-bin
 
       - name: Assemble the AppDir
         run: |
@@ -304,11 +306,29 @@ jobs:
             | sha256sum -c -
           chmod +x linuxdeploy linuxdeploy-plugin-appimage
           export PATH="$PWD:$PATH"
+          # The windowing libraries are dlopen'd, not linked, so ldd — and
+          # with it linuxdeploy — never sees them. Without them bundled the
+          # AppImage panics on any system lacking libxkbcommon-x11, which is
+          # how the AppImage catalog's test caught it. libGL/libEGL stay
+          # out on purpose: they must match the host's GPU driver, and so do
+          # libxcb, libX11-xcb and the wayland libraries, which the AppImage
+          # excludelist forbids bundling for the same reason.
+          dlopened=()
+          for lib in libxkbcommon.so.0 libxkbcommon-x11.so.0 libxcb-xkb.so.1 \
+                     libXcursor.so.1 libXi.so.6 libXrandr.so.2; do
+            path=$(ldconfig -p | awk -v l="$lib" '$1 == l { print $NF; exit }')
+            [ -n "$path" ] || { echo "error: $lib not installed" >&2; exit 1; }
+            dlopened+=(--library "$path")
+          done
+          # A PNG icon as well: AppImage tooling uses it for thumbnails.
+          rsvg-convert -w 256 -h 256 lfff-gui.svg -o lfff-gui.png
           # linuxdeploy matches the icon to the desktop file's Icon= key.
           ./linuxdeploy \
             --appdir AppDir \
             --executable AppDir/usr/bin/lfff-gui \
+            "${dlopened[@]}" \
             --desktop-file lfff-gui.desktop \
+            --icon-file lfff-gui.png \
             --icon-file lfff-gui.svg \
             --output appimage
           mkdir -p dist
