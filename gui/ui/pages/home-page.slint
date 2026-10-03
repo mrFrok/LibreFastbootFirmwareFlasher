@@ -10,7 +10,8 @@ export component HomePage {
 
     callback navigate-to(int);
 
-    VerticalLayout { spacing: 14px;
+    VerticalLayout {
+        spacing: 14px;
 
         Rectangle {
             border-radius: 12px;
@@ -19,27 +20,58 @@ export component HomePage {
                 : MaterialPalette.error-container.with-alpha(0.25);
             border-width: 1px;
             border-color: MaterialPalette.error;
-            HorizontalLayout { padding-left: 14px; padding-right: 14px; padding-top: 12px; padding-bottom: 12px; spacing: 10px;
-                Text { text: "⚠"; font-size: 15px; width: 20px; vertical-alignment: center;
-                    color: MaterialPalette.error; }
-                VerticalLayout { spacing: 4px; horizontal-stretch: 1;
-                    Text { text: Tr.home-warning; font-size: 13px; wrap: word-wrap;
-                        color: MaterialPalette.on-error-container; }
-                    Text { text: Tr.supported-devices; font-size: 12px; wrap: word-wrap;
-                        color: MaterialPalette.on-error-container; }
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                padding-top: 12px;
+                padding-bottom: 12px;
+                spacing: 10px;
+                Text {
+                    text: "⚠";
+                    font-size: 15px;
+                    width: 20px;
+                    vertical-alignment: center;
+                    color: MaterialPalette.error;
+                }
+
+                VerticalLayout {
+                    spacing: 4px;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: Tr.home-warning;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                        color: MaterialPalette.on-error-container;
+                    }
+
+                    Text {
+                        text: Tr.supported-devices;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                        color: MaterialPalette.on-error-container;
+                    }
                 }
             }
         }
 
-        Rectangle { vertical-stretch: 1; }
-        HorizontalLayout { alignment: center;
-            VerticalLayout { spacing: 10px; alignment: center;
-                HorizontalLayout { alignment: center;
+        Rectangle {
+            vertical-stretch: 1;
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                spacing: 10px;
+                alignment: center;
+                HorizontalLayout {
+                    alignment: center;
                     Image {
                         source: @image-url("../icons/logo_icon.svg");
-                        width: 96px; height: 96px;
+                        width: 96px;
+                        height: 96px;
                     }
                 }
+
                 Text {
                     text: "Libre Fastboot Firmware Flasher";
                     font-size: Typography.headline-small-size;
@@ -48,20 +80,29 @@ export component HomePage {
                     horizontal-alignment: center;
                     letter-spacing: 0.5px;
                 }
+
                 Text {
-                    text: root.app-version + "  •  " + (root.lang == "ru" ? "Инструмент прошивки Android" : "Android firmware flashing tool");
+                    text: root.app-version + "  •  " + (root.lang == "ru" ? "Инструмент прошивки Android"
+                        : root.lang == "zh-CN" ? "Android 固件刷写工具"
+                        : root.lang == "zh-TW" ? "Android 韌體刷寫工具"
+                        : "Android firmware flashing tool");
                     font-size: Typography.body-large-size;
                     color: MaterialPalette.on-surface-variant;
                     horizontal-alignment: center;
                 }
             }
         }
-        Rectangle { vertical-stretch: 1; }
+
+        Rectangle {
+            vertical-stretch: 1;
+        }
 
         // Wraps instead of squeezing four cards into the 448px the content
         // area has at the 700px minimum window width. FlexboxLayout wraps by
         // default, unlike CSS flex.
-        FlexboxLayout { spacing: 10px; alignment: stretch;
+        FlexboxLayout {
+            spacing: 10px;
+            alignment: stretch;
             NavCard {
                 min-width: 150px;
                 horizontal-stretch: 1;
@@ -69,6 +110,7 @@ export component HomePage {
                 icon: @image-url("../icons/smartphone.svg");
                 card-clicked => { root.navigate-to(1); }
             }
+
             NavCard {
                 min-width: 150px;
                 horizontal-stretch: 1;
@@ -76,6 +118,7 @@ export component HomePage {
                 icon: @image-url("../icons/download.svg");
                 card-clicked => { root.navigate-to(2); }
             }
+
             NavCard {
                 min-width: 150px;
                 horizontal-stretch: 1;
@@ -83,6 +126,7 @@ export component HomePage {
                 icon: @image-url("../icons/flash.svg");
                 card-clicked => { root.navigate-to(3); }
             }
+
             NavCard {
                 min-width: 150px;
                 horizontal-stretch: 1;
@@ -93,7 +137,9 @@ export component HomePage {
         }
 
         OutlinedCard {
-            VerticalLayout { padding: 16px; spacing: 8px;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 8px;
                 Text {
                     text: Tr.home-features-title;
                     font-size: Typography.label-medium-size;
@@ -101,15 +147,23 @@ export component HomePage {
                     letter-spacing: 0.8px;
                     color: MaterialPalette.primary;
                 }
+
                 for feat in [
-                    Tr.home-feat1, Tr.home-feat2,
-                    Tr.home-feat3, Tr.home-feat4, Tr.home-feat5,
-                ]: HorizontalLayout { spacing: 10px;
+                    Tr.home-feat1,
+                    Tr.home-feat2,
+                    Tr.home-feat3,
+                    Tr.home-feat4,
+                    Tr.home-feat5,
+                ]: HorizontalLayout {
+                    spacing: 10px;
                     Rectangle {
-                        width: 6px; height: 6px; border-radius: 3px;
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 3px;
                         background: MaterialPalette.tertiary;
                         y: (parent.height - 6px) / 2;
                     }
+
                     Text {
                         text: feat;
                         font-size: Typography.body-medium-size;

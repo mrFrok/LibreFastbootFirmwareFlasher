@@ -20,12 +20,17 @@ export component UpdateDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: ease-in-out; }
-        width: 100%; height: 100%;
+        animate opacity {
+            duration: 200ms;
+            easing: ease-in-out;
+        }
+        width: 100%;
+        height: 100%;
         background: StatusColors.scrim;
         TouchArea { }
 
-        VerticalLayout { alignment: center;
+        VerticalLayout {
+            alignment: center;
             Rectangle {
                 background: MaterialPalette.surface-container-high;
                 border-radius: 16px;
@@ -33,16 +38,25 @@ export component UpdateDialog {
                 border-color: MaterialPalette.outline-variant;
                 clip: true;
 
-                VerticalLayout { spacing: 12px; padding: 20px;
+                VerticalLayout {
+                    spacing: 12px;
+                    padding: 20px;
                     Text {
-                        text: root.lang == "ru" ? "Доступно обновление" : "Update Available";
-                        font-size: 20px; font-weight: 700;
+                        text: root.lang == "ru" ? "Доступно обновление"
+                            : root.lang == "zh-CN" ? "有可用更新"
+                            : root.lang == "zh-TW" ? "有可用更新"
+                            : "Update Available";
+                        font-size: 20px;
+                        font-weight: 700;
                         color: MaterialPalette.on-surface;
                         horizontal-alignment: center;
                     }
 
                     Text {
-                        text: root.lang == "ru" ? "Версия " + root.update-version + " доступна для загрузки." : "Version " + root.update-version + " is available for download.";
+                        text: root.lang == "ru" ? "Версия " + root.update-version + " доступна для загрузки."
+                            : root.lang == "zh-CN" ? "版本 " + root.update-version + " 可供下载。"
+                            : root.lang == "zh-TW" ? "版本 " + root.update-version + " 可供下載。"
+                            : "Version " + root.update-version + " is available for download.";
                         font-size: 14px;
                         color: MaterialPalette.on-surface-variant;
                         horizontal-alignment: center;
@@ -53,7 +67,8 @@ export component UpdateDialog {
                         border-radius: 8px;
                         max-height: 180px;
                         ScrollView {
-                            VerticalLayout { padding: 10px;
+                            VerticalLayout {
+                                padding: 10px;
                                 Text {
                                     text: root.update-body;
                                     font-size: 13px;
@@ -64,13 +79,18 @@ export component UpdateDialog {
                         }
                     }
 
-                    HorizontalLayout { spacing: 8px;
+                    HorizontalLayout {
+                        spacing: 8px;
                         TextButton {
                             text: Tr.cancel;
                             clicked => { root.cancel(); }
                         }
+
                         FilledButton {
-                            text: root.lang == "ru" ? "Скачать" : "Download";
+                            text: root.lang == "ru" ? "Скачать"
+                                : root.lang == "zh-CN" ? "下载"
+                                : root.lang == "zh-TW" ? "下載"
+                                : "Download";
                             clicked => { root.download(); }
                         }
                     }

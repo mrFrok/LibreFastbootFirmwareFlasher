@@ -1,4 +1,9 @@
-import { FilledButton, LinearProgressIndicator, MaterialPalette, OutlineButton } from "@material";
+import {
+    FilledButton,
+    LinearProgressIndicator,
+    MaterialPalette,
+    OutlineButton,
+} from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
 import { DeviceInfo, LogEntry } from "../structs.slint";
@@ -23,35 +28,62 @@ export component PartitionPage {
     callback cancel-flash();
     callback export-partition-log();
 
-    VerticalLayout { spacing: 12px;
+    VerticalLayout {
+        spacing: 12px;
 
         Text {
             text: Tr.nav-part;
-            font-size: 20px; font-weight: 700;
+            font-size: 20px;
+            font-weight: 700;
             color: MaterialPalette.on-surface;
         }
-        DeviceBanner { device: root.device; }
 
-        HorizontalLayout { spacing: 8px;
-            PathField { path: root.single-image-path; horizontal-stretch: 1; }
-            OutlineButton { text: ".img";        clicked => { root.browse-single-image(); } }
-            OutlineButton { text: Tr.find-phone; clicked => { root.check-device(); } }
+        DeviceBanner {
+            device: root.device;
         }
 
-        HorizontalLayout { spacing: 8px; height: 20px;
-            Text { text: Tr.part-lbl; font-size: 15px; font-weight: 500;
-                color: MaterialPalette.on-surface-variant; vertical-alignment: center; }
+        HorizontalLayout {
+            spacing: 8px;
+            PathField {
+                path: root.single-image-path;
+                horizontal-stretch: 1;
+            }
+
+            OutlineButton {
+                text: ".img";
+                clicked => { root.browse-single-image(); }
+            }
+
+            OutlineButton {
+                text: Tr.find-phone;
+                clicked => { root.check-device(); }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            height: 20px;
+            Text {
+                text: Tr.part-lbl;
+                font-size: 15px;
+                font-weight: 500;
+                color: MaterialPalette.on-surface-variant;
+                vertical-alignment: center;
+            }
+
             Text {
                 text: root.partition-name != "" ? root.partition-name : "—";
-                font-size: 15px; font-weight: 600;
+                font-size: 15px;
+                font-weight: 600;
                 color: root.partition-name != "" ? MaterialPalette.primary : MaterialPalette.on-surface-variant;
                 vertical-alignment: center;
             }
         }
 
-        HorizontalLayout { spacing: 6px; height: 36px;
-            for p in ["recovery", "boot", "init_boot", "modem", "vendor_boot"]:
-            TouchArea {
+        HorizontalLayout {
+            spacing: 6px;
+            height: 36px;
+            for p in ["recovery", "boot", "init_boot", "modem", "vendor_boot"]: TouchArea {
                 horizontal-stretch: 1;
                 clicked => { root.partition-name = p; }
                 Rectangle {
@@ -59,30 +91,35 @@ export component PartitionPage {
                     background: root.partition-name == p
                         ? MaterialPalette.primary-container
                         : parent.has-hover
-                            ? MaterialPalette.surface-container-highest
-                            : MaterialPalette.surface-container-high;
+                        ? MaterialPalette.surface-container-highest
+                        : MaterialPalette.surface-container-high;
                     border-width: root.partition-name == p ? 2px : 1px;
                     border-color: root.partition-name == p
                         ? MaterialPalette.primary : MaterialPalette.outline-variant;
-                    animate background   { duration: 80ms; }
+                    animate background { duration: 80ms; }
                     animate border-color { duration: 80ms; }
                     animate border-width { duration: 80ms; }
                     Text {
-                        text: p; font-size: 13px;
+                        text: p;
+                        font-size: 13px;
                         font-weight: root.partition-name == p ? 700 : 400;
                         color: root.partition-name == p
                             ? MaterialPalette.on-primary-container : MaterialPalette.on-surface;
                         animate color { duration: 80ms; }
-                        horizontal-alignment: center; vertical-alignment: center;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
                 }
             }
         }
 
-        HorizontalLayout { spacing: 8px; height: 36px;
+        HorizontalLayout {
+            spacing: 8px;
+            height: 36px;
             Rectangle {
                 horizontal-stretch: 1;
-                height: 36px; border-radius: 12px;
+                height: 36px;
+                border-radius: 12px;
                 background: MaterialPalette.surface-container;
                 border-width: 1px;
                 border-color: custom-part-input.has-focus
@@ -91,8 +128,10 @@ export component PartitionPage {
                 animate border-color { duration: 80ms; }
 
                 custom-part-input := TextInput {
-                    x: 12px; y: 0;
-                    width: parent.width - 24px; height: parent.height;
+                    x: 12px;
+                    y: 0;
+                    width: parent.width - 24px;
+                    height: parent.height;
                     text <=> root.partition-name;
                     font-size: 14px;
                     color: MaterialPalette.on-surface;
@@ -101,33 +140,58 @@ export component PartitionPage {
                 }
 
                 Text {
-                    x: 12px; y: 0;
-                    width: parent.width - 24px; height: parent.height;
+                    x: 12px;
+                    y: 0;
+                    width: parent.width - 24px;
+                    height: parent.height;
                     visible: custom-part-input.text == "";
                     opacity: custom-part-input.text == "" ? 1.0 : 0.0;
-                    text: root.lang == "ru" ? "или введите свой раздел…" : "or type custom partition…";
+                    text: root.lang == "ru" ? "или введите свой раздел…"
+                        : root.lang == "zh-CN" ? "或输入自定义分区…"
+                        : root.lang == "zh-TW" ? "或輸入自訂分區…"
+                        : "or type custom partition…";
                     font-size: 14px;
                     color: MaterialPalette.on-surface-variant;
                     vertical-alignment: center;
-                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                    animate opacity {
+                        duration: 100ms;
+                        easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+                    }
                 }
             }
         }
 
-        if root.is-flashing || root.flash-progress > 0: VerticalLayout { spacing: 6px;
-            if root.flash-status != "": Text { text: root.flash-status; font-size: 14px; color: MaterialPalette.primary; }
-            LinearProgressIndicator { progress: root.flash-progress; }
+        if root.is-flashing || root.flash-progress > 0: VerticalLayout {
+            spacing: 6px;
+            if root.flash-status != "": Text {
+                text: root.flash-status;
+                font-size: 14px;
+                color: MaterialPalette.primary;
+            }
+            LinearProgressIndicator {
+                progress: root.flash-progress;
+            }
         }
 
-        HorizontalLayout { spacing: 8px;
+        HorizontalLayout {
+            spacing: 8px;
             FilledButton {
                 text: root.is-flashing ? Tr.flashing : Tr.flash-part-btn;
                 enabled: !root.is-flashing && root.single-image-path != "" && root.device.connected && root.partition-name != "";
                 clicked => { root.show-partition-reboot-choice(); }
             }
-            if root.is-flashing: OutlineButton { text: Tr.cancel; clicked => { root.cancel-flash(); } }
+
+            if root.is-flashing: OutlineButton {
+                text: Tr.cancel;
+                clicked => { root.cancel-flash(); }
+            }
         }
 
-        LogView { entries: root.partition-log; vertical-stretch: 1; export-status: root.partition-export-status; export-log => { root.export-partition-log(); } }
+        LogView {
+            entries: root.partition-log;
+            vertical-stretch: 1;
+            export-status: root.partition-export-status;
+            export-log => { root.export-partition-log(); }
+        }
     }
 }

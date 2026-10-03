@@ -18,83 +18,146 @@ export component PreloaderWarningDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 110; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
+        animate opacity {
+            duration: 350ms;
+            easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+        }
+        z: 110;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
+        TouchArea { }
 
-        VerticalLayout { alignment: center;
-        HorizontalLayout { alignment: center;
-        Rectangle {
-            width: 480px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 480px;
+                    border-radius: 16px;
+                    background: MaterialPalette.surface-container-high;
+                    animate opacity {
+                        duration: 300ms;
+                        easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+                    }
+                    animate y {
+                        duration: 300ms;
+                        easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+                    }
+                    border-width: 1px;
+                    border-color: MaterialPalette.outline-variant;
+                    clip: true;
 
-            VerticalLayout { padding: 28px; spacing: 12px;
-                HorizontalLayout { spacing: 12px;
-                    Text { text: "⚠"; font-size: 24px; color: StatusColors.warning; vertical-alignment: center; }
-                    Text {
-                        text: Tr.preloader-warning-title;
-                        font-size: 18px; font-weight: 700;
-                        color: StatusColors.warning; vertical-alignment: center;
-                    }
-                }
-                Text {
-                    text: root.lang == "ru"
-                        ? "В прошивке обнаружен preloader.img. Для прошивки preloader требуется preloader mode или brom mode — эти режимы недоступны без авторизации в сервисных утилитах.\n\nПропуск preloader может помочь установить новую прошивку, если стандартный метод не работает, но также может привести к кирпичу!"
-                        : "preloader.img found in firmware. Flashing preloader requires preloader mode or brom mode — these modes are unavailable without authorization in service utilities.\n\nSkipping preloader may help flash new firmware if the standard method fails, but may also brick your device!";
-                    font-size: 13px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                VerticalLayout { spacing: 6px;
-                    Text {
-                        text: Tr.preloader-skip-hint;
-                        font-size: 12px; color: StatusColors.warning; wrap: word-wrap;
-                    }
-                    TouchArea {
-                        height: 24px;
-                        clicked => { root.skip-preloader = !root.skip-preloader; }
-                        HorizontalLayout { spacing: 10px;
-                            Rectangle {
-                                width: 18px; height: 18px; border-radius: 4px;
-                                border-width: 2px;
-                                border-color: root.skip-preloader ? MaterialPalette.primary : MaterialPalette.outline;
-                                background: root.skip-preloader ? MaterialPalette.primary : transparent;
-                                animate background { duration: 100ms; }
-                                animate border-color { duration: 100ms; }
-                                y: (parent.height - 18px) / 2;
-                                Text {
-                                    visible: root.skip-preloader;
-                                    opacity: root.skip-preloader ? 1.0 : 0.0;
-                                    text: "✓"; font-size: 14px; font-weight: 700;
-                                    color: MaterialPalette.on-primary;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                    VerticalLayout {
+                        padding: 28px;
+                        spacing: 12px;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Text {
+                                text: "⚠";
+                                font-size: 24px;
+                                color: StatusColors.warning;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: Tr.preloader-warning-title;
+                                font-size: 18px;
+                                font-weight: 700;
+                                color: StatusColors.warning;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        Text {
+                            text: root.lang == "ru"
+                                ? "В прошивке обнаружен preloader.img. Для прошивки preloader требуется preloader mode или brom mode — эти режимы недоступны без авторизации в сервисных утилитах.\n\nПропуск preloader может помочь установить новую прошивку, если стандартный метод не работает, но также может привести к кирпичу!"
+                                : root.lang == "zh-CN"
+                                ? "固件中检测到 preloader.img。刷写 preloader 需要 preloader 模式或 brom 模式——这些模式在没有服务工具授权的情况下不可用。\n\n在标准方法失败时，跳过 preloader 可能有助于刷入新固件，但也可能导致设备变砖！"
+                                : root.lang == "zh-TW"
+                                ? "韌體中偵測到 preloader.img。刷寫 preloader 需要 preloader 模式或 brom 模式——這些模式在沒有服務工具授權的情況下無法使用。\n\n在標準方法失敗時，略過 preloader 可能有助於刷入新韌體，但也可能導致裝置變磚！"
+                                : "preloader.img found in firmware. Flashing preloader requires preloader mode or brom mode — these modes are unavailable without authorization in service utilities.\n\nSkipping preloader may help flash new firmware if the standard method fails, but may also brick your device!";
+                            font-size: 13px;
+                            color: MaterialPalette.on-surface-variant;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle {
+                            vertical-stretch: 1;
+                        }
+
+                        VerticalLayout {
+                            spacing: 6px;
+                            Text {
+                                text: Tr.preloader-skip-hint;
+                                font-size: 12px;
+                                color: StatusColors.warning;
+                                wrap: word-wrap;
+                            }
+
+                            TouchArea {
+                                height: 24px;
+                                clicked => { root.skip-preloader = !root.skip-preloader; }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Rectangle {
+                                        width: 18px;
+                                        height: 18px;
+                                        border-radius: 4px;
+                                        border-width: 2px;
+                                        border-color: root.skip-preloader ? MaterialPalette.primary : MaterialPalette.outline;
+                                        background: root.skip-preloader ? MaterialPalette.primary : transparent;
+                                        animate background { duration: 100ms; }
+                                        animate border-color { duration: 100ms; }
+                                        y: (parent.height - 18px) / 2;
+                                        Text {
+                                            visible: root.skip-preloader;
+                                            opacity: root.skip-preloader ? 1.0 : 0.0;
+                                            text: "✓";
+                                            font-size: 14px;
+                                            font-weight: 700;
+                                            color: MaterialPalette.on-primary;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            animate opacity {
+                                                duration: 100ms;
+                                                easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        text: root.lang == "ru" ? "Пропустить preloader (риск кирпича!)"
+                                            : root.lang == "zh-CN" ? "跳过 preloader（有变砖风险！）"
+                                            : root.lang == "zh-TW" ? "略過 preloader（有變磚風險！）"
+                                            : "Skip preloader (brick risk!)";
+                                        font-size: 14px;
+                                        color: MaterialPalette.error;
+                                        vertical-alignment: center;
+                                    }
                                 }
                             }
-                            Text {
-                                text: root.lang == "ru" ? "Пропустить preloader (риск кирпича!)" : "Skip preloader (brick risk!)";
-                                font-size: 14px; color: MaterialPalette.error; vertical-alignment: center;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: end;
+                            TextButton {
+                                text: Tr.cancel;
+                                clicked => { root.cancel(); }
+                            }
+
+                            FilledButton {
+                                text: root.lang == "ru" ? "Продолжить"
+                                    : root.lang == "zh-CN" ? "继续"
+                                    : root.lang == "zh-TW" ? "繼續"
+                                    : "Continue";
+                                clicked => { root.confirm(); }
                             }
                         }
                     }
                 }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton {
-                        text: Tr.cancel;
-                        clicked => { root.cancel(); }
-                    }
-                    FilledButton {
-                        text: root.lang == "ru" ? "Продолжить" : "Continue";
-                        clicked => { root.confirm(); }
-                    }
-                }
             }
-        }
-        }
         }
     }
 }

@@ -1,4 +1,9 @@
-import { FilledButton, LinearProgressIndicator, MaterialPalette, TextButton } from "@material";
+import {
+    FilledButton,
+    LinearProgressIndicator,
+    MaterialPalette,
+    TextButton,
+} from "@material";
 import { Tr } from "../globals/tr.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
@@ -20,28 +25,51 @@ export component CableTestDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
+        animate opacity {
+            duration: 200ms;
+            easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+        }
+        animate y {
+            duration: 300ms;
+            easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
+        TouchArea { }
 
         Rectangle {
             x: (parent.width - 440px) / 2;
             y: (parent.height - 260px) / 2;
-            width: 440px; height: 260px;
+            width: 440px;
+            height: 260px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
-            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
+            border-width: 1px;
+            border-color: MaterialPalette.outline-variant;
+            clip: true;
 
-            VerticalLayout { padding: 24px; spacing: 14px;
-                HorizontalLayout { spacing: 10px;
-                    Text { text: "🔌"; font-size: 22px; vertical-alignment: center; }
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+                HorizontalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: "🔌";
+                        font-size: 22px;
+                        vertical-alignment: center;
+                    }
+
                     Text {
                         text: Tr.cable-test-title;
-                        font-size: 17px; font-weight: 700;
+                        font-size: 17px;
+                        font-weight: 700;
                         color: MaterialPalette.on-surface;
                         vertical-alignment: center;
                     }
                 }
+
                 Text {
                     text: root.cable-test-status;
                     font-size: 13px;
@@ -49,16 +77,29 @@ export component CableTestDialog {
                     wrap: word-wrap;
                     min-height: 40px;
                 }
-                LinearProgressIndicator { progress: root.cable-test-progress; }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
+
+                LinearProgressIndicator {
+                    progress: root.cable-test-progress;
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
                     TextButton {
                         text: Tr.cancel;
                         enabled: !root.cable-test-passed;
                         clicked => { root.cancel(); }
                     }
+
                     FilledButton {
-                        text: root.lang == "ru" ? "Продолжить →" : "Continue →";
+                        text: root.lang == "ru" ? "Продолжить →"
+                            : root.lang == "zh-CN" ? "继续 →"
+                            : root.lang == "zh-TW" ? "繼續 →"
+                            : "Continue →";
                         enabled: root.cable-test-passed;
                         clicked => { root.continue-flash(); }
                     }

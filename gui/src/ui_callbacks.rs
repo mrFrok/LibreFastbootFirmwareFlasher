@@ -290,6 +290,10 @@ pub fn poll(
                 ui.set_cable_test_status(
                     if ui.get_lang() == "ru" {
                         "Подготовка к тесту..."
+                    } else if ui.get_lang() == "zh-CN" {
+                        "正在准备测试..."
+                    } else if ui.get_lang() == "zh-TW" {
+                        "正在準備測試..."
                     } else {
                         "Preparing test..."
                     }

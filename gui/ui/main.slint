@@ -20,10 +20,14 @@ import { AboutPage } from "pages/about-page.slint";
 import { FlashMethodDialog } from "dialogs/flash-method-dialog.slint";
 import { FlashAllRebootDialog } from "dialogs/flash-all-reboot-dialog.slint";
 import { FlashAllFinalDialog } from "dialogs/flash-all-final-dialog.slint";
-import { SourceFlashFinalDialog } from "dialogs/source-flash-final-dialog.slint";
+import {
+    SourceFlashFinalDialog,
+} from "dialogs/source-flash-final-dialog.slint";
 import { PartitionRebootDialog } from "dialogs/partition-reboot-dialog.slint";
 import { PartitionFinalDialog } from "dialogs/partition-final-dialog.slint";
-import { PostFlashSuccessDialog } from "dialogs/post-flash-success-dialog.slint";
+import {
+    PostFlashSuccessDialog,
+} from "dialogs/post-flash-success-dialog.slint";
 import { CableTestDialog } from "dialogs/cable-test-dialog.slint";
 import { FlashFailureDialog } from "dialogs/flash-failure-dialog.slint";
 import { ArbWarningDialog, ArbState } from "dialogs/arb-warning-dialog.slint";
@@ -42,13 +46,13 @@ export component MainWindow inherits MaterialWindow {
     min-height: 500px;
 
     // Pages: 0=Home 1=Device 2=Download 3=Flash 4=Partition 5=History 6=About
-    in-out property <int>  page: 0;
-    in-out property <string>  lang: "en";
-    in-out property <bool>  is-dark: true;
+    in-out property <int> page: 0;
+    in-out property <string> lang: "en";
+    in-out property <bool> is-dark: true;
     // Index into AppScheme: 0 blue, 1 indigo, 2 teal, 3 green, 4 amber,
     // 5 rose, 6 violet. Translucency is independent of the colour.
-    in-out property <int>   scheme: 0;
-    in-out property <bool>  translucent: false;
+    in-out property <int> scheme: 0;
+    in-out property <bool> translucent: false;
     in-out property <float> ui-scale: 1.0;
     in-out property <float> pending-scale: 0;
 
@@ -70,18 +74,18 @@ export component MainWindow inherits MaterialWindow {
     // animation do nothing.
     //
     // kind: 1 scale, 2 light/dark, 3 language, 4 colour scheme
-    private property <int>    pending-kind: 0;
-    private property <bool>   pending-dark: true;
+    private property <int> pending-kind: 0;
+    private property <bool> pending-dark: true;
     private property <string> pending-lang: "en";
-    private property <int>    pending-scheme: 0;
-    private property <bool>   pending-translucent: false;
-    in-out property <int>     transition-request: 0;
+    private property <int> pending-scheme: 0;
+    private property <bool> pending-translucent: false;
+    in-out property <int> transition-request: 0;
 
     // Progress rather than a diameter, with visibility as a separate flag: the
     // circle has to snap back to nothing after the swap, and hiding it is
     // instant where animating a length back to zero is not.
-    private property <bool>   reveal-visible: false;
-    private property <float>  reveal-p: 0.0;
+    private property <bool> reveal-visible: false;
+    private property <float> reveal-p: 0.0;
     private property <length> reveal-cx: 0px;
     private property <length> reveal-cy: 0px;
     private property <length> reveal-max: 2 * Math.sqrt(
@@ -96,25 +100,27 @@ export component MainWindow inherits MaterialWindow {
     // Translucent so the sweep reads as tinted glass rather than a slab. At 0.6
     // the swap underneath is faintly visible, which is the trade for seeing the
     // interface through the wash.
-    private property <color>  reveal-color:
+    private property <color> reveal-color:
           root.pending-kind == 4
-            ? (root.is-dark ? LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).dark.primaryContainer
-                            : LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).light.primaryContainer)
-              .with-alpha(0.6)
+        ? (root.is-dark ? LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).dark.primaryContainer
+        : LfffScheme.scheme-of(root.as-scheme(root.pending-scheme)).light.primaryContainer).with-alpha(0.6)
         : root.pending-kind == 2
-            ? (root.pending-dark ? LfffScheme.schemes.dark.background
-                                 : LfffScheme.schemes.light.background).with-alpha(0.6)
+        ? (root.pending-dark ? LfffScheme.schemes.dark.background
+        : LfffScheme.schemes.light.background).with-alpha(0.6)
         : MaterialPalette.background.with-alpha(0.6);
-    animate reveal-p { duration: 420ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+    animate reveal-p {
+        duration: 420ms;
+        easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+    }
 
     pure function as-scheme(i: int) -> AppScheme {
         return i == 1 ? AppScheme.indigo
-             : i == 2 ? AppScheme.teal
-             : i == 3 ? AppScheme.green
-             : i == 4 ? AppScheme.amber
-             : i == 5 ? AppScheme.rose
-             : i == 6 ? AppScheme.violet
-             : AppScheme.blue;
+            : i == 2 ? AppScheme.teal
+            : i == 3 ? AppScheme.green
+            : i == 4 ? AppScheme.amber
+            : i == 5 ? AppScheme.rose
+            : i == 6 ? AppScheme.violet
+            : AppScheme.blue;
     }
 
     // Each switch grows from roughly its own place in the top bar.
@@ -182,22 +188,28 @@ export component MainWindow inherits MaterialWindow {
         }
     }
 
-    animate page-opacity { duration: 250ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-    animate page-x       { duration: 350ms; easing: spring; }
+    animate page-opacity {
+        duration: 250ms;
+        easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+    }
+    animate page-x {
+        duration: 350ms;
+        easing: spring;
+    }
 
     // State
     in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—", is-fastboot-mode: false };
-    in-out property <string>  firmware-path;
-    in-out property <int>     flash-source-mode: 0;
-    in-out property <string>  source-dir;
-    in-out property <int>     source-image-count: 0;
-    in-out property <int>     source-total-ops: 0;
-    in-out property <string>  single-image-path;
-    in-out property <string>  partition-name;
-    in-out property <bool>    is-flashing: false;
-    in-out property <float>   flash-progress: 0;
-    in-out property <string>  flash-status;
-    in-out property <string>  current-partition;
+    in-out property <string> firmware-path;
+    in-out property <int> flash-source-mode: 0;
+    in-out property <string> source-dir;
+    in-out property <int> source-image-count: 0;
+    in-out property <int> source-total-ops: 0;
+    in-out property <string> single-image-path;
+    in-out property <string> partition-name;
+    in-out property <bool> is-flashing: false;
+    in-out property <float> flash-progress: 0;
+    in-out property <string> flash-status;
+    in-out property <string> current-partition;
     in-out property <[LogEntry]> device-log: [];
     in-out property <[LogEntry]> download-log: [];
     in-out property <[LogEntry]> flash-log: [];
@@ -207,48 +219,48 @@ export component MainWindow inherits MaterialWindow {
     in-out property <string> partition-export-status: "";
     in-out property <string> device-export-status: "";
     in-out property <string> download-export-status: "";
-    in-out property <string>  output-dir;
-    in-out property <string>  download-url;
-    in-out property <string>  dl-speed;
-    in-out property <string>  dl-eta;
-    in-out property <string>  dl-downloaded;
-    in-out property <string>  dl-total;
-    in-out property <float>   dl-percent: 0;
-    in-out property <bool>    is-downloading: false;
-    in-out property <string>  test-status;
-    in-out property <int>     test-step: 0;
-    in-out property <string>  skip-partitions;
-    in-out property <bool>    show-skip-partitions: false;
-    in-out property <bool>    show-confirm: false;
+    in-out property <string> output-dir;
+    in-out property <string> download-url;
+    in-out property <string> dl-speed;
+    in-out property <string> dl-eta;
+    in-out property <string> dl-downloaded;
+    in-out property <string> dl-total;
+    in-out property <float> dl-percent: 0;
+    in-out property <bool> is-downloading: false;
+    in-out property <string> test-status;
+    in-out property <int> test-step: 0;
+    in-out property <string> skip-partitions;
+    in-out property <bool> show-skip-partitions: false;
+    in-out property <bool> show-confirm: false;
     // Which confirmation dialog is visible — see the ConfirmAction global
     // (globals/confirm-action.slint) for the value names.
-    in-out property <int>     confirm-action: 0;
-    in-out property <int>     reboot-choice: 0;
+    in-out property <int> confirm-action: 0;
+    in-out property <int> reboot-choice: 0;
     // Mandatory flash method: 0 = not chosen, 1 = Snapdragon, 2 = MediaTek.
     // Flashing never starts while this is 0.
-    in-out property <int>     flash-method: 0;
+    in-out property <int> flash-method: 0;
     // Extracted/validated firmware directory, set by the worker via FlashPrepared.
-    in-out property <string>  prepared-dir: "";
-    in-out property <bool>    show-arb-warning: false;
+    in-out property <string> prepared-dir: "";
+    in-out property <bool> show-arb-warning: false;
     in-out property <ArbState> arb-warning-state: ArbState.known;
-    in-out property <int>     arb-warning-version: 0;
-    in-out property <bool>    skip-xbl-abl: false;
-    in-out property <bool>    skip-preloader: false;
-    in-out property <bool>    show-preloader-warning: false;
-    in-out property <bool>    pending-source-flash: false;
-    in-out property <string>  app-version: "dev";
-    in-out property <bool>    show-update-dialog: false;
-    in-out property <string>  update-version: "";
-    in-out property <string>  update-url: "";
-    in-out property <string>  update-body: "";
-    in-out property <float>   cable-test-progress: 0;
-    in-out property <string>  cable-test-status: "";
-    in-out property <bool>    cable-test-passed: false;
-    in-out property <string>  flash-failed-partitions: "";
-    in-out property <string>  flash-fail-partition: "";
-    in-out property <string>  flash-fail-slot: "";
-    in-out property <string>  flash-fail-error: "";
-    in-out property <string>  fastbootd-fallback-detail: "";
+    in-out property <int> arb-warning-version: 0;
+    in-out property <bool> skip-xbl-abl: false;
+    in-out property <bool> skip-preloader: false;
+    in-out property <bool> show-preloader-warning: false;
+    in-out property <bool> pending-source-flash: false;
+    in-out property <string> app-version: "dev";
+    in-out property <bool> show-update-dialog: false;
+    in-out property <string> update-version: "";
+    in-out property <string> update-url: "";
+    in-out property <string> update-body: "";
+    in-out property <float> cable-test-progress: 0;
+    in-out property <string> cable-test-status: "";
+    in-out property <bool> cable-test-passed: false;
+    in-out property <string> flash-failed-partitions: "";
+    in-out property <string> flash-fail-partition: "";
+    in-out property <string> flash-fail-slot: "";
+    in-out property <string> flash-fail-error: "";
+    in-out property <string> fastbootd-fallback-detail: "";
 
     // LfffScheme must be handed to the library palette here: a global cannot
     // bind another global's `in` property declaratively.
@@ -257,12 +269,12 @@ export component MainWindow inherits MaterialWindow {
     // re-runs this.
     function apply-scheme() {
         LfffScheme.current = root.scheme == 1 ? AppScheme.indigo
-                           : root.scheme == 2 ? AppScheme.teal
-                           : root.scheme == 3 ? AppScheme.green
-                           : root.scheme == 4 ? AppScheme.amber
-                           : root.scheme == 5 ? AppScheme.rose
-                           : root.scheme == 6 ? AppScheme.violet
-                           : AppScheme.blue;
+            : root.scheme == 2 ? AppScheme.teal
+            : root.scheme == 3 ? AppScheme.green
+            : root.scheme == 4 ? AppScheme.amber
+            : root.scheme == 5 ? AppScheme.rose
+            : root.scheme == 6 ? AppScheme.violet
+            : AppScheme.blue;
         LfffScheme.translucent = root.translucent;
         MaterialPalette.schemes = LfffScheme.schemes;
     }
@@ -280,18 +292,26 @@ export component MainWindow inherits MaterialWindow {
         if confirm-action == ConfirmAction.cable-test { root.run-cable-test(); }
     }
 
-    callback check-device();       callback browse-firmware();
-    callback browse-folder();      callback browse-single-image();
+    callback check-device();
+    callback browse-firmware();
+    callback browse-folder();
+    callback browse-single-image();
     callback browse-source-dir();
     callback start-flash-from-source();
-    callback start-flash();        callback start-single-flash();
-    callback cancel-flash();       callback check-deps();
-    callback install-deps();       callback download-firmware(string);
+    callback start-flash();
+    callback start-single-flash();
+    callback cancel-flash();
+    callback check-deps();
+    callback install-deps();
+    callback download-firmware(string);
     callback cancel-download();
-    callback extract-firmware();   callback open-url(string);
+    callback extract-firmware();
+    callback open-url(string);
     callback browse-output-dir();
-    callback paste-clipboard();    callback request-back();
-    callback run-driver-test();    callback get-device-info();
+    callback paste-clipboard();
+    callback request-back();
+    callback run-driver-test();
+    callback get-device-info();
     callback reboot-to(string);
     callback prepare-flash();
     callback retry-flash();
@@ -326,7 +346,8 @@ export component MainWindow inherits MaterialWindow {
         }
 
         // ── Content area ──────────────────────────────────────────────────────
-        VerticalLayout { horizontal-stretch: 1;
+        VerticalLayout {
+            horizontal-stretch: 1;
 
             // ── Top bar ───────────────────────────────────────────────────────
             TopBar {
@@ -351,7 +372,7 @@ export component MainWindow inherits MaterialWindow {
                 set-lang(l) => {
                     if l != root.lang {
                         root.pending-lang = l;
-                        root.start-transition(3, root.width - 100px);
+                        root.start-transition(3, root.width - 134px);
                     }
                 }
                 toggle-theme => {
@@ -371,7 +392,10 @@ export component MainWindow inherits MaterialWindow {
                     height: parent.height;
                     x: root.page-x;
 
-                    VerticalLayout { padding: 24px; spacing: 14px; height: 100%;
+                    VerticalLayout {
+                        padding: 24px;
+                        spacing: 14px;
+                        height: 100%;
 
                         if root.page == 0: HomePage {
                             app-version: root.app-version;
@@ -489,7 +513,10 @@ export component MainWindow inherits MaterialWindow {
                         ? MaterialPalette.surface-container-low
                         : #fafafa;
                     opacity: root.page-opacity;
-                    animate opacity { duration: 300ms; easing: ease-in-out; }
+                    animate opacity {
+                        duration: 300ms;
+                        easing: ease-in-out;
+                    }
                 }
             }
         }

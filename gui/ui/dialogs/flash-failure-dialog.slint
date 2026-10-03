@@ -1,4 +1,9 @@
-import { FilledButton, MaterialPalette, OutlineButton, TextButton } from "@material";
+import {
+    FilledButton,
+    MaterialPalette,
+    OutlineButton,
+    TextButton,
+} from "@material";
 import { Tr } from "../globals/tr.slint";
 import { ScrollView } from "std-widgets.slint";
 import { StatusColors } from "../globals/status-colors.slint";
@@ -24,30 +29,54 @@ export component FlashFailureDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
+        animate opacity {
+            duration: 200ms;
+            easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+        }
+        animate y {
+            duration: 300ms;
+            easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
+        TouchArea { }
 
         Rectangle {
             x: (parent.width - 480px) / 2;
             y: (parent.height - 320px) / 2;
-            width: 480px; height: root.is-session-error ? 320px : 280px;
+            width: 480px;
+            height: root.is-session-error ? 320px : 280px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
-            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
+            border-width: 1px;
+            border-color: MaterialPalette.outline-variant;
+            clip: true;
 
-            VerticalLayout { padding: 24px; spacing: 14px;
-                HorizontalLayout { spacing: 10px;
-                    Text { text: "⚠"; font-size: 22px; color: StatusColors.warning; vertical-alignment: center; }
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+                HorizontalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: "⚠";
+                        font-size: 22px;
+                        color: StatusColors.warning;
+                        vertical-alignment: center;
+                    }
+
                     Text {
                         text: Tr.flash-error-title;
-                        font-size: 17px; font-weight: 700;
+                        font-size: 17px;
+                        font-weight: 700;
                         color: MaterialPalette.error;
                         vertical-alignment: center;
                     }
                 }
 
-                if root.is-session-error: ScrollView { vertical-stretch: 1;
+                if root.is-session-error: ScrollView {
+                    vertical-stretch: 1;
                     Text {
                         text: root.flash-fail-error;
                         font-size: 13px;
@@ -59,6 +88,10 @@ export component FlashFailureDialog {
                 if !root.is-session-error: Text {
                     text: root.lang == "ru"
                         ? "Раздел " + root.flash-fail-partition + "_" + root.flash-fail-slot + " не удалось прошить"
+                        : root.lang == "zh-CN"
+                        ? "刷写 " + root.flash-fail-partition + "_" + root.flash-fail-slot + " 失败"
+                        : root.lang == "zh-TW"
+                        ? "刷寫 " + root.flash-fail-partition + "_" + root.flash-fail-slot + " 失敗"
                         : "Failed to flash " + root.flash-fail-partition + "_" + root.flash-fail-slot;
                     font-size: 14px;
                     color: MaterialPalette.on-surface;
@@ -81,9 +114,13 @@ export component FlashFailureDialog {
                     wrap: word-wrap;
                 }
 
-                Rectangle { vertical-stretch: 1; }
+                Rectangle {
+                    vertical-stretch: 1;
+                }
 
-                HorizontalLayout { spacing: 8px; alignment: end;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
                     if root.is-session-error: FilledButton {
                         text: Tr.dismiss;
                         clicked => { root.close(); }

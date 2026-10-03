@@ -29,24 +29,32 @@ component CompactSegmented inherits Rectangle {
             background: i == root.current-index
                 ? MaterialPalette.secondary-container
                 : (touch.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent);
-            animate background { duration: 120ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+            animate background {
+                duration: 120ms;
+                easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+            }
 
             if i > 0: Rectangle {
-                x: 0; width: 1px; height: 100%;
+                x: 0;
+                width: 1px;
+                height: 100%;
                 background: MaterialPalette.outline-variant;
             }
 
             if root.swatches.length == 0: Text {
                 text: label;
-                font-size: 11px; font-weight: 600;
+                font-size: 11px;
+                font-weight: 600;
                 color: i == root.current-index
                     ? MaterialPalette.on-secondary-container
                     : MaterialPalette.on-surface-variant;
-                horizontal-alignment: center; vertical-alignment: center;
+                horizontal-alignment: center;
+                vertical-alignment: center;
             }
 
             if root.swatches.length > 0: Rectangle {
-                width: 12px; height: 12px;
+                width: 12px;
+                height: 12px;
                 border-radius: self.width / 2;
                 background: root.swatches[i];
                 border-width: 1px;
@@ -80,19 +88,21 @@ export component TopBar inherits Rectangle {
     // Each scheme's own dark-mode primary, so the swatch names the colour.
     private property <[color]> swatches: [#66B2FF, #ADC6FF, #00C7BF, #7EC16D, #E39C40, #F68792, #BA98F6];
 
-
     height: 48px;
     background: MaterialPalette.surface-container;
 
     Rectangle {
-        y: parent.height - 1px; height: 1px; width: 100%;
+        y: parent.height - 1px;
+        height: 1px;
+        width: 100%;
         background: MaterialPalette.outline-variant;
     }
 
     HorizontalLayout {
         padding-left: 16px;
         padding-right: 24px;
-        alignment: end; spacing: 8px;
+        alignment: end;
+        spacing: 8px;
         // Children keep their preferred height and sit centred in the 48px bar;
         // a manual `y` would be overridden by the layout.
         cross-axis-alignment: center;
@@ -100,9 +110,9 @@ export component TopBar inherits Rectangle {
         CompactSegmented {
             labels: ["S", "M", "L", "XL"];
             current-index: root.ui-scale == root.scales[0] ? 0
-                         : root.ui-scale == root.scales[1] ? 1
-                         : root.ui-scale == root.scales[2] ? 2
-                         : 3;
+                : root.ui-scale == root.scales[1] ? 1
+                : root.ui-scale == root.scales[2] ? 2
+                : 3;
             selected(i) => { root.set-scale(root.scales[i]); }
         }
 
@@ -111,7 +121,8 @@ export component TopBar inherits Rectangle {
         // own DropDownMenu wraps a text field with a 56px minimum height, which
         // is taller than the bar, so this is a PopupWindow.
         Rectangle {
-            height: 28px; width: 40px;
+            height: 28px;
+            width: 40px;
             border-radius: self.height / 2;
             border-width: 1px;
             border-color: MaterialPalette.outline-variant;
@@ -120,7 +131,8 @@ export component TopBar inherits Rectangle {
             animate background { duration: 120ms; }
 
             Rectangle {
-                width: 14px; height: 14px;
+                width: 14px;
+                height: 14px;
                 border-radius: self.width / 2;
                 background: root.swatches[root.scheme];
                 border-width: root.translucent ? 2px : 1px;
@@ -156,15 +168,19 @@ export component TopBar inherits Rectangle {
                                 : (row.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent);
 
                             HorizontalLayout {
-                                padding-left: 10px; padding-right: 10px; spacing: 10px;
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 10px;
                                 cross-axis-alignment: center;
                                 Rectangle {
-                                    width: 14px; height: 14px;
+                                    width: 14px;
+                                    height: 14px;
                                     border-radius: self.width / 2;
                                     background: root.swatches[i];
                                     border-width: 1px;
                                     border-color: MaterialPalette.outline-variant;
                                 }
+
                                 Text {
                                     text: name;
                                     font-size: 12px;
@@ -182,7 +198,10 @@ export component TopBar inherits Rectangle {
                             }
                         }
 
-                        Rectangle { height: 1px; background: MaterialPalette.outline-variant; }
+                        Rectangle {
+                            height: 1px;
+                            background: MaterialPalette.outline-variant;
+                        }
 
                         Rectangle {
                             height: 30px;
@@ -192,7 +211,9 @@ export component TopBar inherits Rectangle {
                                 : (glass-row.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent);
 
                             HorizontalLayout {
-                                padding-left: 10px; padding-right: 10px; spacing: 10px;
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 10px;
                                 cross-axis-alignment: center;
                                 Text {
                                     text: Tr.translucent;
@@ -203,9 +224,11 @@ export component TopBar inherits Rectangle {
                                     vertical-alignment: center;
                                     horizontal-stretch: 1;
                                 }
+
                                 if root.translucent: Image {
                                     source: @image-url("../icons/check.svg");
-                                    width: 14px; height: 14px;
+                                    width: 14px;
+                                    height: 14px;
                                     colorize: MaterialPalette.on-secondary-container;
                                 }
                             }
@@ -221,10 +244,15 @@ export component TopBar inherits Rectangle {
         }
 
         CompactSegmented {
-            labels: ["EN", "RU"];
+            labels: ["EN", "RU", "简", "繁"];
             segment-width: 34px;
-            current-index: root.lang == "en" ? 0 : 1;
-            selected(i) => { root.set-lang(i == 0 ? "en" : "ru"); }
+            current-index: root.lang == "en" ? 0
+                : root.lang == "ru" ? 1
+                : root.lang == "zh-CN" ? 2
+                : 3;
+            selected(i) => {
+                root.set-lang(i == 0 ? "en" : i == 1 ? "ru" : i == 2 ? "zh-CN" : "zh-TW");
+            }
         }
 
         // `inline` drops IconButton from a 40px touch target to an 18px icon,

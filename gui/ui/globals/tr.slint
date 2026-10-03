@@ -1,206 +1,509 @@
 // Translations global — all user-facing strings
 
 export global Tr {
-    in-out property <string> lang: "en"; // "en" or "ru"
+    // "en" / "ru" / "zh-CN" (Simplified Chinese) / "zh-TW" (Traditional Chinese)
+    in-out property <string> lang: "en";
 
-    out property <string> home:         lang == "ru" ? "Главная" : "Home";
-    out property <string> nav-device:   lang == "ru" ? "Устройство" : "Device & Drivers";
-    out property <string> nav-download: lang == "ru" ? "Загрузка" : "Download";
-    out property <string> nav-flash:    lang == "ru" ? "Прошить всё" : "Flash All";
-    out property <string> nav-part:     lang == "ru" ? "Прошить раздел" : "Flash Partition";
-    out property <string> nav-about:    lang == "ru" ? "О программе" : "About";
+    out property <string> home: lang == "ru" ? "Главная"
+        : lang == "zh-CN" ? "主页"
+        : lang == "zh-TW" ? "首頁"
+        : "Home";
+    out property <string> nav-device: lang == "ru"
+        ? "Устройство" : lang == "zh-CN"
+        ? "设备与驱动" : lang == "zh-TW"
+        ? "裝置與驅動" : "Device & Drivers";
+    out property <string> nav-download: lang == "ru"
+        ? "Загрузка" : lang == "zh-CN"
+        ? "下载" : lang == "zh-TW"
+        ? "下載" : "Download";
+    out property <string> nav-flash: lang == "ru"
+        ? "Прошить всё" : lang == "zh-CN"
+        ? "全部刷写" : lang == "zh-TW"
+        ? "全部刷寫" : "Flash All";
+    out property <string> nav-part: lang == "ru"
+        ? "Прошить раздел" : lang == "zh-CN"
+        ? "刷写分区" : lang == "zh-TW"
+        ? "刷寫分區" : "Flash Partition";
+    out property <string> nav-about: lang == "ru"
+        ? "О программе" : lang == "zh-CN"
+        ? "关于" : lang == "zh-TW"
+        ? "關於" : "About";
 
-    out property <string> no-device:    lang == "ru" ? "Устройство не найдено" : "No device connected";
-    out property <string> find-device:  lang == "ru" ? "Найти устройство" : "Find device";
-    out property <string> check-deps:   lang == "ru" ? "Проверить" : "Check deps";
-    out property <string> install-deps: lang == "ru" ? "Установить" : "Install deps";
-    out property <string> driver-test:  lang == "ru" ? "Тест драйвера" : "Driver Test";
-    out property <string> run-test:     lang == "ru" ? "Запустить" : "Run test";
+    out property <string> no-device: lang == "ru"
+        ? "Устройство не найдено" : lang == "zh-CN"
+        ? "未连接设备" : lang == "zh-TW"
+        ? "未連接裝置" : "No device connected";
+    out property <string> find-device: lang == "ru"
+        ? "Найти устройство" : lang == "zh-CN"
+        ? "查找设备" : lang == "zh-TW"
+        ? "尋找裝置" : "Find device";
+    out property <string> check-deps: lang == "ru"
+        ? "Проверить" : lang == "zh-CN"
+        ? "检查依赖" : lang == "zh-TW"
+        ? "檢查依賴" : "Check deps";
+    out property <string> install-deps: lang == "ru"
+        ? "Установить" : lang == "zh-CN"
+        ? "安装依赖" : lang == "zh-TW"
+        ? "安裝依賴" : "Install deps";
+    out property <string> driver-test: lang == "ru"
+        ? "Тест драйвера" : lang == "zh-CN"
+        ? "驱动测试" : lang == "zh-TW"
+        ? "驅動測試" : "Driver Test";
+    out property <string> run-test: lang == "ru"
+        ? "Запустить" : lang == "zh-CN"
+        ? "运行测试" : lang == "zh-TW"
+        ? "執行測試" : "Run test";
 
-    out property <string> ota-url:      lang == "ru" ? "URL прошивки" : "OTA URL";
-    out property <string> paste:        lang == "ru" ? "Вставить" : "Paste";
-    out property <string> dl-btn:       lang == "ru" ? "Скачать" : "Download";
-    out property <string> local-lbl:    lang == "ru" ? "Распаковать прошивку:" : "Extract firmware:";
-    out property <string> select-zip:   lang == "ru" ? "Выбрать ZIP" : "Select ZIP";
-    out property <string> extract:      lang == "ru" ? "Распаковать" : "Extract";
+    out property <string> ota-url: lang == "ru"
+        ? "URL прошивки" : lang == "zh-CN"
+        ? "OTA 链接" : lang == "zh-TW"
+        ? "OTA 連結" : "OTA URL";
+    out property <string> paste: lang == "ru"
+        ? "Вставить" : lang == "zh-CN"
+        ? "粘贴" : lang == "zh-TW"
+        ? "貼上" : "Paste";
+    out property <string> dl-btn: lang == "ru"
+        ? "Скачать" : lang == "zh-CN"
+        ? "下载" : lang == "zh-TW"
+        ? "下載" : "Download";
+    out property <string> local-lbl: lang == "ru"
+        ? "Распаковать прошивку:" : lang == "zh-CN"
+        ? "解压固件：" : lang == "zh-TW"
+        ? "解壓縮韌體：" : "Extract firmware:";
+    out property <string> select-zip: lang == "ru"
+        ? "Выбрать ZIP" : lang == "zh-CN"
+        ? "选择 ZIP" : lang == "zh-TW"
+        ? "選擇 ZIP" : "Select ZIP";
+    out property <string> extract: lang == "ru"
+        ? "Распаковать" : lang == "zh-CN"
+        ? "解压" : lang == "zh-TW"
+        ? "解壓縮" : "Extract";
 
-    out property <string> select-folder:lang == "ru" ? "Выбрать папку" : "Select folder";
-    out property <string> flash-from-folder:lang == "ru" ? "Из папки" : "From folder";
-    out property <string> flash-from-src:lang == "ru" ? "Из исходников" : "From build output";
-    out property <string> src-select:    lang == "ru" ? "Выбрать папку" : "Select folder";
-    out property <string> src-images:    lang == "ru" ? "образов" : "images";
-    out property <string> src-ops:       lang == "ru" ? "операций" : "ops";
-    out property <string> find-phone:   lang == "ru" ? "Найти телефон" : "Find phone";
-    out property <string> flash-all-btn:lang == "ru" ? "Прошить всё" : "Flash all";
-    out property <string> flashing:     lang == "ru" ? "Прошивается…" : "Flashing…";
-    out property <string> cancel:       lang == "ru" ? "Отмена" : "Cancel";
+    out property <string> select-folder: lang == "ru"
+        ? "Выбрать папку" : lang == "zh-CN"
+        ? "选择文件夹" : lang == "zh-TW"
+        ? "選擇資料夾" : "Select folder";
+    out property <string> flash-from-folder: lang == "ru"
+        ? "Из папки" : lang == "zh-CN"
+        ? "从文件夹" : lang == "zh-TW"
+        ? "從資料夾" : "From folder";
+    out property <string> flash-from-src: lang == "ru"
+        ? "Из исходников" : lang == "zh-CN"
+        ? "从构建输出" : lang == "zh-TW"
+        ? "從建置輸出" : "From build output";
+    out property <string> src-select: lang == "ru"
+        ? "Выбрать папку" : lang == "zh-CN"
+        ? "选择文件夹" : lang == "zh-TW"
+        ? "選擇資料夾" : "Select folder";
+    out property <string> src-images: lang == "ru"
+        ? "образов" : lang == "zh-CN"
+        ? "个镜像" : lang == "zh-TW"
+        ? "個映像" : "images";
+    out property <string> src-ops: lang == "ru"
+        ? "операций" : lang == "zh-CN"
+        ? "个操作" : lang == "zh-TW"
+        ? "個操作" : "ops";
+    out property <string> find-phone: lang == "ru"
+        ? "Найти телефон" : lang == "zh-CN"
+        ? "查找手机" : lang == "zh-TW"
+        ? "尋找手機" : "Find phone";
+    out property <string> flash-all-btn: lang == "ru"
+        ? "Прошить всё" : lang == "zh-CN"
+        ? "全部刷写" : lang == "zh-TW"
+        ? "全部刷寫" : "Flash all";
+    out property <string> flashing: lang == "ru"
+        ? "Прошивается…" : lang == "zh-CN"
+        ? "刷写中…" : lang == "zh-TW"
+        ? "刷寫中…" : "Flashing…";
+    out property <string> cancel: lang == "ru"
+        ? "Отмена" : lang == "zh-CN"
+        ? "取消" : lang == "zh-TW"
+        ? "取消" : "Cancel";
 
-    out property <string> part-lbl:     lang == "ru" ? "Раздел: " : "Partition: ";
-    out property <string> flash-part-btn:lang == "ru" ? "Прошить раздел" : "Flash partition";
+    out property <string> part-lbl: lang == "ru"
+        ? "Раздел: " : lang == "zh-CN"
+        ? "分区：" : lang == "zh-TW"
+        ? "分區：" : "Partition: ";
+    out property <string> flash-part-btn: lang == "ru"
+        ? "Прошить раздел" : lang == "zh-CN"
+        ? "刷写分区" : lang == "zh-TW"
+        ? "刷寫分區" : "Flash partition";
 
-    out property <string> confirm-title:lang == "ru" ? "Подтверждение" : "Confirm";
-    out property <string> confirm-flash:lang == "ru" ? "Начать прошивку?\nВсе разделы будут перезаписаны." : "Start flashing?\nAll partitions will be overwritten.";
-    out property <string> flash-btn:    lang == "ru" ? "Прошить" : "Flash";
-    out property <string> slot-lbl:     lang == "ru" ? "Слот " : "Slot ";
-    out property <string> slot-switch-title: lang == "ru" ? "Переключить слот" : "Switch Slot";
-    out property <string> slot-switch-warn:  lang == "ru" ? "Переключение слота может привести к невозможности загрузки устройства. Убедитесь, что целевой слот содержит рабочую прошивку.\n\nРаботает только в режиме fastboot (bootloader)." : "Switching slots may brick your device. Ensure the target slot has a working firmware.\n\nWorks only in fastboot (bootloader) mode.";
-    out property <string> slot-switch-btn:   lang == "ru" ? "Переключить на слот " : "Switch to slot ";
-    out property <string> author-lbl:   lang == "ru" ? "Автор: mrFrok" : "Author: mrFrok";
-    out property <string> license-lbl:  lang == "ru" ? "Лицензия: GPL-3.0" : "License: GPL-3.0";
+    out property <string> confirm-title: lang == "ru"
+        ? "Подтверждение" : lang == "zh-CN"
+        ? "确认" : lang == "zh-TW"
+        ? "確認" : "Confirm";
+    out property <string> confirm-flash: lang == "ru"
+        ? "Начать прошивку?\nВсе разделы будут перезаписаны." : lang == "zh-CN"
+        ? "开始刷写？\n所有分区都会被覆写。" : lang == "zh-TW"
+        ? "開始刷寫？\n所有分區都會被覆寫。" : "Start flashing?\nAll partitions will be overwritten.";
+    out property <string> flash-btn: lang == "ru"
+        ? "Прошить" : lang == "zh-CN"
+        ? "刷写" : lang == "zh-TW"
+        ? "刷寫" : "Flash";
+    out property <string> slot-lbl: lang == "ru"
+        ? "Слот " : lang == "zh-CN"
+        ? "槽位 " : lang == "zh-TW"
+        ? "槽位 " : "Slot ";
+    out property <string> slot-switch-title: lang == "ru"
+        ? "Переключить слот" : lang == "zh-CN"
+        ? "切换槽位" : lang == "zh-TW"
+        ? "切換槽位" : "Switch Slot";
+    out property <string> slot-switch-warn: lang == "ru"
+        ? "Переключение слота может привести к невозможности загрузки устройства. Убедитесь, что целевой слот содержит рабочую прошивку.\n\nРаботает только в режиме fastboot (bootloader)." : lang == "zh-CN"
+        ? "切换槽位可能导致设备无法启动。请确保目标槽位包含可用的固件。\n\n仅在 fastboot（bootloader）模式下有效。" : lang == "zh-TW"
+        ? "切換槽位可能導致裝置無法啟動。請確保目標槽位包含可用的韌體。\n\n僅在 fastboot（bootloader）模式下有效。" : "Switching slots may brick your device. Ensure the target slot has a working firmware.\n\nWorks only in fastboot (bootloader) mode.";
+    out property <string> slot-switch-btn: lang == "ru"
+        ? "Переключить на слот " : lang == "zh-CN"
+        ? "切换到槽位 " : lang == "zh-TW"
+        ? "切換到槽位 " : "Switch to slot ";
+    out property <string> author-lbl: lang == "ru"
+        ? "Автор: mrFrok" : lang == "zh-CN"
+        ? "作者：mrFrok" : lang == "zh-TW"
+        ? "作者：mrFrok" : "Author: mrFrok";
+    out property <string> license-lbl: lang == "ru"
+        ? "Лицензия: GPL-3.0" : lang == "zh-CN"
+        ? "许可证：GPL-3.0" : lang == "zh-TW"
+        ? "授權條款：GPL-3.0" : "License: GPL-3.0";
 
     // Reboot menu
-    out property <string> reboot-title:    lang == "ru" ? "Перезагрузка" : "Reboot";
-    out property <string> reboot-recovery: lang == "ru" ? "Recovery" : "Recovery";
-    out property <string> reboot-bootloader: lang == "ru" ? "Bootloader" : "Bootloader";
-    out property <string> reboot-fastbootd: lang == "ru" ? "Fastbootd" : "Fastbootd";
-    out property <string> reboot-system:   lang == "ru" ? "Перезагрузить" : "Reboot";
+    out property <string> reboot-title: lang == "ru"
+        ? "Перезагрузка" : lang == "zh-CN"
+        ? "重启" : lang == "zh-TW"
+        ? "重新啟動" : "Reboot";
+    out property <string> reboot-recovery: lang == "ru"
+        ? "Recovery" : lang == "zh-CN"
+        ? "Recovery" : lang == "zh-TW"
+        ? "Recovery" : "Recovery";
+    out property <string> reboot-bootloader: lang == "ru"
+        ? "Bootloader" : lang == "zh-CN"
+        ? "Bootloader" : lang == "zh-TW"
+        ? "Bootloader" : "Bootloader";
+    out property <string> reboot-fastbootd: lang == "ru"
+        ? "Fastbootd" : lang == "zh-CN"
+        ? "Fastbootd" : lang == "zh-TW"
+        ? "Fastbootd" : "Fastbootd";
+    out property <string> reboot-system: lang == "ru"
+        ? "Перезагрузить" : lang == "zh-CN"
+        ? "重启" : lang == "zh-TW"
+        ? "重新啟動" : "Reboot";
 
     // Flash All step 0 — mandatory flash-method choice
-    out property <string> flash-method-title: lang == "ru" ? "Выберите метод прошивки" : "Select flash method";
+    out property <string> flash-method-title: lang == "ru"
+        ? "Выберите метод прошивки" : lang == "zh-CN"
+        ? "选择刷写方式" : lang == "zh-TW"
+        ? "選擇刷寫方式" : "Select flash method";
     out property <string> flash-method-body: lang == "ru"
         ? "Автоматическое определение платформы отключено. Укажите чипсет вашего устройства — от этого зависит порядок прошивки разделов. Прошивка не начнётся без выбора."
+        : lang == "zh-CN" ? "已禁用平台自动检测。请选择您设备的芯片组——它决定分区的刷写方式。未选择前不会开始刷写。"
+        : lang == "zh-TW" ? "已停用平台自動偵測。請選擇您裝置的晶片組——它決定分區的刷寫方式。未選擇前不會開始刷寫。"
         : "Platform auto-detection is disabled. Choose your device's chipset — it determines how partitions are flashed. Flashing will not start without a choice.";
-    out property <string> flash-method-snapdragon: lang == "ru" ? "Snapdragon (Qualcomm)" : "Snapdragon (Qualcomm)";
+    out property <string> flash-method-snapdragon: lang == "ru"
+        ? "Snapdragon (Qualcomm)" : lang == "zh-CN"
+        ? "骁龙（高通）" : lang == "zh-TW"
+        ? "Snapdragon（Qualcomm）" : "Snapdragon (Qualcomm)";
     out property <string> flash-method-snapdragon-desc: lang == "ru"
         ? "modem прошивается в bootloader, остальное в fastbootd; проверка ARB"
+        : lang == "zh-CN" ? "modem 在 bootloader 模式下刷写，其余在 fastbootd 中刷写；进行 ARB 检查"
+        : lang == "zh-TW" ? "modem 在 bootloader 模式下刷寫，其餘在 fastbootd 中刷寫；進行 ARB 檢查"
         : "modem flashed in bootloader mode, the rest in fastbootd; ARB check";
-    out property <string> flash-method-mtk: lang == "ru" ? "MediaTek" : "MediaTek";
+    out property <string> flash-method-mtk: lang == "ru"
+        ? "MediaTek" : lang == "zh-CN"
+        ? "MediaTek" : lang == "zh-TW"
+        ? "MediaTek" : "MediaTek";
     out property <string> flash-method-mtk-desc: lang == "ru"
         ? "все разделы прошиваются в fastbootd; xbl/abl пропускаются"
+        : lang == "zh-CN" ? "所有分区在 fastbootd 中刷写；跳过 xbl/abl"
+        : lang == "zh-TW" ? "所有分區在 fastbootd 中刷寫；略過 xbl/abl"
         : "all partitions flashed in fastbootd; xbl/abl skipped";
     out property <string> flash-method-hint: lang == "ru"
         ? "⚠ Неверный метод может привести к неудачной прошивке или кирпичу. Уточните чипсет в характеристиках устройства."
+        : lang == "zh-CN" ? "⚠ 选择错误的方式可能导致刷写失败或设备变砖。请在设备规格中确认芯片组。"
+        : lang == "zh-TW" ? "⚠ 選擇錯誤的方式可能導致刷寫失敗或裝置變磚。請在裝置規格中確認晶片組。"
         : "⚠ A wrong method can fail the flash or brick the device. Check your device's specifications for the chipset.";
-    out property <string> back-btn: lang == "ru" ? "← Назад" : "← Back";
+    out property <string> back-btn: lang == "ru"
+        ? "← Назад" : lang == "zh-CN"
+        ? "← 返回" : lang == "zh-TW"
+        ? "← 返回" : "← Back";
 
     // Flash All step 1 — reboot source dialog
-    out property <string> flash-reboot-title: lang == "ru" ? "Откуда перезагрузиться в Fastbootd?" : "How to reboot into Fastbootd?";
-    out property <string> flash-reboot-from-system:     lang == "ru" ? "Из системы\n(adb reboot fastboot)" : "From system\n(adb reboot fastboot)";
-    out property <string> flash-reboot-from-bootloader: lang == "ru" ? "Из Bootloader\n(fastboot reboot fastboot)" : "From bootloader\n(fastboot reboot fastboot)";
-    out property <string> flash-reboot-skip:            lang == "ru" ? "Уже в Fastbootd\n(не перезагружаться)" : "Already in Fastbootd\n(don't reboot)";
-    out property <string> fastbootd-fallback-title: lang == "ru" ? "Fastbootd не подтверждён" : "Fastbootd not confirmed";
+    out property <string> flash-reboot-title: lang == "ru"
+        ? "Откуда перезагрузиться в Fastbootd?" : lang == "zh-CN"
+        ? "如何重启进入 Fastbootd？" : lang == "zh-TW"
+        ? "如何重新啟動進入 Fastbootd？" : "How to reboot into Fastbootd?";
+    out property <string> flash-reboot-from-system: lang == "ru"
+        ? "Из системы\n(adb reboot fastboot)" : lang == "zh-CN"
+        ? "从系统\n（adb reboot fastboot）" : lang == "zh-TW"
+        ? "從系統\n（adb reboot fastboot）" : "From system\n(adb reboot fastboot)";
+    out property <string> flash-reboot-from-bootloader: lang == "ru"
+        ? "Из Bootloader\n(fastboot reboot fastboot)" : lang == "zh-CN"
+        ? "从 Bootloader\n（fastboot reboot fastboot）" : lang == "zh-TW"
+        ? "從 Bootloader\n（fastboot reboot fastboot）" : "From bootloader\n(fastboot reboot fastboot)";
+    out property <string> flash-reboot-skip: lang == "ru"
+        ? "Уже в Fastbootd\n(не перезагружаться)" : lang == "zh-CN"
+        ? "已在 Fastbootd\n（不重启）" : lang == "zh-TW"
+        ? "已在 Fastbootd\n（不重新啟動）" : "Already in Fastbootd\n(don't reboot)";
+    out property <string> fastbootd-fallback-title: lang == "ru"
+        ? "Fastbootd не подтверждён" : lang == "zh-CN"
+        ? "Fastbootd 未确认" : lang == "zh-TW"
+        ? "Fastbootd 未確認" : "Fastbootd not confirmed";
     out property <string> fastbootd-fallback-warning: lang == "ru"
         ? "Это известная особенность некоторых OnePlus / OPPO / Realme: userspace fastboot может отображаться как обычный fastboot. Продолжайте только если уверены."
+        : lang == "zh-CN" ? "这是某些 OnePlus / OPPO / Realme 设备上的已知问题：userspace fastboot 可能被识别为普通 fastboot。仅在确认可信时才继续。"
+        : lang == "zh-TW" ? "這是某些 OnePlus / OPPO / Realme 裝置上的已知問題：userspace fastboot 可能被識別為一般 fastboot。僅在確認可信時才繼續。"
         : "This is a known issue on some OnePlus / OPPO / Realme devices: userspace fastboot can be listed as plain fastboot. Continue only if you trust this mode.";
 
     // Flash All step 2 — final confirm
-    out property <string> flash-final-title: lang == "ru" ? "Последнее предупреждение" : "Final warning";
-    out property <string> flash-final-body:  lang == "ru" ? "Устройство находится в Fastbootd или предупреждение о режиме fastboot было принято. Все разделы будут перезаписаны. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd, or the fastboot mode warning was accepted. All partitions will be overwritten. This action is irreversible.\n\nProceed with flashing?";
-    out property <string> src-final-title:  lang == "ru" ? "Прошивка из исходников" : "Flash from source";
-    out property <string> src-final-body:   lang == "ru" ? "Устройство находится в Fastbootd или предупреждение о режиме fastboot было принято. Образы из папки исходников будут прошиты. Это действие необратимо.\n\nПродолжить прошивку?" : "Device is in Fastbootd, or the fastboot mode warning was accepted. Images from the source build folder will be flashed. This action is irreversible.\n\nProceed with flashing?";
+    out property <string> flash-final-title: lang == "ru"
+        ? "Последнее предупреждение" : lang == "zh-CN"
+        ? "最后警告" : lang == "zh-TW"
+        ? "最後警告" : "Final warning";
+    out property <string> flash-final-body: lang == "ru"
+        ? "Устройство находится в Fastbootd или предупреждение о режиме fastboot было принято. Все разделы будут перезаписаны. Это действие необратимо.\n\nПродолжить прошивку?" : lang == "zh-CN"
+        ? "设备处于 Fastbootd，或已接受 fastboot 模式警告。所有分区都将被覆写。此操作不可逆。\n\n继续刷写？" : lang == "zh-TW"
+        ? "裝置處於 Fastbootd，或已接受 fastboot 模式警告。所有分區都將被覆寫。此操作不可逆。\n\n繼續刷寫？" : "Device is in Fastbootd, or the fastboot mode warning was accepted. All partitions will be overwritten. This action is irreversible.\n\nProceed with flashing?";
+    out property <string> src-final-title: lang == "ru"
+        ? "Прошивка из исходников" : lang == "zh-CN"
+        ? "从源刷写" : lang == "zh-TW"
+        ? "從來源刷寫" : "Flash from source";
+    out property <string> src-final-body: lang == "ru"
+        ? "Устройство находится в Fastbootd или предупреждение о режиме fastboot было принято. Образы из папки исходников будут прошиты. Это действие необратимо.\n\nПродолжить прошивку?" : lang == "zh-CN"
+        ? "设备处于 Fastbootd，或已接受 fastboot 模式警告。来自源构建文件夹的镜像将被刷写。此操作不可逆。\n\n继续刷写？" : lang == "zh-TW"
+        ? "裝置處於 Fastbootd，或已接受 fastboot 模式警告。來自來源建置資料夾的映像將被刷寫。此操作不可逆。\n\n繼續刷寫？" : "Device is in Fastbootd, or the fastboot mode warning was accepted. Images from the source build folder will be flashed. This action is irreversible.\n\nProceed with flashing?";
 
     // Flash Partition step 1 — reboot to bootloader
-    out property <string> part-reboot-title:        lang == "ru" ? "Откуда перезагрузиться в Bootloader?" : "How to reboot into Bootloader?";
-    out property <string> part-reboot-from-system:  lang == "ru" ? "Из системы\n(adb reboot bootloader)" : "From system\n(adb reboot bootloader)";
-    out property <string> part-reboot-from-fastboot:lang == "ru" ? "Из Fastboot\n(fastboot reboot-bootloader)" : "From Fastboot\n(fastboot reboot-bootloader)";
-    out property <string> part-reboot-skip:         lang == "ru" ? "Уже в Bootloader\n(не перезагружаться)" : "Already in Bootloader\n(don't reboot)";
-    out property <string> part-final-title: lang == "ru" ? "Прошить раздел" : "Flash partition";
-    out property <string> part-final-body:  lang == "ru" ? "Раздел будет перезаписан. Продолжить?" : "The partition will be overwritten. Continue?";
+    out property <string> part-reboot-title: lang == "ru"
+        ? "Откуда перезагрузиться в Bootloader?" : lang == "zh-CN"
+        ? "如何重启进入 Bootloader？" : lang == "zh-TW"
+        ? "如何重新啟動進入 Bootloader？" : "How to reboot into Bootloader?";
+    out property <string> part-reboot-from-system: lang == "ru"
+        ? "Из системы\n(adb reboot bootloader)" : lang == "zh-CN"
+        ? "从系统\n（adb reboot bootloader）" : lang == "zh-TW"
+        ? "從系統\n（adb reboot bootloader）" : "From system\n(adb reboot bootloader)";
+    out property <string> part-reboot-from-fastboot: lang == "ru"
+        ? "Из Fastboot\n(fastboot reboot-bootloader)" : lang == "zh-CN"
+        ? "从 Fastboot\n（fastboot reboot-bootloader）" : lang == "zh-TW"
+        ? "從 Fastboot\n（fastboot reboot-bootloader）" : "From Fastboot\n(fastboot reboot-bootloader)";
+    out property <string> part-reboot-skip: lang == "ru"
+        ? "Уже в Bootloader\n(не перезагружаться)" : lang == "zh-CN"
+        ? "已在 Bootloader\n（不重启）" : lang == "zh-TW"
+        ? "已在 Bootloader\n（不重新啟動）" : "Already in Bootloader\n(don't reboot)";
+    out property <string> part-final-title: lang == "ru"
+        ? "Прошить раздел" : lang == "zh-CN"
+        ? "刷写分区" : lang == "zh-TW"
+        ? "刷寫分區" : "Flash partition";
+    out property <string> part-final-body: lang == "ru"
+        ? "Раздел будет перезаписан. Продолжить?" : lang == "zh-CN"
+        ? "分区将被覆写。继续？" : lang == "zh-TW"
+        ? "分區將被覆寫。繼續？" : "The partition will be overwritten. Continue?";
 
     // Home page
-    out property <string> home-title:   lang == "ru" ? "Добро пожаловать" : "Welcome";
-    out property <string> home-sub:     lang == "ru" ? "Прошивальщик Android-устройств через fastboot" : "Android firmware flasher via fastboot";
+    out property <string> home-title: lang == "ru"
+        ? "Добро пожаловать" : lang == "zh-CN"
+        ? "欢迎" : lang == "zh-TW"
+        ? "歡迎" : "Welcome";
+    out property <string> home-sub: lang == "ru"
+        ? "Прошивальщик Android-устройств через fastboot" : lang == "zh-CN"
+        ? "通过 fastboot 刷写 Android 设备的工具" : lang == "zh-TW"
+        ? "透過 fastboot 刷寫 Android 裝置的工具" : "Android firmware flasher via fastboot";
 
-    out property <string> home-features-title: lang == "ru" ? "Возможности:" : "Features:";
-    out property <string> home-feat1: lang == "ru" ? "Автоматическая установка драйверов" : "Automatic installation of drivers";
-    out property <string> home-feat2: lang == "ru" ? "Прошивка разделов boot, init_boot и recovery" : "Flashing of boot, init_boot and recovery images";
-    out property <string> home-feat3: lang == "ru" ? "Распаковка OTA.zip и payload.bin для прошивки" : "Unpacking OTA.zip or payload.bin for subsequent flashing";
-    out property <string> home-feat4: lang == "ru" ? "Прошивка пересоздаёт разделы — чистая система без остатков" : "Flashing recreates partitions, resulting in a clean system";
-    out property <string> home-feat5: lang == "ru" ? "Меню перезагрузки: ADB / BOOTLOADER / FASTBOOTD" : "Reboot menu for quick switching: ADB / BOOTLOADER / FASTBOOTD";
+    out property <string> home-features-title: lang == "ru"
+        ? "Возможности:" : lang == "zh-CN"
+        ? "功能：" : lang == "zh-TW"
+        ? "功能：" : "Features:";
+    out property <string> home-feat1: lang == "ru"
+        ? "Автоматическая установка драйверов" : lang == "zh-CN"
+        ? "自动安装驱动" : lang == "zh-TW"
+        ? "自動安裝驅動" : "Automatic installation of drivers";
+    out property <string> home-feat2: lang == "ru"
+        ? "Прошивка разделов boot, init_boot и recovery" : lang == "zh-CN"
+        ? "刷写 boot、init_boot 和 recovery 镜像" : lang == "zh-TW"
+        ? "刷寫 boot、init_boot 和 recovery 映像" : "Flashing of boot, init_boot and recovery images";
+    out property <string> home-feat3: lang == "ru"
+        ? "Распаковка OTA.zip и payload.bin для прошивки" : lang == "zh-CN"
+        ? "解压 OTA.zip 或 payload.bin 以便刷写" : lang == "zh-TW"
+        ? "解壓縮 OTA.zip 或 payload.bin 以便刷寫" : "Unpacking OTA.zip or payload.bin for subsequent flashing";
+    out property <string> home-feat4: lang == "ru"
+        ? "Прошивка пересоздаёт разделы — чистая система без остатков" : lang == "zh-CN"
+        ? "刷写会重建分区——干净系统无残留" : lang == "zh-TW"
+        ? "刷寫會重建分區——乾淨系統無殘留" : "Flashing recreates partitions, resulting in a clean system";
+    out property <string> home-feat5: lang == "ru"
+        ? "Меню перезагрузки: ADB / BOOTLOADER / FASTBOOTD" : lang == "zh-CN"
+        ? "重启菜单：ADB / BOOTLOADER / FASTBOOTD" : lang == "zh-TW"
+        ? "重新啟動選單：ADB / BOOTLOADER / FASTBOOTD" : "Reboot menu for quick switching: ADB / BOOTLOADER / FASTBOOTD";
 
     out property <string> home-warning: lang == "ru"
         ? "Внимание! Я не несу ответственности за ваши действия. Всё делается на ваш страх и риск."
+        : lang == "zh-CN" ? "注意！我对您的操作不承担责任。一切由您自行承担风险。"
+        : lang == "zh-TW" ? "注意！我對您的操作不承擔責任。一切由您自行承擔風險。"
         : "Attention! I do not take responsibility for your actions. Everything you do at your own risk.";
 
     out property <string> supported-devices: lang == "ru"
         ? "Данная программа предназначена для устройств Realme, OnePlus и OPPO на базе Qualcomm. Имеется частичная поддержка Mediatek."
+        : lang == "zh-CN" ? "本程序面向基于 Qualcomm 的 Realme、OnePlus 和 OPPO 设备。部分支持 MediaTek。"
+        : lang == "zh-TW" ? "本程式面向基於 Qualcomm 的 Realme、OnePlus 和 OPPO 裝置。部分支援 MediaTek。"
         : "This tool is intended for Realme, OnePlus and OPPO devices based on Qualcomm. Partial Mediatek support is available.";
 
-    out property <string> home-quicklinks: lang == "ru" ? "Быстрые ссылки:" : "Quick links:";
-    out property <string> home-goto-device:   lang == "ru" ? "Устройство и драйверы" : "Device & Drivers";
-    out property <string> home-goto-download: lang == "ru" ? "Скачать прошивку" : "Download Firmware";
-    out property <string> home-goto-flash:    lang == "ru" ? "Прошить всё" : "Flash All";
-    out property <string> home-goto-part:     lang == "ru" ? "Прошить раздел" : "Flash Partition";
+    out property <string> home-quicklinks: lang == "ru"
+        ? "Быстрые ссылки:" : lang == "zh-CN"
+        ? "快速链接：" : lang == "zh-TW"
+        ? "快速連結：" : "Quick links:";
+    out property <string> home-goto-device: lang == "ru"
+        ? "Устройство и драйверы" : lang == "zh-CN"
+        ? "设备与驱动" : lang == "zh-TW"
+        ? "裝置與驅動" : "Device & Drivers";
+    out property <string> home-goto-download: lang == "ru"
+        ? "Скачать прошивку" : lang == "zh-CN"
+        ? "下载固件" : lang == "zh-TW"
+        ? "下載韌體" : "Download Firmware";
+    out property <string> home-goto-flash: lang == "ru"
+        ? "Прошить всё" : lang == "zh-CN"
+        ? "全部刷写" : lang == "zh-TW"
+        ? "全部刷寫" : "Flash All";
+    out property <string> home-goto-part: lang == "ru"
+        ? "Прошить раздел" : lang == "zh-CN"
+        ? "刷写分区" : lang == "zh-TW"
+        ? "刷寫分區" : "Flash Partition";
 
     out property <string> flash-error-title: lang == "ru"
         ? "Ошибка прошивки"
+        : lang == "zh-CN" ? "刷写错误"
+        : lang == "zh-TW" ? "刷寫錯誤"
         : "Flash Error";
     out property <string> retry: lang == "ru"
         ? "Повторить"
+        : lang == "zh-CN" ? "重试"
+        : lang == "zh-TW" ? "重試"
         : "Retry";
     out property <string> skip: lang == "ru"
         ? "Пропустить"
+        : lang == "zh-CN" ? "跳过"
+        : lang == "zh-TW" ? "略過"
         : "Skip";
     out property <string> dismiss: lang == "ru"
         ? "Закрыть"
+        : lang == "zh-CN" ? "关闭"
+        : lang == "zh-TW" ? "關閉"
         : "Dismiss";
     out property <string> reboot: lang == "ru"
         ? "Перезагрузить устройство"
+        : lang == "zh-CN" ? "重启设备"
+        : lang == "zh-TW" ? "重新啟動裝置"
         : "Reboot device";
     out property <string> flash-error-hint: lang == "ru"
         ? "Проверьте подключение и попробуйте снова."
+        : lang == "zh-CN" ? "检查连接后重试。"
+        : lang == "zh-TW" ? "檢查連線後重試。"
         : "Check the connection and try again.";
 
     out property <string> output-dir: lang == "ru"
         ? "Папка для сохранения:"
+        : lang == "zh-CN" ? "保存到文件夹："
+        : lang == "zh-TW" ? "儲存到資料夾："
         : "Save to folder:";
     out property <string> browse: lang == "ru"
         ? "Обзор"
+        : lang == "zh-CN" ? "浏览"
+        : lang == "zh-TW" ? "瀏覽"
         : "Browse";
     out property <string> export-log: lang == "ru"
         ? "Экспорт"
+        : lang == "zh-CN" ? "导出"
+        : lang == "zh-TW" ? "匯出"
         : "Export";
     out property <string> log-exported: lang == "ru"
         ? "Лог экспортирован: "
+        : lang == "zh-CN" ? "日志已导出："
+        : lang == "zh-TW" ? "日誌已匯出："
         : "Log exported: ";
     out property <string> log-title: lang == "ru"
         ? "Лог"
+        : lang == "zh-CN" ? "日志"
+        : lang == "zh-TW" ? "日誌"
         : "Log";
     out property <string> log-empty: lang == "ru"
         ? "—"
+        : lang == "zh-CN" ? "—"
+        : lang == "zh-TW" ? "—"
         : "—";
 
     // Dialog titles
     out property <string> arb-warning-title: lang == "ru"
         ? "Предупреждение ARB"
+        : lang == "zh-CN" ? "ARB 警告"
+        : lang == "zh-TW" ? "ARB 警告"
         : "ARB Warning";
     out property <string> preloader-warning-title: lang == "ru"
         ? "Предупреждение preloader"
+        : lang == "zh-CN" ? "Preloader 警告"
+        : lang == "zh-TW" ? "Preloader 警告"
         : "Preloader Warning";
     out property <string> cable-test-title: lang == "ru"
         ? "Тест кабеля"
+        : lang == "zh-CN" ? "数据线测试"
+        : lang == "zh-TW" ? "傳輸線測試"
         : "Cable Test";
     out property <string> flash-complete: lang == "ru"
         ? "Прошивка завершена"
+        : lang == "zh-CN" ? "刷写完成"
+        : lang == "zh-TW" ? "刷寫完成"
         : "Flash complete";
     out property <string> next-action: lang == "ru"
         ? "Что сделать с устройством?"
+        : lang == "zh-CN" ? "接下来要对设备做什么？"
+        : lang == "zh-TW" ? "接下來要對裝置做什麼？"
         : "What would you like to do next?";
     out property <string> continue-next: lang == "ru"
         ? "Продолжить →"
+        : lang == "zh-CN" ? "继续 →"
+        : lang == "zh-TW" ? "繼續 →"
         : "Continue →";
     out property <string> reboot-and-flash: lang == "ru"
         ? "Перезагрузить и прошить →"
+        : lang == "zh-CN" ? "重启并刷写 →"
+        : lang == "zh-TW" ? "重新啟動並刷寫 →"
         : "Reboot & flash →";
     out property <string> abort: lang == "ru"
         ? "Прервать"
+        : lang == "zh-CN" ? "中止"
+        : lang == "zh-TW" ? "中止"
         : "Abort";
     out property <string> skip-next: lang == "ru"
         ? "Пропустить →"
+        : lang == "zh-CN" ? "跳过 →"
+        : lang == "zh-TW" ? "略過 →"
         : "Skip →";
     out property <string> wipe-data-reboot: lang == "ru"
         ? "Сброс данных + перезагрузка"
+        : lang == "zh-CN" ? "清除数据 + 重启"
+        : lang == "zh-TW" ? "清除資料 + 重新啟動"
         : "Wipe data + reboot";
     out property <string> arb-skip-xbl-hint: lang == "ru"
         ? "⚠ Пропуск xbl/abl может сохранить ARB=0, но может привести к кирпичу!"
+        : lang == "zh-CN" ? "⚠ 跳过 xbl/abl 可保持 ARB=0，但也可能导致设备变砖！"
+        : lang == "zh-TW" ? "⚠ 略過 xbl/abl 可保持 ARB=0，但也可能導致裝置變磚！"
         : "⚠ Skipping xbl/abl may preserve ARB=0, but may also brick your device!";
     out property <string> preloader-skip-hint: lang == "ru"
         ? "⚠ Пропуск preloader может помочь установить новую прошивку, если стандартный метод не срабатывает, но также может сделать устройство неработоспособным"
+        : lang == "zh-CN" ? "⚠ 在标准方法失败时，跳过 preloader 可能有助于刷入新固件，但也可能导致设备无法启动"
+        : lang == "zh-TW" ? "⚠ 在標準方法失敗時，略過 preloader 可能有助於刷入新韌體，但也可能導致裝置無法啟動"
         : "⚠ Skipping preloader may help flash new firmware when the standard method fails, but may also render the device unbootable";
 
     // Colour scheme names, and the translucency toggle next to them.
     out property <[string]> scheme-names: lang == "ru"
-        ? ["Синяя", "Индиго", "Бирюзовая", "Зелёная", "Янтарная", "Розовая", "Фиолетовая"]
+        ? [
+        "Синяя",
+        "Индиго",
+        "Бирюзовая",
+        "Зелёная",
+        "Янтарная",
+        "Розовая",
+        "Фиолетовая"
+    ]
+        : lang == "zh-CN"
+        ? ["蓝色", "靛蓝", "青色", "绿色", "琥珀色", "玫瑰色", "紫色"]
+        : lang == "zh-TW"
+        ? ["藍色", "靛藍", "青色", "綠色", "琥珀色", "玫瑰色", "紫色"]
         : ["Blue", "Indigo", "Teal", "Green", "Amber", "Rose", "Violet"];
-    out property <string> translucent: lang == "ru" ? "Прозрачность" : "Translucent";
+    out property <string> translucent: lang == "ru" ? "Прозрачность" : lang == "zh-CN" ? "半透明" : lang == "zh-TW" ? "半透明" : "Translucent";
 }

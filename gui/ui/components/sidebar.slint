@@ -17,23 +17,34 @@ export component Sidebar inherits Rectangle {
         padding-right: 12px;
         spacing: 0px;
 
-        Rectangle { height: 72px;
-            HorizontalLayout { padding-left: 16px; spacing: 8px;
+        Rectangle {
+            height: 72px;
+            HorizontalLayout {
+                padding-left: 16px;
+                spacing: 8px;
                 Image {
                     source: @image-url("../icons/logo_icon.svg");
-                    width: 32px; height: 32px;
+                    width: 32px;
+                    height: 32px;
                     y: (parent.height - 32px) / 2;
                 }
-                VerticalLayout { spacing: 1px; horizontal-stretch: 1; alignment: center;
+
+                VerticalLayout {
+                    spacing: 1px;
+                    horizontal-stretch: 1;
+                    alignment: center;
                     Text {
                         text: "Libre Fastboot";
-                        font-size: 13px; font-weight: 600;
+                        font-size: 13px;
+                        font-weight: 600;
                         color: MaterialPalette.on-surface;
                         overflow: elide;
                     }
+
                     Text {
                         text: "Firmware Flasher";
-                        font-size: 13px; font-weight: 600;
+                        font-size: 13px;
+                        font-weight: 600;
                         color: MaterialPalette.on-surface;
                         overflow: elide;
                     }
@@ -48,6 +59,7 @@ export component Sidebar inherits Rectangle {
             selected: root.page == 0;
             clicked => { root.navigate(0); }
         }
+
         NavItem {
             label: Tr.nav-device;
             icon: @image-url("../icons/smartphone.svg");
@@ -55,6 +67,7 @@ export component Sidebar inherits Rectangle {
             selected: root.page == 1;
             clicked => { root.navigate(1); }
         }
+
         NavItem {
             label: Tr.nav-download;
             icon: @image-url("../icons/download.svg");
@@ -62,6 +75,7 @@ export component Sidebar inherits Rectangle {
             selected: root.page == 2;
             clicked => { root.navigate(2); }
         }
+
         NavItem {
             label: Tr.nav-flash;
             icon: @image-url("../icons/flash.svg");
@@ -69,6 +83,7 @@ export component Sidebar inherits Rectangle {
             selected: root.page == 3;
             clicked => { root.navigate(3); }
         }
+
         NavItem {
             label: Tr.nav-part;
             icon: @image-url("../icons/storage.svg");
@@ -77,22 +92,34 @@ export component Sidebar inherits Rectangle {
             clicked => { root.navigate(4); }
         }
 
-        Rectangle { vertical-stretch: 1; }
+        Rectangle {
+            vertical-stretch: 1;
+        }
 
-        Rectangle { height: 16px; }
+        Rectangle {
+            height: 16px;
+        }
+
         Rectangle {
             height: 1px;
             background: MaterialPalette.outline-variant;
         }
-        Rectangle { height: 8px; }
+
+        Rectangle {
+            height: 8px;
+        }
 
         NavItem {
-            label: root.lang == "ru" ? "История" : "History";
+            label: root.lang == "ru" ? "История"
+                : root.lang == "zh-CN" ? "历史"
+                : root.lang == "zh-TW" ? "歷史"
+                : "History";
             icon: @image-url("../icons/history.svg");
             icon-active: @image-url("../icons/history-filled.svg");
             selected: root.page == 5;
             clicked => { root.navigate(5); }
         }
+
         NavItem {
             label: Tr.nav-about;
             icon: @image-url("../icons/info.svg");

@@ -1,4 +1,9 @@
-import { FilledButton, MaterialPalette, OutlineButton, TextButton } from "@material";
+import {
+    FilledButton,
+    MaterialPalette,
+    OutlineButton,
+    TextButton,
+} from "@material";
 import { Tr } from "../globals/tr.slint";
 import { RebootOption } from "../structs.slint";
 import { StatusColors } from "../globals/status-colors.slint";
@@ -23,34 +28,74 @@ export component ConfirmDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%;
+        animate opacity {
+            duration: 350ms;
+            easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
 
         Rectangle {
             x: (parent.width - 420px) / 2;
             y: (parent.height - 240px) / 2;
-            width: 420px; height: 240px;
+            width: 420px;
+            height: 240px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
-            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
-            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            border-width: 1px;
+            border-color: MaterialPalette.outline-variant;
+            clip: true;
+            animate opacity {
+                duration: 300ms;
+                easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+            }
+            animate y {
+                duration: 300ms;
+                easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+            }
 
-            VerticalLayout { padding: 28px; spacing: 12px;
-                HorizontalLayout { spacing: 8px; alignment: start;
-                    Text { text: root.icon-text; font-size: 22px; color: root.icon-color; vertical-alignment: center; }
+            VerticalLayout {
+                padding: 28px;
+                spacing: 12px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: root.icon-text;
+                        font-size: 22px;
+                        color: root.icon-color;
+                        vertical-alignment: center;
+                    }
+
                     Text {
                         text: root.title;
-                        font-size: 18px; font-weight: 700; color: root.icon-color;
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: root.icon-color;
                     }
                 }
+
                 Text {
                     text: root.body;
-                    font-size: 14px; color: MaterialPalette.on-surface-variant; wrap: word-wrap;
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
                 }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton { text: root.cancel-text; clicked => { root.cancelled(); } }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    TextButton {
+                        text: root.cancel-text;
+                        clicked => { root.cancelled(); }
+                    }
+
                     FilledButton {
                         text: root.primary-text;
                         enabled: root.primary-enabled;
@@ -83,78 +128,135 @@ export component WarningDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 110; background: StatusColors.scrim; width: 100%; height: 100%;
+        animate opacity {
+            duration: 350ms;
+            easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+        }
+        z: 110;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
 
-        VerticalLayout { alignment: center;
-        HorizontalLayout { alignment: center;
-        Rectangle {
-            width: 460px;
-            border-radius: 16px;
-            background: MaterialPalette.surface-container-high;
-            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 460px;
+                    border-radius: 16px;
+                    background: MaterialPalette.surface-container-high;
+                    animate opacity {
+                        duration: 300ms;
+                        easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+                    }
+                    animate y {
+                        duration: 300ms;
+                        easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+                    }
+                    border-width: 1px;
+                    border-color: MaterialPalette.outline-variant;
+                    clip: true;
 
-            VerticalLayout { padding: 28px; spacing: 12px;
-                HorizontalLayout { spacing: 12px;
-                    Text { text: "⚠"; font-size: 24px; color: StatusColors.warning; vertical-alignment: center; }
-                    Text {
-                        text: root.title;
-                        font-size: 18px; font-weight: 700;
-                        color: StatusColors.warning; vertical-alignment: center;
-                    }
-                }
-                Text {
-                    text: root.body;
-                    font-size: 13px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-                Rectangle { vertical-stretch: 1; }
-                if root.has-checkbox: VerticalLayout { spacing: 6px;
-                    Text {
-                        text: root.warning-text;
-                        font-size: 12px; color: StatusColors.warning; wrap: word-wrap;
-                    }
-                    TouchArea {
-                        height: 24px;
-                        clicked => { root.checkbox-toggled(); }
-                        HorizontalLayout { spacing: 10px;
-                            Rectangle {
-                                width: 18px; height: 18px; border-radius: 4px;
-                                border-width: 2px;
-                                border-color: root.checkbox-checked ? MaterialPalette.primary : MaterialPalette.outline;
-                                background: root.checkbox-checked ? MaterialPalette.primary : transparent;
-                                animate background { duration: 100ms; }
-                                animate border-color { duration: 100ms; }
-                                y: (parent.height - 18px) / 2;
-                                Text {
-                                    visible: root.checkbox-checked;
-                                    opacity: root.checkbox-checked ? 1.0 : 0.0;
-                                    text: "✓"; font-size: 14px; font-weight: 700;
-                                    color: MaterialPalette.on-primary;
-                                    horizontal-alignment: center; vertical-alignment: center;
-                                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                    VerticalLayout {
+                        padding: 28px;
+                        spacing: 12px;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Text {
+                                text: "⚠";
+                                font-size: 24px;
+                                color: StatusColors.warning;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: root.title;
+                                font-size: 18px;
+                                font-weight: 700;
+                                color: StatusColors.warning;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        Text {
+                            text: root.body;
+                            font-size: 13px;
+                            color: MaterialPalette.on-surface-variant;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle {
+                            vertical-stretch: 1;
+                        }
+
+                        if root.has-checkbox: VerticalLayout {
+                            spacing: 6px;
+                            Text {
+                                text: root.warning-text;
+                                font-size: 12px;
+                                color: StatusColors.warning;
+                                wrap: word-wrap;
+                            }
+
+                            TouchArea {
+                                height: 24px;
+                                clicked => { root.checkbox-toggled(); }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Rectangle {
+                                        width: 18px;
+                                        height: 18px;
+                                        border-radius: 4px;
+                                        border-width: 2px;
+                                        border-color: root.checkbox-checked ? MaterialPalette.primary : MaterialPalette.outline;
+                                        background: root.checkbox-checked ? MaterialPalette.primary : transparent;
+                                        animate background { duration: 100ms; }
+                                        animate border-color { duration: 100ms; }
+                                        y: (parent.height - 18px) / 2;
+                                        Text {
+                                            visible: root.checkbox-checked;
+                                            opacity: root.checkbox-checked ? 1.0 : 0.0;
+                                            text: "✓";
+                                            font-size: 14px;
+                                            font-weight: 700;
+                                            color: MaterialPalette.on-primary;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            animate opacity {
+                                                duration: 100ms;
+                                                easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        text: root.checkbox-text;
+                                        font-size: 14px;
+                                        color: MaterialPalette.on-surface;
+                                        vertical-alignment: center;
+                                    }
                                 }
                             }
-                            Text {
-                                text: root.checkbox-text;
-                                font-size: 14px; color: MaterialPalette.on-surface; vertical-alignment: center;
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: end;
+                            TextButton {
+                                text: Tr.cancel;
+                                clicked => { root.cancelled(); }
+                            }
+
+                            FilledButton {
+                                text: root.lang == "ru" ? "Я понимаю, продолжить"
+                                    : root.lang == "zh-CN" ? "我已了解，继续"
+                                    : root.lang == "zh-TW" ? "我已了解，繼續"
+                                    : "I understand, continue";
+                                clicked => { root.confirmed(); }
                             }
                         }
                     }
                 }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton { text: Tr.cancel; clicked => { root.cancelled(); } }
-                    FilledButton {
-                        text: root.lang == "ru" ? "Я понимаю, продолжить" : "I understand, continue";
-                        clicked => { root.confirmed(); }
-                    }
-                }
             }
-        }
-        }
         }
     }
 }
@@ -176,27 +278,47 @@ export component RebootChoiceDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 350ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%;
+        animate opacity {
+            duration: 350ms;
+            easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
 
         Rectangle {
             x: (parent.width - 460px) / 2;
             y: (parent.height - 275px) / 2;
-            width: 460px; height: 275px;
+            width: 460px;
+            height: 275px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
-            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
-            animate opacity { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-            animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
+            border-width: 1px;
+            border-color: MaterialPalette.outline-variant;
+            clip: true;
+            animate opacity {
+                duration: 300ms;
+                easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+            }
+            animate y {
+                duration: 300ms;
+                easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+            }
 
-            VerticalLayout { padding: 20px; spacing: 10px;
+            VerticalLayout {
+                padding: 20px;
+                spacing: 10px;
                 Text {
                     text: root.title;
-                    font-size: 15px; font-weight: 600;
+                    font-size: 15px;
+                    font-weight: 600;
                     color: MaterialPalette.on-surface;
                     wrap: word-wrap;
                 }
-                VerticalLayout { spacing: 6px;
+
+                VerticalLayout {
+                    spacing: 6px;
                     for item in root.options: TouchArea {
                         height: 48px;
                         clicked => { root.choice = item.val; }
@@ -209,8 +331,8 @@ export component RebootChoiceDialog {
                             background: root.choice == item.val
                                 ? MaterialPalette.secondary-container
                                 : (parent.has-hover
-                                    ? MaterialPalette.surface-container-highest
-                                    : MaterialPalette.surface-container);
+                                ? MaterialPalette.surface-container-highest
+                                : MaterialPalette.surface-container);
                             animate background { duration: 80ms; }
                             animate border-color { duration: 80ms; }
                             Text {
@@ -226,10 +348,20 @@ export component RebootChoiceDialog {
                         }
                     }
                 }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton { text: Tr.cancel; clicked => { root.cancelled(); } }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    TextButton {
+                        text: Tr.cancel;
+                        clicked => { root.cancelled(); }
+                    }
+
                     FilledButton {
-                        text: root.lang == "ru" ? "Перезагрузить и прошить →" : "Reboot & flash →";
+                        text: root.lang == "ru" ? "Перезагрузить и прошить →"
+                            : root.lang == "zh-CN" ? "重启并刷写 →"
+                            : root.lang == "zh-TW" ? "重新啟動並刷寫 →"
+                            : "Reboot & flash →";
                         enabled: root.choice != 0;
                         clicked => { root.confirmed(); }
                     }
