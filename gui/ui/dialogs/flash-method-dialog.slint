@@ -30,12 +30,19 @@ export component FlashMethodDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%;
+        animate opacity {
+            duration: 200ms;
+            easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
         TouchArea { }
 
         fs := FocusScope {
-            width: 100%; height: 100%;
+            width: 100%;
+            height: 100%;
             key-pressed(event) => {
                 if !root.show { return reject; }
                 if event.text == Key.Escape {
@@ -55,114 +62,137 @@ export component FlashMethodDialog {
                 reject
             }
 
-            VerticalLayout { alignment: center;
-            HorizontalLayout { alignment: center;
-            Rectangle {
-                width: 460px;
-                border-radius: 16px;
-                background: MaterialPalette.surface-container-high;
-                border-width: 1px;
-                border-color: MaterialPalette.outline-variant;
-                clip: true;
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 460px;
+                        border-radius: 16px;
+                        background: MaterialPalette.surface-container-high;
+                        border-width: 1px;
+                        border-color: MaterialPalette.outline-variant;
+                        clip: true;
 
-                VerticalLayout { padding: 20px; spacing: 10px;
-                    Text {
-                        text: Tr.flash-method-title;
-                        font-size: 18px; font-weight: 700;
-                        color: MaterialPalette.on-surface;
-                        wrap: word-wrap;
-                    }
-                    Text {
-                        text: Tr.flash-method-body;
-                        font-size: 13px;
-                        color: MaterialPalette.on-surface-variant;
-                        wrap: word-wrap;
-                    }
+                        VerticalLayout {
+                            padding: 20px;
+                            spacing: 10px;
+                            Text {
+                                text: Tr.flash-method-title;
+                                font-size: 18px;
+                                font-weight: 700;
+                                color: MaterialPalette.on-surface;
+                                wrap: word-wrap;
+                            }
 
-                    VerticalLayout { spacing: 8px;
-                        for item in [
-                            { label: Tr.flash-method-snapdragon, desc: Tr.flash-method-snapdragon-desc, val: 1 },
-                            { label: Tr.flash-method-mtk,        desc: Tr.flash-method-mtk-desc,        val: 2 },
-                        ]: TouchArea {
-                            height: 58px;
-                            clicked => { root.method = item.val; }
+                            Text {
+                                text: Tr.flash-method-body;
+                                font-size: 13px;
+                                color: MaterialPalette.on-surface-variant;
+                                wrap: word-wrap;
+                            }
 
-                            Rectangle {
-                                border-radius: 12px;
-                                border-width: 2px;
-                                border-color: root.method == item.val
-                                    ? MaterialPalette.primary
-                                    : MaterialPalette.outline-variant;
-                                background: parent.pressed
-                                    ? MaterialPalette.surface-container-highest
-                                    : root.method == item.val
-                                        ? MaterialPalette.secondary-container
-                                        : (parent.has-hover
-                                            ? MaterialPalette.surface-container-highest
-                                            : MaterialPalette.surface-container);
-                                animate background { duration: 80ms; }
-                                animate border-color { duration: 80ms; }
+                            VerticalLayout {
+                                spacing: 8px;
+                                for item in [
+                                    { label: Tr.flash-method-snapdragon, desc: Tr.flash-method-snapdragon-desc, val: 1 },
+                                    { label: Tr.flash-method-mtk, desc: Tr.flash-method-mtk-desc, val: 2 },
+                                ]: TouchArea {
+                                    height: 58px;
+                                    clicked => { root.method = item.val; }
 
-                                HorizontalLayout { padding-left: 14px; padding-right: 14px; spacing: 12px;
-                                    // Radio indicator
                                     Rectangle {
-                                        width: 20px; height: 20px;
-                                        y: (parent.height - 20px) / 2;
-                                        border-radius: 10px;
+                                        border-radius: 12px;
                                         border-width: 2px;
                                         border-color: root.method == item.val
                                             ? MaterialPalette.primary
-                                            : MaterialPalette.outline;
-                                        animate border-color { duration: 100ms; }
-                                        Rectangle {
-                                            width: 10px; height: 10px;
-                                            x: (parent.width - 10px) / 2;
-                                            y: (parent.height - 10px) / 2;
-                                            border-radius: 5px;
-                                            background: root.method == item.val
-                                                ? MaterialPalette.primary
-                                                : transparent;
-                                            animate background { duration: 100ms; }
-                                        }
-                                    }
-                                    VerticalLayout { alignment: center; spacing: 2px;
-                                        Text {
-                                            text: item.label;
-                                            font-size: 14px; font-weight: 600;
-                                            color: root.method == item.val
-                                                ? MaterialPalette.on-secondary-container
-                                                : MaterialPalette.on-surface;
-                                        }
-                                        Text {
-                                            text: item.desc;
-                                            font-size: 12px;
-                                            color: MaterialPalette.on-surface-variant;
-                                            wrap: word-wrap;
+                                            : MaterialPalette.outline-variant;
+                                        background: parent.pressed
+                                            ? MaterialPalette.surface-container-highest
+                                            : root.method == item.val
+                                            ? MaterialPalette.secondary-container
+                                            : (parent.has-hover
+                                            ? MaterialPalette.surface-container-highest
+                                            : MaterialPalette.surface-container);
+                                        animate background { duration: 80ms; }
+                                        animate border-color { duration: 80ms; }
+
+                                        HorizontalLayout {
+                                            padding-left: 14px;
+                                            padding-right: 14px;
+                                            spacing: 12px;
+                                    // Radio indicator
+                                    Rectangle {
+                                                width: 20px;
+                                                height: 20px;
+                                                y: (parent.height - 20px) / 2;
+                                                border-radius: 10px;
+                                                border-width: 2px;
+                                                border-color: root.method == item.val
+                                                    ? MaterialPalette.primary
+                                                    : MaterialPalette.outline;
+                                                animate border-color { duration: 100ms; }
+                                                Rectangle {
+                                                    width: 10px;
+                                                    height: 10px;
+                                                    x: (parent.width - 10px) / 2;
+                                                    y: (parent.height - 10px) / 2;
+                                                    border-radius: 5px;
+                                                    background: root.method == item.val
+                                                        ? MaterialPalette.primary
+                                                        : transparent;
+                                                    animate background { duration: 100ms; }
+                                                }
+                                            }
+
+                                            VerticalLayout {
+                                                alignment: center;
+                                                spacing: 2px;
+                                                Text {
+                                                    text: item.label;
+                                                    font-size: 14px;
+                                                    font-weight: 600;
+                                                    color: root.method == item.val
+                                                        ? MaterialPalette.on-secondary-container
+                                                        : MaterialPalette.on-surface;
+                                                }
+
+                                                Text {
+                                                    text: item.desc;
+                                                    font-size: 12px;
+                                                    color: MaterialPalette.on-surface-variant;
+                                                    wrap: word-wrap;
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }
 
-                    Text {
-                        text: Tr.flash-method-hint;
-                        font-size: 12px;
-                        color: StatusColors.warning;
-                        wrap: word-wrap;
-                    }
+                            Text {
+                                text: Tr.flash-method-hint;
+                                font-size: 12px;
+                                color: StatusColors.warning;
+                                wrap: word-wrap;
+                            }
 
-                    HorizontalLayout { spacing: 8px; alignment: end;
-                        TextButton { text: Tr.cancel; clicked => { root.cancel(); } }
-                        FilledButton {
-                            text: Tr.continue-next;
-                            enabled: root.method != 0;
-                            clicked => { root.proceed(); }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: end;
+                                TextButton {
+                                    text: Tr.cancel;
+                                    clicked => { root.cancel(); }
+                                }
+
+                                FilledButton {
+                                    text: Tr.continue-next;
+                                    enabled: root.method != 0;
+                                    clicked => { root.proceed(); }
+                                }
+                            }
                         }
                     }
                 }
-            }
-            }
             }
         }
     }

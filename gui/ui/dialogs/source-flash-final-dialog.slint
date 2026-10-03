@@ -18,25 +18,37 @@ export component SourceFlashFinalDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
+        animate opacity {
+            duration: 200ms;
+            easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
+        TouchArea { }
 
         Rectangle {
             x: (parent.width - 440px) / 2;
             y: (parent.height - 260px) / 2;
-            width: 440px; height: 260px;
+            width: 440px;
+            height: 260px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
             border-width: 1px;
             border-color: MaterialPalette.outline-variant;
             clip: true;
 
-            VerticalLayout { padding: 24px; spacing: 12px;
+            VerticalLayout {
+                padding: 24px;
+                spacing: 12px;
                 Text {
                     text: Tr.src-final-title;
-                    font-size: 18px; font-weight: 700;
+                    font-size: 18px;
+                    font-weight: 700;
                     color: MaterialPalette.error;
                 }
+
                 Text {
                     text: Tr.src-final-body;
                     font-size: 14px;
@@ -44,14 +56,19 @@ export component SourceFlashFinalDialog {
                     wrap: word-wrap;
                     vertical-stretch: 1;
                 }
-                HorizontalLayout { spacing: 8px; alignment: end;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
                     TextButton {
                         text: Tr.cancel;
                         clicked => { root.cancel(); }
                     }
+
                     BackButton {
                         clicked => { root.back(); }
                     }
+
                     FilledButton {
                         text: Tr.flash-btn;
                         clicked => { root.flash(); }

@@ -8,10 +8,14 @@ export component AboutPage {
 
     callback open-url(string);
 
-    VerticalLayout { spacing: 0px;
-        Rectangle { vertical-stretch: 1; }
+    VerticalLayout {
+        spacing: 0px;
+        Rectangle {
+            vertical-stretch: 1;
+        }
 
-        VerticalLayout { spacing: 8px;
+        VerticalLayout {
+            spacing: 8px;
             Text {
                 text: "Libre Fastboot Firmware Flasher";
                 font-size: Typography.display-small-size;
@@ -20,12 +24,14 @@ export component AboutPage {
                 horizontal-alignment: center;
                 letter-spacing: 1px;
             }
+
             Text {
                 text: root.app-version;
                 font-size: Typography.body-large-size;
                 color: MaterialPalette.on-surface-variant;
                 horizontal-alignment: center;
             }
+
             Text {
                 text: Tr.author-lbl;
                 font-size: Typography.body-large-size;
@@ -34,31 +40,47 @@ export component AboutPage {
             }
         }
 
-        Rectangle { height: 24px; }
+        Rectangle {
+            height: 24px;
+        }
+
         HorizontalDivider { }
-        Rectangle { height: 20px; }
+
+        Rectangle {
+            height: 20px;
+        }
 
         HorizontalLayout {
-            Rectangle { horizontal-stretch: 1; }
-            VerticalLayout { spacing: 10px; min-width: 320px; max-width: 520px; horizontal-stretch: 1;
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            VerticalLayout {
+                spacing: 10px;
+                min-width: 320px;
+                max-width: 520px;
+                horizontal-stretch: 1;
                 AboutLink {
                     icon: @image-url("../icons/github.svg");
                     label: "GitHub — LibreFastbootFirmwareFlasher";
                     url: "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
                     open(u) => { root.open-url(u); }
                 }
+
                 AboutLink {
                     icon: @image-url("../icons/telegram.svg");
                     label: "Author on Telegram";
                     url: "https://t.me/mrFrok228";
                     open(u) => { root.open-url(u); }
                 }
+
                 AboutLink {
                     icon: @image-url("../icons/telegram.svg");
                     label: "Telegram group";
                     url: "https://t.me/gt3neo5hub";
                     open(u) => { root.open-url(u); }
                 }
+
                 AboutLink {
                     icon: @image-url("../icons/boosty.svg");
                     label: "Donate — Boosty";
@@ -66,16 +88,25 @@ export component AboutPage {
                     open(u) => { root.open-url(u); }
                 }
             }
-            Rectangle { horizontal-stretch: 1; }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
         }
 
-        Rectangle { height: 16px; }
+        Rectangle {
+            height: 16px;
+        }
+
         Text {
             text: Tr.license-lbl;
-            font-size: 13px; color: MaterialPalette.on-surface-variant;
+            font-size: 13px;
+            color: MaterialPalette.on-surface-variant;
             horizontal-alignment: center;
         }
 
-        Rectangle { vertical-stretch: 1; }
+        Rectangle {
+            vertical-stretch: 1;
+        }
     }
 }

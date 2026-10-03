@@ -29,12 +29,12 @@ export global LfffScheme {
     // destination before actually switching to it.
     public pure function scheme-of(a: AppScheme) -> MaterialSchemes {
         return a == AppScheme.indigo ? root.indigo-scheme
-             : a == AppScheme.teal   ? root.teal-scheme
-             : a == AppScheme.green  ? root.green-scheme
-             : a == AppScheme.amber  ? root.amber-scheme
-             : a == AppScheme.rose   ? root.rose-scheme
-             : a == AppScheme.violet ? root.violet-scheme
-             : root.blue-scheme;
+            : a == AppScheme.teal ? root.teal-scheme
+            : a == AppScheme.green ? root.green-scheme
+            : a == AppScheme.amber ? root.amber-scheme
+            : a == AppScheme.rose ? root.rose-scheme
+            : a == AppScheme.violet ? root.violet-scheme
+            : root.blue-scheme;
     }
 
     pure function glassify(s: MaterialSchemes) -> MaterialSchemes {

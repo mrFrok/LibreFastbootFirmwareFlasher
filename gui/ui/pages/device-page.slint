@@ -1,4 +1,11 @@
-import { ActionChip, FilledButton, HorizontalDivider, MaterialPalette, OutlineButton, TonalButton } from "@material";
+import {
+    ActionChip,
+    FilledButton,
+    HorizontalDivider,
+    MaterialPalette,
+    OutlineButton,
+    TonalButton,
+} from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
 import { DeviceInfo, LogEntry } from "../structs.slint";
@@ -22,35 +29,51 @@ export component DevicePage {
     callback export-device-log();
     callback get-device-info();
 
-    VerticalLayout { spacing: 0px;
+    VerticalLayout {
+        spacing: 0px;
 
         Text {
             text: Tr.nav-device;
-            font-size: 20px; font-weight: 700;
+            font-size: 20px;
+            font-weight: 700;
             color: MaterialPalette.on-surface;
         }
-        Rectangle { height: 12px; }
-        DeviceBanner { device: root.device; }
-        Rectangle { height: 8px; }
+
+        Rectangle {
+            height: 12px;
+        }
+
+        DeviceBanner {
+            device: root.device;
+        }
+
+        Rectangle {
+            height: 8px;
+        }
 
         if root.device.connected: Rectangle {
             background: MaterialPalette.error-container;
             border-radius: 12px;
             border-width: 1px;
             border-color: MaterialPalette.error;
-            VerticalLayout { spacing: 8px; padding: 12px;
+            VerticalLayout {
+                spacing: 8px;
+                padding: 12px;
                 Text {
                     text: Tr.slot-switch-warn;
                     font-size: 13px;
                     color: MaterialPalette.on-error-container;
                     wrap: word-wrap;
                 }
-                HorizontalLayout { spacing: 8px;
+
+                HorizontalLayout {
+                    spacing: 8px;
                     FilledButton {
                         text: Tr.slot-switch-btn + "A";
                         enabled: root.device.is-fastboot-mode && root.device.slot != "a";
                         clicked => { root.set-active-slot("a"); }
                     }
+
                     FilledButton {
                         text: Tr.slot-switch-btn + "B";
                         enabled: root.device.is-fastboot-mode && root.device.slot != "b";
@@ -60,25 +83,56 @@ export component DevicePage {
             }
         }
 
-        Rectangle { height: 8px; }
-        HorizontalLayout { spacing: 8px;
-            OutlineButton { text: Tr.find-device;  horizontal-stretch: 1; clicked => { root.check-device(); } }
-            OutlineButton { text: Tr.check-deps;   horizontal-stretch: 1; clicked => { root.check-deps(); } }
-            FilledButton  { text: Tr.install-deps; horizontal-stretch: 1; clicked => { root.install-deps(); } }
+        Rectangle {
+            height: 8px;
         }
 
-        Rectangle { height: 12px; }
-        HorizontalDivider { }
-        Rectangle { height: 8px; }
+        HorizontalLayout {
+            spacing: 8px;
+            OutlineButton {
+                text: Tr.find-device;
+                horizontal-stretch: 1;
+                clicked => { root.check-device(); }
+            }
 
-        HorizontalLayout { spacing: 8px; height: 32px;
+            OutlineButton {
+                text: Tr.check-deps;
+                horizontal-stretch: 1;
+                clicked => { root.check-deps(); }
+            }
+
+            FilledButton {
+                text: Tr.install-deps;
+                horizontal-stretch: 1;
+                clicked => { root.install-deps(); }
+            }
+        }
+
+        Rectangle {
+            height: 12px;
+        }
+
+        HorizontalDivider { }
+
+        Rectangle {
+            height: 8px;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            height: 32px;
             Text {
                 text: Tr.driver-test;
-                font-size: 15px; font-weight: 500;
+                font-size: 15px;
+                font-weight: 500;
                 color: MaterialPalette.on-surface;
                 vertical-alignment: center;
             }
-            Rectangle { horizontal-stretch: 1; }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
             TonalButton {
                 text: Tr.run-test;
                 enabled: root.test-step == 0 || root.test-step >= 5 || root.test-step < 0;
@@ -86,23 +140,38 @@ export component DevicePage {
             }
         }
 
-        Rectangle { height: 4px; }
-        HorizontalLayout { spacing: 16px; height: 24px;
+        Rectangle {
+            height: 4px;
+        }
+
+        HorizontalLayout {
+            spacing: 16px;
+            height: 24px;
             for s in [
-                { label: "ADB", n: 2 }, { label: "Bootloader", n: 3 },
-                { label: "Fastbootd", n: 4 }, { label: "Done", n: 5 },
-            ]: HorizontalLayout { spacing: 6px;
+                { label: "ADB", n: 2 },
+                { label: "Bootloader", n: 3 },
+                { label: "Fastbootd", n: 4 },
+                { label: "Done", n: 5 },
+            ]: HorizontalLayout {
+                spacing: 6px;
                 Rectangle {
-                    width: 10px; height: 10px; border-radius: 5px;
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 5px;
                     background: root.test-step >= s.n
-                            ? StatusColors.success
+                        ? StatusColors.success
                         : root.test-step < 0 ? MaterialPalette.error
                         : MaterialPalette.outline-variant;
-                    animate background { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                    animate background {
+                        duration: 100ms;
+                        easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+                    }
                     y: (parent.height - 10px) / 2;
                 }
+
                 Text {
-                    text: s.label; font-size: 14px;
+                    text: s.label;
+                    font-size: 14px;
                     color: root.test-step >= s.n
                         ? StatusColors.success
                         : MaterialPalette.on-surface-variant;
@@ -112,40 +181,72 @@ export component DevicePage {
             }
         }
 
-        Rectangle { height: 4px; visible: root.test-status != ""; }
+        Rectangle {
+            height: 4px;
+            visible: root.test-status != "";
+        }
+
         Text {
             visible: root.test-status != "";
             opacity: root.test-status != "" ? 1.0 : 0.0;
-            text: root.test-status; font-size: 14px;
+            text: root.test-status;
+            font-size: 14px;
             color: root.test-step < 0 ? MaterialPalette.error : MaterialPalette.primary;
             animate color { duration: 200ms; }
-            animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+            animate opacity {
+                duration: 100ms;
+                easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+            }
         }
 
-        Rectangle { height: 12px; }
-        HorizontalDivider { }
-        Rectangle { height: 8px; }
+        Rectangle {
+            height: 12px;
+        }
 
-        HorizontalLayout { spacing: 8px; height: 32px;
+        HorizontalDivider { }
+
+        Rectangle {
+            height: 8px;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            height: 32px;
             Text {
                 text: Tr.reboot-title;
-                font-size: 15px; font-weight: 500;
+                font-size: 15px;
+                font-weight: 500;
                 color: MaterialPalette.on-surface;
                 vertical-alignment: center;
             }
-            Rectangle { horizontal-stretch: 1; }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
         }
 
-        Rectangle { height: 8px; }
+        Rectangle {
+            height: 8px;
+        }
 
-        Text { text: "ADB"; font-size: Typography.label-medium-size; color: MaterialPalette.on-surface-variant; min-height: 14px; }
-        Rectangle { height: 4px; }
-        HorizontalLayout { spacing: 8px;
+        Text {
+            text: "ADB";
+            font-size: Typography.label-medium-size;
+            color: MaterialPalette.on-surface-variant;
+            min-height: 14px;
+        }
+
+        Rectangle {
+            height: 4px;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
             for item in [
-                { label: Tr.reboot-recovery,    target: "adb-recovery"    },
-                { label: Tr.reboot-bootloader,  target: "adb-bootloader"  },
-                { label: Tr.reboot-fastbootd,   target: "adb-fastboot"    },
-                { label: Tr.reboot-system,      target: "adb-reboot"      },
+                { label: Tr.reboot-recovery, target: "adb-recovery" },
+                { label: Tr.reboot-bootloader, target: "adb-bootloader" },
+                { label: Tr.reboot-fastbootd, target: "adb-fastboot" },
+                { label: Tr.reboot-system, target: "adb-reboot" },
             ]: ActionChip {
                 horizontal-stretch: 1;
                 text: item.label;
@@ -153,16 +254,28 @@ export component DevicePage {
             }
         }
 
-        Rectangle { height: 12px; }
+        Rectangle {
+            height: 12px;
+        }
 
-        Text { text: "Fastboot"; font-size: Typography.label-medium-size; color: MaterialPalette.on-surface-variant; min-height: 14px; }
-        Rectangle { height: 4px; }
-        HorizontalLayout { spacing: 8px;
+        Text {
+            text: "Fastboot";
+            font-size: Typography.label-medium-size;
+            color: MaterialPalette.on-surface-variant;
+            min-height: 14px;
+        }
+
+        Rectangle {
+            height: 4px;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
             for item in [
-                { label: Tr.reboot-recovery,    target: "fb-recovery"    },
-                { label: Tr.reboot-bootloader,  target: "fb-bootloader"  },
-                { label: Tr.reboot-fastbootd,   target: "fb-fastboot"    },
-                { label: Tr.reboot-system,      target: "fb-reboot"      },
+                { label: Tr.reboot-recovery, target: "fb-recovery" },
+                { label: Tr.reboot-bootloader, target: "fb-bootloader" },
+                { label: Tr.reboot-fastbootd, target: "fb-fastboot" },
+                { label: Tr.reboot-system, target: "fb-reboot" },
             ]: ActionChip {
                 horizontal-stretch: 1;
                 text: item.label;
@@ -170,6 +283,11 @@ export component DevicePage {
             }
         }
 
-        LogView { entries: root.device-log; vertical-stretch: 1; export-status: root.device-export-status; export-log => { root.export-device-log(); } }
+        LogView {
+            entries: root.device-log;
+            vertical-stretch: 1;
+            export-status: root.device-export-status;
+            export-log => { root.export-device-log(); }
+        }
     }
 }

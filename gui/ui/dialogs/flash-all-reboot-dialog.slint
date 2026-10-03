@@ -20,32 +20,44 @@ export component FlashAllRebootDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
+        animate opacity {
+            duration: 200ms;
+            easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
+        TouchArea { }
 
         Rectangle {
             x: (parent.width - 520px) / 2;
             y: (parent.height - 280px) / 2;
-            width: 520px; height: 280px;
+            width: 520px;
+            height: 280px;
             border-radius: 20px;
             background: MaterialPalette.surface-container-high;
             border-width: 1px;
             border-color: MaterialPalette.outline-variant;
             clip: true;
 
-            VerticalLayout { padding: 20px; spacing: 10px;
+            VerticalLayout {
+                padding: 20px;
+                spacing: 10px;
                 Text {
                     text: Tr.flash-reboot-title;
-                    font-size: 15px; font-weight: 600;
+                    font-size: 15px;
+                    font-weight: 600;
                     color: MaterialPalette.on-surface;
                     wrap: word-wrap;
                 }
 
-                VerticalLayout { spacing: 6px;
+                VerticalLayout {
+                    spacing: 6px;
                     for item in [
-                        { label: Tr.flash-reboot-from-system,     val: 1 },
+                        { label: Tr.flash-reboot-from-system, val: 1 },
                         { label: Tr.flash-reboot-from-bootloader, val: 2 },
-                        { label: Tr.flash-reboot-skip,            val: 3 },
+                        { label: Tr.flash-reboot-skip, val: 3 },
                     ]: TouchArea {
                         height: 48px;
                         clicked => { root.reboot-choice = item.val; }
@@ -59,8 +71,8 @@ export component FlashAllRebootDialog {
                             background: root.reboot-choice == item.val
                                 ? MaterialPalette.secondary-container
                                 : (parent.has-hover
-                                    ? MaterialPalette.surface-container-highest
-                                    : MaterialPalette.surface-container);
+                                ? MaterialPalette.surface-container-highest
+                                : MaterialPalette.surface-container);
                             animate background { duration: 80ms; }
                             animate border-color { duration: 80ms; }
 
@@ -78,9 +90,18 @@ export component FlashAllRebootDialog {
                     }
                 }
 
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton { text: Tr.cancel; clicked => { root.cancel(); } }
-                    BackButton { clicked => { root.back(); } }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    TextButton {
+                        text: Tr.cancel;
+                        clicked => { root.cancel(); }
+                    }
+
+                    BackButton {
+                        clicked => { root.back(); }
+                    }
+
                     FilledButton {
                         text: Tr.reboot-and-flash;
                         enabled: root.reboot-choice != 0;

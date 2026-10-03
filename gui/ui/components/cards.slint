@@ -12,7 +12,8 @@ export component NavCard inherits TouchArea {
     height: 92px;
 
     Rectangle {
-        width: 100%; height: 100%;
+        width: 100%;
+        height: 100%;
         y: root.pressed ? 2px : (root.has-hover ? -2px : 0px);
         border-radius: root.pressed ? 18px : 28px;
         border-width: 1px;
@@ -26,23 +27,35 @@ export component NavCard inherits TouchArea {
         drop-shadow-color: StatusColors.drop-shadow;
         drop-shadow-offset-y: root.has-hover ? 6px : 1px;
         animate y, border-radius, drop-shadow-blur, drop-shadow-offset-y {
-            duration: 400ms; easing: spring;
+            duration: 400ms;
+            easing: spring;
         }
-        animate background, border-color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+        animate background, border-color {
+            duration: 200ms;
+            easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+        }
 
-        VerticalLayout { alignment: center; spacing: 6px;
-            HorizontalLayout { alignment: center;
+        VerticalLayout {
+            alignment: center;
+            spacing: 6px;
+            HorizontalLayout {
+                alignment: center;
                 Rectangle {
-                    width: 40px; height: 40px;
+                    width: 40px;
+                    height: 40px;
                     border-radius: root.has-hover ? 14px : 20px;
                     background: root.has-hover
                         ? MaterialPalette.primary
                         : MaterialPalette.surface-container-high;
-                    animate border-radius { duration: 400ms; easing: spring; }
+                    animate border-radius {
+                        duration: 400ms;
+                        easing: spring;
+                    }
                     animate background { duration: 200ms; }
                     Image {
                         source: icon;
-                        width: 20px; height: 20px;
+                        width: 20px;
+                        height: 20px;
                         x: (parent.width - 20px) / 2;
                         y: (parent.height - 20px) / 2;
                         colorize: root.has-hover
@@ -52,6 +65,7 @@ export component NavCard inherits TouchArea {
                     }
                 }
             }
+
             Text {
                 text: label;
                 font-size: Typography.label-large-size;
@@ -64,6 +78,6 @@ export component NavCard inherits TouchArea {
             }
         }
     }
+
     clicked => { root.card-clicked(); }
 }
-

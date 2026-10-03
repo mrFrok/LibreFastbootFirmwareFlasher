@@ -26,20 +26,26 @@ import { DeviceInfo } from "../structs.slint";
 export component PathField inherits Rectangle {
     in property <string> path;
     in property <bool> has-focus: false;
-    height: 48px; border-radius: 18px;
-    min-width: 0px; clip: true;
+    height: 48px;
+    border-radius: 18px;
+    min-width: 0px;
+    clip: true;
     background: MaterialPalette.surface-container;
     border-width: has-focus ? 2px : 1px;
     border-color: has-focus ? MaterialPalette.primary : MaterialPalette.outline-variant;
     animate border-color { duration: 150ms; }
     animate border-width { duration: 100ms; }
-    HorizontalLayout { padding-left: 16px; padding-right: 16px;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
         Text {
             text: root.path != "" ? root.path : "…";
             font-size: Typography.body-medium-size;
             font-family: "monospace";
             color: root.path != "" ? MaterialPalette.on-surface : MaterialPalette.on-surface-variant;
-            vertical-alignment: center; overflow: elide; horizontal-stretch: 1;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
         }
     }
 }
@@ -47,7 +53,8 @@ export component PathField inherits Rectangle {
 // ── Back Button ────────────────────────────────────────────────────────────
 export component BackButton {
     callback clicked;
-    width: 44px; height: 44px;
+    width: 44px;
+    height: 44px;
     ta := TouchArea {
         clicked => { root.clicked(); }
         Rectangle {
@@ -58,11 +65,18 @@ export component BackButton {
             background: ta.pressed
                 ? MaterialPalette.surface-container-highest
                 : ta.has-hover ? MaterialPalette.surface-container-high : transparent;
-            animate border-radius, y { duration: 350ms; easing: spring; }
-            animate background { duration: 120ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+            animate border-radius, y {
+                duration: 350ms;
+                easing: spring;
+            }
+            animate background {
+                duration: 120ms;
+                easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+            }
             Image {
                 source: @image-url("../icons/arrow_back.svg");
-                width: 20px; height: 20px;
+                width: 20px;
+                height: 20px;
                 x: (parent.width - 20px) / 2;
                 y: (parent.height - 20px) / 2;
                 colorize: MaterialPalette.on-surface-variant;
@@ -75,28 +89,41 @@ export component BackButton {
 export component DeviceBanner inherits Rectangle {
     in property <DeviceInfo> device;
     callback set-slot(string);
-    height: 48px; border-radius: 20px;
+    height: 48px;
+    border-radius: 20px;
     background: device.connected
         ? MaterialPalette.primary-container
         : MaterialPalette.error-container;
-    animate background { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+    animate background {
+        duration: 200ms;
+        easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+    }
     border-width: 1px;
     border-color: device.connected
         ? MaterialPalette.primary
         : MaterialPalette.error;
-    animate border-color { duration: 200ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+    animate border-color {
+        duration: 200ms;
+        easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+    }
 
-    HorizontalLayout { padding-left: 14px; padding-right: 14px; spacing: 10px;
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 10px;
         // Device icon container
         Rectangle {
-            width: 28px; height: 28px; border-radius: 14px;
+            width: 28px;
+            height: 28px;
+            border-radius: 14px;
             background: device.connected
                 ? MaterialPalette.primary
                 : MaterialPalette.error;
             y: (parent.height - 28px) / 2;
             Image {
                 source: @image-url("../icons/smartphone.svg");
-                width: 16px; height: 16px;
+                width: 16px;
+                height: 16px;
                 x: (parent.width - 16px) / 2;
                 y: (parent.height - 16px) / 2;
                 colorize: device.connected
@@ -104,7 +131,9 @@ export component DeviceBanner inherits Rectangle {
                     : MaterialPalette.on-error;
             }
         }
-        if device.connected: HorizontalLayout { spacing: 10px;
+
+        if device.connected: HorizontalLayout {
+            spacing: 10px;
             Text {
                 text: device.name;
                 font-size: Typography.body-medium-size;
@@ -112,6 +141,7 @@ export component DeviceBanner inherits Rectangle {
                 color: MaterialPalette.on-primary-container;
                 vertical-alignment: center;
             }
+
             Text {
                 text: device.serial;
                 font-size: Typography.body-small-size;
@@ -119,6 +149,7 @@ export component DeviceBanner inherits Rectangle {
                 color: MaterialPalette.on-primary-container;
                 vertical-alignment: center;
             }
+
             Text {
                 text: Tr.slot-lbl + device.slot;
                 font-size: Typography.body-small-size;

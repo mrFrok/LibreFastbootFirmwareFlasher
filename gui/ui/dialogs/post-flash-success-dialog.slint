@@ -1,4 +1,9 @@
-import { FilledButton, MaterialPalette, OutlineButton, TextButton } from "@material";
+import {
+    FilledButton,
+    MaterialPalette,
+    OutlineButton,
+    TextButton,
+} from "@material";
 import { Tr } from "../globals/tr.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
@@ -18,33 +23,54 @@ export component PostFlashSuccessDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
+        animate opacity {
+            duration: 200ms;
+            easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
+        TouchArea { }
 
         Rectangle {
             x: (parent.width - 460px) / 2;
             y: (parent.height - 310px) / 2;
-            width: 460px; height: 310px;
+            width: 460px;
+            height: 310px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
-            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
+            border-width: 1px;
+            border-color: MaterialPalette.outline-variant;
+            clip: true;
 
-            VerticalLayout { padding: 24px; spacing: 12px;
-                HorizontalLayout { spacing: 8px; alignment: start;
+            VerticalLayout {
+                padding: 24px;
+                spacing: 12px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
                     Image {
                         source: @image-url("../icons/check.svg");
-                        width: 22px; height: 22px;
+                        width: 22px;
+                        height: 22px;
                         colorize: StatusColors.success;
                         y: (parent.height - 22px) / 2;
                     }
+
                     Text {
                         text: Tr.flash-complete;
-                        font-size: 18px; font-weight: 700; color: StatusColors.success;
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: StatusColors.success;
                     }
                 }
+
                 Text {
                     text: Tr.next-action;
-                    font-size: 14px; color: MaterialPalette.on-surface-variant; wrap: word-wrap;
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
                     vertical-stretch: 1;
                 }
                 // Vertical stack: long Russian strings can't fit side-by-side
@@ -52,10 +78,12 @@ export component PostFlashSuccessDialog {
                     text: Tr.wipe-data-reboot;
                     clicked => { root.wipe-and-reboot(); }
                 }
+
                 OutlineButton {
                     text: Tr.reboot;
                     clicked => { root.reboot(); }
                 }
+
                 TextButton {
                     text: Tr.dismiss;
                     clicked => { root.dismiss(); }

@@ -1,5 +1,11 @@
 import { Palette } from "std-widgets.slint";
-import { FilledButton, HorizontalDivider, LinearProgressIndicator, MaterialPalette, OutlineButton } from "@material";
+import {
+    FilledButton,
+    HorizontalDivider,
+    LinearProgressIndicator,
+    MaterialPalette,
+    OutlineButton,
+} from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
 import { DeviceInfo, LogEntry } from "../structs.slint";
@@ -29,18 +35,34 @@ export component DownloadPage {
     callback extract-firmware();
     callback export-download-log();
 
-    VerticalLayout { spacing: 12px;
+    VerticalLayout {
+        spacing: 12px;
 
         Text {
             text: Tr.nav-download;
-            font-size: 20px; font-weight: 700;
+            font-size: 20px;
+            font-weight: 700;
             color: MaterialPalette.on-surface;
         }
-        DeviceBanner { device: root.device; }
 
-        Text { text: Tr.output-dir; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
-        HorizontalLayout { spacing: 8px; height: 44px;
-            PathField { path: root.output-dir; horizontal-stretch: 1; }
+        DeviceBanner {
+            device: root.device;
+        }
+
+        Text {
+            text: Tr.output-dir;
+            font-size: Typography.body-large-size;
+            color: MaterialPalette.on-surface-variant;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            height: 44px;
+            PathField {
+                path: root.output-dir;
+                horizontal-stretch: 1;
+            }
+
             OutlineButton {
                 min-width: 90px;
                 text: Tr.browse;
@@ -48,7 +70,9 @@ export component DownloadPage {
             }
         }
 
-        HorizontalLayout { spacing: 8px; height: 44px;
+        HorizontalLayout {
+            spacing: 8px;
+            height: 44px;
             Rectangle {
                 horizontal-stretch: 1;
                 min-width: 0px;
@@ -62,8 +86,10 @@ export component DownloadPage {
                 animate border-color { duration: 80ms; }
 
                 Text {
-                    x: 14px; y: 0px;
-                    width: parent.width - 28px; height: parent.height;
+                    x: 14px;
+                    y: 0px;
+                    width: parent.width - 28px;
+                    height: parent.height;
                     visible: root.download-url == "" && !url-input.has-focus;
                     opacity: root.download-url == "" && !url-input.has-focus ? 1.0 : 0.0;
                     text: Tr.ota-url;
@@ -71,12 +97,17 @@ export component DownloadPage {
                     color: MaterialPalette.on-surface-variant;
                     vertical-alignment: center;
                     overflow: elide;
-                    animate opacity { duration: 100ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
+                    animate opacity {
+                        duration: 100ms;
+                        easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+                    }
                 }
 
                 url-input := TextInput {
-                    x: 14px; y: 0px;
-                    width: parent.width - 28px; height: parent.height;
+                    x: 14px;
+                    y: 0px;
+                    width: parent.width - 28px;
+                    height: parent.height;
                     text <=> root.download-url;
                     font-size: 14px;
                     color: MaterialPalette.on-surface;
@@ -105,23 +136,61 @@ export component DownloadPage {
             }
         }
 
-        if root.dl-percent > 0 || root.dl-total != "": VerticalLayout { spacing: 6px;
-            HorizontalLayout { spacing: 10px;
-                Text { text: Math.round(root.dl-percent) + "%"; font-size: 15px; font-weight: 700; color: MaterialPalette.primary; }
-                Text { text: root.dl-downloaded + " / " + root.dl-total; font-size: 14px; color: MaterialPalette.on-surface-variant; }
-                Rectangle { horizontal-stretch: 1; }
-                Text { text: "↓ " + root.dl-speed; font-size: 14px; font-weight: 500; color: StatusColors.success; }
-                Text { text: "ETA " + root.dl-eta; font-size: 14px; color: MaterialPalette.on-surface-variant; }
+        if root.dl-percent > 0 || root.dl-total != "": VerticalLayout {
+            spacing: 6px;
+            HorizontalLayout {
+                spacing: 10px;
+                Text {
+                    text: Math.round(root.dl-percent) + "%";
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: MaterialPalette.primary;
+                }
+
+                Text {
+                    text: root.dl-downloaded + " / " + root.dl-total;
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface-variant;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                Text {
+                    text: "↓ " + root.dl-speed;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: StatusColors.success;
+                }
+
+                Text {
+                    text: "ETA " + root.dl-eta;
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface-variant;
+                }
             }
-            LinearProgressIndicator { progress: root.dl-percent / 100; }
+
+            LinearProgressIndicator {
+                progress: root.dl-percent / 100;
+            }
         }
 
         HorizontalDivider { }
 
-        Text { text: Tr.local-lbl; font-size: Typography.body-large-size; color: MaterialPalette.on-surface-variant; }
+        Text {
+            text: Tr.local-lbl;
+            font-size: Typography.body-large-size;
+            color: MaterialPalette.on-surface-variant;
+        }
 
-        HorizontalLayout { spacing: 8px; height: 44px;
-            PathField { path: root.firmware-path; horizontal-stretch: 1; }
+        HorizontalLayout {
+            spacing: 8px;
+            height: 44px;
+            PathField {
+                path: root.firmware-path;
+                horizontal-stretch: 1;
+            }
 
             OutlineButton {
                 min-width: 110px;
@@ -137,6 +206,11 @@ export component DownloadPage {
             }
         }
 
-        LogView { entries: root.download-log; vertical-stretch: 1; export-status: root.download-export-status; export-log => { root.export-download-log(); } }
+        LogView {
+            entries: root.download-log;
+            vertical-stretch: 1;
+            export-status: root.download-export-status;
+            export-log => { root.export-download-log(); }
+        }
     }
 }

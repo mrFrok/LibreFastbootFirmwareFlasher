@@ -2,10 +2,10 @@ import { MaterialPalette } from "@material";
 import { Typography } from "../globals/typography.slint";
 
 export component NavItem inherits TouchArea {
-    in property <string>  label;
-    in property <bool>    selected;
-    in property <image>   icon;
-    in property <image>   icon-active;
+    in property <string> label;
+    in property <bool> selected;
+    in property <image> icon;
+    in property <image> icon-active;
 
     height: 56px;
 
@@ -19,12 +19,20 @@ export component NavItem inherits TouchArea {
         background: selected
             ? MaterialPalette.secondary-container
             : transparent;
-        animate background { duration: 250ms; easing: cubic-bezier(0.2, 0.0, 0, 1.0); }
-        animate border-radius, y { duration: 350ms; easing: spring; }
+        animate background {
+            duration: 250ms;
+            easing: cubic-bezier(0.2, 0.0, 0, 1.0);
+        }
+        animate border-radius, y {
+            duration: 350ms;
+            easing: spring;
+        }
 
         // State layer overlay
         Rectangle {
-            width: 100%; height: 100%; border-radius: parent.border-radius;
+            width: 100%;
+            height: 100%;
+            border-radius: parent.border-radius;
             background: root.has-hover
                 ? MaterialPalette.on-surface.with-alpha(0.08)
                 : transparent;
@@ -32,11 +40,14 @@ export component NavItem inherits TouchArea {
         }
 
         HorizontalLayout {
-            padding-left: 16px; padding-right: 24px; spacing: 12px;
+            padding-left: 16px;
+            padding-right: 24px;
+            spacing: 12px;
 
             Image {
                 source: selected ? root.icon-active : root.icon;
-                width: 22px; height: 22px;
+                width: 22px;
+                height: 22px;
                 y: (parent.height - 22px) / 2;
                 colorize: selected
                     ? MaterialPalette.on-secondary-container
@@ -61,7 +72,7 @@ export component NavItem inherits TouchArea {
 }
 
 export component AboutLink inherits TouchArea {
-    in property <image>  icon;
+    in property <image> icon;
     in property <string> label;
     in property <string> url;
 
@@ -80,26 +91,38 @@ export component AboutLink inherits TouchArea {
         border-color: root.has-hover
             ? MaterialPalette.outline
             : MaterialPalette.outline-variant;
-        animate border-radius, y { duration: 350ms; easing: spring; }
+        animate border-radius, y {
+            duration: 350ms;
+            easing: spring;
+        }
         animate background { duration: 150ms; }
         animate border-color { duration: 150ms; }
 
-        HorizontalLayout { padding-left: 16px; padding-right: 16px; spacing: 12px;
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            spacing: 12px;
             // Icon in tertiary circle
             Rectangle {
-                width: 32px; height: 32px;
+                width: 32px;
+                height: 32px;
                 border-radius: root.has-hover ? 12px : 16px;
                 background: MaterialPalette.tertiary-container;
                 y: (parent.height - 32px) / 2;
-                animate border-radius { duration: 350ms; easing: spring; }
+                animate border-radius {
+                    duration: 350ms;
+                    easing: spring;
+                }
                 Image {
                     source: icon;
-                    width: 16px; height: 16px;
+                    width: 16px;
+                    height: 16px;
                     x: (parent.width - 16px) / 2;
                     y: (parent.height - 16px) / 2;
                     colorize: MaterialPalette.on-tertiary-container;
                 }
             }
+
             Text {
                 text: label;
                 font-size: Typography.body-medium-size;
@@ -108,6 +131,7 @@ export component AboutLink inherits TouchArea {
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
+
             Text {
                 text: "→";
                 font-size: Typography.body-large-size;

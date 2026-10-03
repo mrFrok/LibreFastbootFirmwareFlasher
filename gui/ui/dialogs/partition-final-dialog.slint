@@ -19,31 +19,64 @@ export component PartitionFinalDialog {
     Rectangle {
         visible: show;
         opacity: show ? 1.0 : 0.0;
-        animate opacity { duration: 200ms; easing: cubic-bezier(0.4, 0.0, 0.2, 1.0); }
-        animate y { duration: 300ms; easing: cubic-bezier(0.05, 0.7, 0.1, 1.0); }
-        z: 100; background: StatusColors.scrim; width: 100%; height: 100%; TouchArea { }
+        animate opacity {
+            duration: 200ms;
+            easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+        }
+        animate y {
+            duration: 300ms;
+            easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+        }
+        z: 100;
+        background: StatusColors.scrim;
+        width: 100%;
+        height: 100%;
+        TouchArea { }
 
         Rectangle {
             x: (parent.width - 400px) / 2;
             y: (parent.height - 220px) / 2;
-            width: 400px; height: 220px;
+            width: 400px;
+            height: 220px;
             border-radius: 16px;
             background: MaterialPalette.surface-container-high;
-            border-width: 1px; border-color: MaterialPalette.outline-variant; clip: true;
+            border-width: 1px;
+            border-color: MaterialPalette.outline-variant;
+            clip: true;
 
-            VerticalLayout { padding: 28px; spacing: 12px;
+            VerticalLayout {
+                padding: 28px;
+                spacing: 12px;
                 Text {
                     text: Tr.part-final-title + ": " + root.partition-name;
-                    font-size: 18px; font-weight: 700; color: MaterialPalette.on-surface;
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: MaterialPalette.on-surface;
                 }
+
                 Text {
                     text: Tr.part-final-body;
-                    font-size: 14px; color: MaterialPalette.on-surface-variant; wrap: word-wrap;
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
                 }
-                Rectangle { vertical-stretch: 1; }
-                HorizontalLayout { spacing: 8px; alignment: end;
-                    TextButton { text: Tr.cancel; clicked => { root.cancel(); } }
-                    BackButton { clicked => { root.back(); } }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    TextButton {
+                        text: Tr.cancel;
+                        clicked => { root.cancel(); }
+                    }
+
+                    BackButton {
+                        clicked => { root.back(); }
+                    }
+
                     FilledButton {
                         text: Tr.flash-btn;
                         clicked => { root.flash(); }
