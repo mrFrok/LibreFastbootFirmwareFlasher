@@ -39,6 +39,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install slint-lsp
         run: |
+          # The release binary links its live-preview stack even when only
+          # formatting; the runner image lacks libinput and libgbm.
+          sudo apt-get update -qq
+          sudo apt-get install -y libinput10 libgbm1 libxkbcommon0 libfontconfig1 libfreetype6
           curl -fsSLo slint-lsp.tar.gz \
             "https://github.com/slint-ui/slint/releases/download/v$SLINT_VERSION/slint-lsp-linux.tar.gz"
           echo "$SLINT_LSP_SHA256  slint-lsp.tar.gz" | sha256sum -c -
