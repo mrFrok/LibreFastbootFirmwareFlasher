@@ -161,6 +161,26 @@ def update_formula(path: Path, version: str, h: dict) -> None:
     print(f"Formula/lfff.rb: version {version}, {len(ASSETS) + 1} hashes")
 
 
+def update_cask(path: Path, version: str, h: dict) -> None:
+    """The macOS app cask: one version, one hash per architecture."""
+    s = path.read_text()
+    s = sub_exactly(s, r'(\n  version ")[^"]+(")', rf"\g<1>{version}\g<2>", "cask version")
+    s = sub_exactly(
+        s,
+        r'(sha256 arm:\s*")[0-9a-f]{64}(")',
+        rf"\g<1>{h[('gui', 'macos', 'aarch64')]}\g<2>",
+        "cask arm hash",
+    )
+    s = sub_exactly(
+        s,
+        r'(intel:\s*")[0-9a-f]{64}(")',
+        rf"\g<1>{h[('gui', 'macos', 'x86_64')]}\g<2>",
+        "cask intel hash",
+    )
+    path.write_text(s)
+    print(f"{path.name}: version {version}, 2 hashes")
+
+
 def update_flatpak(path: Path, version: str, h: dict) -> None:
     """The manifest pulls the app itself from the release, like Homebrew does."""
     by_asset = {name: h[key] for key, name in ASSETS.items()}
@@ -206,6 +226,7 @@ def main() -> int:
     ap.add_argument("--aur-bin", type=Path, help="path to lfff-bin/PKGBUILD")
     ap.add_argument("--aur-src", type=Path, help="path to lfff/PKGBUILD")
     ap.add_argument("--formula", type=Path, help="path to Formula/lfff.rb")
+    ap.add_argument("--cask", type=Path, help="path to Casks/librefastbootfirmwareflasher.rb")
     ap.add_argument("--flatpak", type=Path, help="path to the flatpak manifest")
     ap.add_argument("--metainfo", type=Path, help="path to the AppStream metainfo")
     ap.add_argument("--date", help="release date for the metainfo entry (default: today, UTC)")
@@ -227,6 +248,8 @@ def main() -> int:
             update_aur_src(args.aur_src, version, source_hash(version))
         if args.formula:
             update_formula(args.formula, version, h)
+        if args.cask:
+            update_cask(args.cask, version, h)
         if args.flatpak:
             update_flatpak(args.flatpak, version, h)
         if args.metainfo:

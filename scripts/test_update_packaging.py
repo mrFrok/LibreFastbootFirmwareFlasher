@@ -243,6 +243,32 @@ class TestFormula(Case):
             up.update_formula(self.path, "9.9.9", H)
 
 
+class TestCask(Case):
+    def setUp(self):
+        super().setUp()
+        self.path = self.copy(DATA / "librefastbootfirmwareflasher.rb")
+
+    def test_version_and_hashes_per_arch(self):
+        up.update_cask(self.path, "9.9.9", H)
+        s = self.path.read_text()
+        self.assertIn('version "9.9.9"', s)
+        self.assertIn(f'arm:   "{H[("gui", "macos", "aarch64")]}"', s)
+        self.assertIn(f'intel: "{H[("gui", "macos", "x86_64")]}"', s)
+        # The url follows the version by interpolation and is never rewritten.
+        self.assertIn("/download/v#{version}/lfff-gui-macos-#{arch}.tar.gz", s)
+
+    def test_idempotent(self):
+        up.update_cask(self.path, "9.9.9", H)
+        once = self.path.read_text()
+        up.update_cask(self.path, "9.9.9", H)
+        self.assertEqual(once, self.path.read_text())
+
+    def test_restructured_file_raises(self):
+        self.path.write_text(self.path.read_text().replace("intel:", "x86:"))
+        with self.assertRaises(up.PatchError):
+            up.update_cask(self.path, "9.9.9", H)
+
+
 class TestFlatpak(Case):
     def setUp(self):
         super().setUp()

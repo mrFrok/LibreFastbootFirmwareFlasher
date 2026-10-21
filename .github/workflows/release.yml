@@ -497,21 +497,22 @@ jobs:
           ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           path: tap
 
-      - name: Point the formula at the new release
+      - name: Point the formula and the cask at the new release
         run: |
           python3 src/scripts/update-packaging.py --version "$VERSION" \
-            --formula tap/Formula/lfff.rb
+            --formula tap/Formula/lfff.rb \
+            --cask tap/Casks/librefastbootfirmwareflasher.rb
 
       - name: Commit
         working-directory: tap
         run: |
           if git diff --quiet; then
-            echo "formula already up to date"
+            echo "formula and cask already up to date"
             exit 0
           fi
           git config user.name  "$(git log -1 --format='%an')"
           git config user.email "$(git log -1 --format='%ae')"
-          git commit -m "lfff ${VERSION#v}" -- Formula/lfff.rb
+          git commit -m "lfff ${VERSION#v}" -- Formula/lfff.rb Casks/librefastbootfirmwareflasher.rb
           git push
 
   packaging-flatpak:

@@ -48,7 +48,7 @@ jobs:
       # installs it. The formula lives in mrFrok/homebrew-lfff and the packaging
       # job only rewrites its versions and hashes, so this is the only place
       # its install logic ever runs before a user hits it.
-      - name: Homebrew install from the tap
+      - name: Homebrew install from the tap (cask and formula)
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
           HOMEBREW_NO_INSTALL_CLEANUP: '1'
@@ -57,10 +57,17 @@ jobs:
           # Current Homebrew refuses formulae from third-party taps until
           # they are trusted; older releases have no `brew trust` at all.
           if brew trust --help >/dev/null 2>&1; then brew trust mrfrok/lfff; fi
-          brew install lfff
+          # The cask pulls in the formula, so this one command is the whole
+          # install a user does.
+          brew install --cask librefastbootfirmwareflasher
           lfff --version
           test -x "$(brew --prefix)/bin/lfff-gui"
-          test -d "$(brew --prefix lfff)/LibreFastbootFirmwareFlasher.app"
+          test -d /Applications/LibreFastbootFirmwareFlasher.app
+          # Not notarised, so the cask must have taken the quarantine off.
+          if xattr /Applications/LibreFastbootFirmwareFlasher.app | grep -q com.apple.quarantine; then
+            echo "::error::the app is still quarantined"
+            exit 1
+          fi
           brew test lfff
 
   slint-format:

@@ -60,10 +60,17 @@ yay -S lfff         # build from source
 yay -S lfff-bin     # prebuilt binary
 ```
 
-**Homebrew (macOS / Linux)**
+**Homebrew (macOS)** — the app in /Applications, plus the command-line tool
 ```bash
 brew tap mrFrok/lfff
 brew trust mrfrok/lfff   # current Homebrew asks this of third-party taps
+brew install --cask librefastbootfirmwareflasher
+```
+
+**Homebrew (Linux)**, or just the command-line tool on macOS
+```bash
+brew tap mrFrok/lfff
+brew trust mrfrok/lfff
 brew install lfff
 ```
 
