@@ -63,12 +63,15 @@ yay -S lfff-bin     # prebuilt binary
 **Homebrew (macOS / Linux)**
 ```bash
 brew tap mrFrok/lfff
+brew trust mrfrok/lfff   # current Homebrew asks this of third-party taps
 brew install lfff
 ```
 
+If `brew trust` is an unknown command, your Homebrew predates it — skip that line.
+
 On macOS, `brew tap` needs git, which comes with Apple's Command Line Tools.
 If it fails with *"No developer tools installed"* or *"Git is unavailable"*,
-install them first, then run the two commands again:
+install them first, then run the commands above again:
 ```bash
 xcode-select --install
 ```

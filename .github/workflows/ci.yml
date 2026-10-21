@@ -54,6 +54,9 @@ jobs:
           HOMEBREW_NO_INSTALL_CLEANUP: '1'
         run: |
           brew tap mrFrok/lfff
+          # Current Homebrew refuses formulae from third-party taps until
+          # they are trusted; older releases have no `brew trust` at all.
+          if brew trust --help >/dev/null 2>&1; then brew trust mrfrok/lfff; fi
           brew install lfff
           lfff --version
           test -x "$(brew --prefix)/bin/lfff-gui"
