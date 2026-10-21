@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -8,8 +9,8 @@ pub struct Config {
     pub lang: String,
     #[serde(default = "default_theme")]
     pub theme: String,
-    /// Colour scheme index: 0 = blue (LFFF), 1 = indigo (@material default),
-    /// 2 = glass (translucent). Matches `AppScheme` in globals/lfff-scheme.slint.
+    /// Colour scheme index into `AppScheme` in globals/lfff-scheme.slint:
+    /// 0 blue, 1 indigo, 2 teal, 3 green, 4 amber, 5 rose, 6 violet.
     #[serde(default)]
     pub scheme: i32,
     /// Alpha-blended surfaces, for compositors that blur behind windows.
@@ -17,6 +18,20 @@ pub struct Config {
     pub translucent: bool,
     #[serde(default)]
     pub output_dir: Option<String>,
+    /// Chip the user chose per device product ("snapdragon" or "mediatek").
+    /// Never guessed: an entry exists only after the user picked it.
+    #[serde(default)]
+    pub chips: BTreeMap<String, String>,
+    /// Tools pinned to the sidebar, by their id on the Tools page.
+    #[serde(default)]
+    pub pinned_tools: Vec<String>,
+    /// The pre-2.10 page layout, kept for a transition period.
+    #[serde(default)]
+    pub classic_ui: bool,
+    /// The user closed the first-launch notice (supported phones, own risk);
+    /// it is not shown again.
+    #[serde(default)]
+    pub notice_accepted: bool,
 }
 
 fn default_lang() -> String {
@@ -35,6 +50,10 @@ impl Default for Config {
             scheme: 0,
             translucent: false,
             output_dir: None,
+            chips: BTreeMap::new(),
+            pinned_tools: Vec::new(),
+            classic_ui: false,
+            notice_accepted: false,
         }
     }
 }
@@ -90,4 +109,36 @@ pub fn set_output_dir(path: &str) {
     let mut config = load_config();
     config.output_dir = Some(path.to_string());
     save_config(&config);
+}
+
+pub fn set_chip(product: &str, chip: &str) {
+    let mut config = load_config();
+    config.chips.insert(product.to_string(), chip.to_string());
+    save_config(&config);
+}
+
+pub fn clear_chips() {
+    let mut config = load_config();
+    config.chips.clear();
+    save_config(&config);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A config written by an older version has none of the newer fields and
+    // must still load with every setting it does have.
+    #[test]
+    fn an_old_config_file_still_loads() {
+        let old = r#"{"scale":1.25,"lang":"ru","theme":"light","scheme":2,"translucent":true,"output_dir":"/tmp/fw"}"#;
+        let c: Config = serde_json::from_str(old).unwrap();
+        assert_eq!(c.lang, "ru");
+        assert_eq!(c.scheme, 2);
+        assert!(c.chips.is_empty());
+        assert!(c.pinned_tools.is_empty());
+        assert!(!c.classic_ui);
+        // Existing users see the first-launch notice once after updating.
+        assert!(!c.notice_accepted);
+    }
 }

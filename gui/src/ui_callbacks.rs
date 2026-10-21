@@ -106,18 +106,25 @@ pub fn poll(
                     ui.set_flash_status(partition.into());
                 }
             }
-            WMsg::DeviceDetected {
-                name,
-                serial,
-                slot,
-                is_fastboot_mode,
-            } => {
+            WMsg::DeviceDetected(d) => {
                 ui.set_device(DeviceInfo {
                     connected: true,
-                    name: name.into(),
-                    serial: serial.into(),
-                    slot: slot.into(),
-                    is_fastboot_mode,
+                    name: d.name.into(),
+                    serial: d.serial.into(),
+                    slot: if d.slot.is_empty() {
+                        "\u{2014}".into()
+                    } else {
+                        d.slot.into()
+                    },
+                    is_fastboot_mode: d.mode != crate::device_poll::Mode::System,
+                    mode: d.mode.as_ui(),
+                    unlocked: match d.unlocked {
+                        Some(true) => 1,
+                        Some(false) => 0,
+                        None => -1,
+                    },
+                    product: d.product.into(),
+                    battery: d.battery,
                 });
             }
             WMsg::DeviceDisconnected => {
@@ -127,6 +134,10 @@ pub fn poll(
                     serial: "\u{2014}".into(),
                     slot: "\u{2014}".into(),
                     is_fastboot_mode: false,
+                    mode: 0,
+                    unlocked: -1,
+                    product: "".into(),
+                    battery: -1,
                 });
             }
             WMsg::FlashComplete {

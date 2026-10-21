@@ -198,7 +198,7 @@ export component MainWindow inherits MaterialWindow {
     }
 
     // State
-    in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—", is-fastboot-mode: false };
+    in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—", is-fastboot-mode: false, mode: 0, unlocked: -1, product: "", battery: -1 };
     in-out property <string> firmware-path;
     in-out property <int> flash-source-mode: 0;
     in-out property <string> source-dir;

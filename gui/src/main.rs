@@ -1,6 +1,7 @@
 // src/main.rs — LFFF GUI entry point
 
 mod config;
+mod device_poll;
 mod env_path;
 mod log_models;
 mod ui_callbacks;
@@ -54,12 +55,7 @@ enum WMsg {
         fraction: f32,
         partition: String,
     },
-    DeviceDetected {
-        name: String,
-        serial: String,
-        slot: String,
-        is_fastboot_mode: bool,
-    },
+    DeviceDetected(device_poll::DeviceSnapshot),
     DeviceDisconnected,
     FlashComplete {
         success: bool,
@@ -281,7 +277,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let fail_resp = std::rc::Rc::new(std::cell::RefCell::new(None));
     let fastbootd_resp = std::rc::Rc::new(std::cell::RefCell::new(None));
 
-    thread::spawn(move || worker::worker(crx, mtx, flash_cancel_w));
+    // Set by the worker for the length of each command; the device poller
+    // stays quiet meanwhile. `current_device` is the poller's last reading.
+    let worker_busy = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let current_device = std::sync::Arc::new(std::sync::Mutex::new(None));
+    device_poll::spawn(mtx.clone(), worker_busy.clone(), current_device.clone());
+    thread::spawn(move || worker::worker(crx, mtx, flash_cancel_w, worker_busy, current_device));
 
     let models = log_models::LogModels::new();
     models.attach(&ui);

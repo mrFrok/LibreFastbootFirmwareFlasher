@@ -6,6 +6,17 @@ use std::time::Duration;
 use lfff_lib::arb::ArbVerdict;
 
 use super::{Cmd, FlashMethod, LogLevel, WMsg};
+use crate::device_poll::{self, DeviceSnapshot};
+
+/// Clears the worker-busy flag when a command ends, however it ends —
+/// `continue` leaves most arms early.
+struct Idle<'a>(&'a std::sync::atomic::AtomicBool);
+
+impl Drop for Idle<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
 
 fn log(tx: &mpsc::Sender<WMsg>, l: LogLevel, tab: u8, m: impl Into<String>) {
     tx.send(WMsg::Log {
@@ -489,6 +500,8 @@ pub fn worker(
     rx: mpsc::Receiver<Cmd>,
     tx: mpsc::Sender<WMsg>,
     flash_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    current_device: std::sync::Arc<std::sync::Mutex<Option<DeviceSnapshot>>>,
 ) {
     let mut serial: Option<String> = None;
     let mut current_device_product = String::new();
@@ -498,137 +511,59 @@ pub fn worker(
     > = std::sync::Arc::new(std::sync::Mutex::new(None));
 
     while let Ok(cmd) = rx.recv() {
+        // The poller's reading is the freshest device the worker can know of
+        // between commands; within one, the worker tracks it itself (a reboot
+        // can change the serial it must use).
+        if let Some(d) = current_device.lock().unwrap().clone() {
+            serial = Some(d.serial);
+            current_device_product = d.product;
+        }
+        busy.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _idle = Idle(&busy);
         match cmd {
             Cmd::CheckDevice => {
                 log(&tx, LogLevel::Info, 0, "Searching for device...");
-
-                // run_cmd enforces a timeout — a hung adb daemon must not
-                // freeze the worker thread forever.
-                let r = lfff_lib::utils::run_cmd(&["adb", "devices"], 5);
-                let mut adb_device = None;
-                if r.code == 0 {
-                    for line in r.stdout.lines().skip(1) {
-                        let parts: Vec<&str> = line.split_whitespace().collect();
-                        if parts.len() >= 2 && parts[1] == "device" {
-                            adb_device = Some(parts[0].to_string());
-                            break;
+                let snap = if let Some(ser) = lfff_lib::device::list_adb_devices().first() {
+                    Some(device_poll::read_adb(ser))
+                } else if let Some(ser) = lfff_lib::device::list_fastboot_devices().first() {
+                    let s = device_poll::read_fastboot(ser);
+                    if s.is_none() {
+                        log(&tx, LogLevel::Error, 0, "Device found but getvar failed");
+                        continue;
+                    }
+                    s
+                } else {
+                    None
+                };
+                *current_device.lock().unwrap() = snap.clone();
+                match snap {
+                    Some(d) => {
+                        serial = Some(d.serial.clone());
+                        current_device_product = d.product.clone();
+                        let mut info = format!("Device: {} ({}) | {:?}", d.name, d.product, d.mode);
+                        if d.battery >= 0 {
+                            info.push_str(&format!(" | Battery: {}%", d.battery));
                         }
-                    }
-                }
-
-                if let Some(ref ser) = adb_device {
-                    log(&tx, LogLevel::Success, 0, format!("ADB device: {}", ser));
-                    serial = Some(ser.clone());
-
-                    // One adb round-trip for all properties instead of six
-                    // separate `adb shell` invocations (each costs a process
-                    // spawn + USB round-trip). `-s` keeps it working with
-                    // multiple devices connected.
-                    let script = "echo model=$(getprop ro.product.model); \
-                                      echo device=$(getprop ro.product.device); \
-                                      echo build=$(getprop ro.build.display.id); \
-                                      echo android=$(getprop ro.build.version.release); \
-                                      echo slot=$(getprop ro.boot.slot_suffix); \
-                                      echo battery=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)";
-                    let r = lfff_lib::utils::run_cmd(&["adb", "-s", ser, "shell", script], 5);
-                    let get = |key: &str| -> String {
-                        r.stdout
-                            .lines()
-                            .find_map(|l| l.trim().strip_prefix(&format!("{}=", key)))
-                            .unwrap_or("")
-                            .trim()
-                            .to_string()
-                    };
-                    let model = get("model");
-                    let product = get("device");
-                    let build = get("build");
-                    let android = get("android");
-                    let slot = get("slot");
-                    let battery = get("battery").parse::<i32>().unwrap_or(-1);
-
-                    let name = if !model.is_empty() {
-                        model.clone()
-                    } else {
-                        product.clone()
-                    };
-                    current_device_product = if !product.is_empty() {
-                        product.clone()
-                    } else {
-                        name.clone()
-                    };
-                    let slot_clean = slot.trim_start_matches('_').to_string();
-
-                    tx.send(WMsg::DeviceDetected {
-                        name: name.clone(),
-                        serial: ser.clone(),
-                        slot: if slot_clean.is_empty() {
-                            "N/A".into()
-                        } else {
-                            slot_clean
-                        },
-                        is_fastboot_mode: false,
-                    })
-                    .ok();
-
-                    let mut info = format!("Device: {} ({})", name, product);
-                    if !build.is_empty() {
-                        info.push_str(&format!(" | Build: {}", build));
-                    }
-                    if !android.is_empty() {
-                        info.push_str(&format!(" | Android {}", android));
-                    }
-                    if battery >= 0 {
-                        info.push_str(&format!(" | Battery: {}%", battery));
-                    }
-                    log(&tx, LogLevel::Success, 0, info);
-                    continue;
-                }
-
-                let s = lfff_lib::device::list_fastboot_devices();
-                if s.is_empty() {
-                    log(
-                        &tx,
-                        LogLevel::Error,
-                        0,
-                        "No device found via ADB or fastboot",
-                    );
-                    tx.send(WMsg::DeviceDisconnected).ok();
-                    serial = None;
-                    current_device_product.clear();
-                    continue;
-                }
-                let ser = &s[0];
-                serial = Some(ser.clone());
-                match lfff_lib::device::get_device_info(Some(ser)) {
-                    Some(i) => {
-                        let name = if i.product.is_empty() {
-                            ser.clone()
-                        } else {
-                            i.product.clone()
-                        };
-                        current_device_product = name.clone();
-                        let slot = if i.current_slot.is_empty() {
-                            "\u{2014}".into()
-                        } else {
-                            i.current_slot.clone()
-                        };
-                        tx.send(WMsg::DeviceDetected {
-                            name: name.clone(),
-                            serial: ser.clone(),
-                            slot,
-                            is_fastboot_mode: true,
-                        })
-                        .ok();
-                        let mut d = format!("Fastboot device: {}", name);
-                        if i.battery_level >= 0 {
-                            d.push_str(&format!(" | Battery: {}%", i.battery_level));
+                        if let Some(u) = d.unlocked {
+                            info.push_str(&format!(
+                                " | Unlocked: {}",
+                                if u { "yes" } else { "no" }
+                            ));
                         }
-                        if !i.unlocked.is_empty() {
-                            d.push_str(&format!(" | Unlocked: {}", i.unlocked));
-                        }
-                        log(&tx, LogLevel::Success, 0, d);
+                        log(&tx, LogLevel::Success, 0, info);
+                        tx.send(WMsg::DeviceDetected(d)).ok();
                     }
-                    None => log(&tx, LogLevel::Error, 0, "Device found but getvar failed"),
+                    None => {
+                        log(
+                            &tx,
+                            LogLevel::Error,
+                            0,
+                            "No device found via ADB or fastboot",
+                        );
+                        tx.send(WMsg::DeviceDisconnected).ok();
+                        serial = None;
+                        current_device_product.clear();
+                    }
                 }
             }
 
@@ -1210,13 +1145,10 @@ pub fn worker(
                                         0,
                                         format!("Active slot set to {}", slot.to_uppercase()),
                                     );
-                                    tx.send(WMsg::DeviceDetected {
-                                        name: "".into(),
-                                        serial: ser.clone(),
-                                        slot: slot.clone(),
-                                        is_fastboot_mode: true,
-                                    })
-                                    .ok();
+                                    if let Some(d) = device_poll::read_fastboot(ser) {
+                                        *current_device.lock().unwrap() = Some(d.clone());
+                                        tx.send(WMsg::DeviceDetected(d)).ok();
+                                    }
                                 }
                                 Ok(o) => {
                                     let err = String::from_utf8_lossy(&o.stderr);
@@ -1781,13 +1713,10 @@ pub fn worker(
                     && let Some(info) = lfff_lib::device::get_device_info(Some(ser))
                 {
                     current_device_product = info.product.clone();
-                    tx.send(WMsg::DeviceDetected {
-                        name: info.product.clone(),
-                        serial: ser.clone(),
-                        slot: info.current_slot.clone(),
-                        is_fastboot_mode: true,
-                    })
-                    .ok();
+                    if let Some(d) = device_poll::read_fastboot(ser) {
+                        *current_device.lock().unwrap() = Some(d.clone());
+                        tx.send(WMsg::DeviceDetected(d)).ok();
+                    }
                     log(
                         &tx,
                         LogLevel::Success,

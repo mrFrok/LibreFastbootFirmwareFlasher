@@ -1,6 +1,21 @@
 // Shared structs and constants
 
-export struct DeviceInfo { connected: bool, name: string, serial: string, slot: string, is-fastboot-mode: bool }
+export struct DeviceInfo {
+    connected: bool,
+    name: string,
+    serial: string,
+    slot: string,
+    // true in bootloader or fastbootd; kept for the classic pages
+    is-fastboot-mode: bool,
+    // 0 none, 1 system (adb), 2 bootloader, 3 fastbootd
+    mode: int,
+    // -1 unknown, 0 locked, 1 unlocked
+    unlocked: int,
+    // codename the chip choice is remembered under
+    product: string,
+    // -1 unknown
+    battery: int,
+}
 export struct LogEntry { timestamp: string, level: string, message: string }
 export struct RebootOption { label: string, val: int }
 export struct FlashHistoryItem {
