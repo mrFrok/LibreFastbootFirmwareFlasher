@@ -1,6 +1,7 @@
 // src/main.rs — LFFF GUI entry point
 
 mod config;
+mod env_path;
 mod log_models;
 mod ui_callbacks;
 mod worker;
@@ -250,6 +251,9 @@ fn select_renderer() {
 
 fn main() -> Result<(), slint::PlatformError> {
     env_logger::init();
+    // Before anything looks for fastboot or adb, and while still single-threaded.
+    #[cfg(target_os = "macos")]
+    env_path::inherit_shell_path();
     select_renderer();
 
     #[cfg(target_os = "linux")]
