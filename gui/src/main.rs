@@ -35,6 +35,7 @@ mod confirm_action {
     pub const SESSION_ERROR: i32 = 11;
     pub const FLASH_METHOD: i32 = 12;
     pub const FASTBOOTD_FALLBACK: i32 = 13;
+    pub const CLOSE_FLASHING: i32 = 15;
 }
 
 /// Flash method — always an explicit user choice, never auto-detected.
@@ -130,6 +131,8 @@ enum WMsg {
         arb: lfff_lib::arb::ArbVerdict,
         has_preloader: bool,
         cached: bool,
+        /// Device codenames the OTA is built for; empty when it does not say.
+        devices: Vec<String>,
     },
     FirmwareFailed(String),
     /// Install progress. stage: 0 prepare the phone, 1 cable check,
@@ -146,6 +149,8 @@ enum WMsg {
     },
     /// The install stopped before anything was written to the phone.
     InstallStopped(String),
+    /// A phone is on adb but has not allowed USB debugging from this computer.
+    DeviceUnauthorized,
 }
 
 #[derive(Debug)]
@@ -368,6 +373,24 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_chips_summary(ui_callbacks::chips_summary(&config).into());
     ui.set_cache_summary(ui_callbacks::cache_summary().into());
     ui_callbacks::refresh_cached_firmwares(&ui);
+
+    // Closing mid-flash leaves the phone half-written: ask first.
+    let w_close = ui.as_weak();
+    ui.window().on_close_requested(move || {
+        let Some(ui) = w_close.upgrade() else {
+            return slint::CloseRequestResponse::HideWindow;
+        };
+        if ui.get_is_flashing() {
+            ui.set_confirm_action(confirm_action::CLOSE_FLASHING);
+            ui.set_show_confirm(true);
+            slint::CloseRequestResponse::KeepWindowShown
+        } else {
+            slint::CloseRequestResponse::HideWindow
+        }
+    });
+    ui.on_quit_app(|| {
+        slint::quit_event_loop().ok();
+    });
 
     ctx.send(Cmd::CheckForUpdates).ok();
     // The install page's first step; also refreshes the classic deps log.

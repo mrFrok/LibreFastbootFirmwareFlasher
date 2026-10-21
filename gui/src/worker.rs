@@ -394,6 +394,63 @@ fn preflight(tx: &mpsc::Sender<WMsg>, serial: Option<&str>) -> Result<(), String
     Ok(())
 }
 
+/// Set to stop the firmware being unpacked; cleared when the next starts.
+static UNPACK_CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn cancel_unpack() {
+    UNPACK_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Keeps the computer awake while it lives: sleeping halfway through
+/// writing super leaves the phone half-flashed. Best effort: without
+/// an inhibitor tool the flash goes on as before.
+struct NoSleep(Option<std::process::Child>);
+
+impl NoSleep {
+    fn new() -> Self {
+        let why = "Flashing a phone; sleeping now would leave it half-flashed";
+        #[cfg(target_os = "macos")]
+        let tries: Vec<Vec<String>> = vec![vec!["caffeinate".into(), "-i".into()]];
+        #[cfg(not(target_os = "macos"))]
+        let tries: Vec<Vec<String>> = ["systemd-inhibit", "elogind-inhibit"]
+            .iter()
+            .map(|t| {
+                vec![
+                    t.to_string(),
+                    "--what=sleep:idle".into(),
+                    "--who=LibreFastbootFirmwareFlasher".into(),
+                    format!("--why={why}"),
+                    "--mode=block".into(),
+                    "sleep".into(),
+                    "infinity".into(),
+                ]
+            })
+            .collect();
+        let _ = why;
+        for t in tries {
+            if let Ok(child) = std::process::Command::new(&t[0])
+                .args(&t[1..])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+            {
+                return NoSleep(Some(child));
+            }
+        }
+        NoSleep(None)
+    }
+}
+
+impl Drop for NoSleep {
+    fn drop(&mut self) {
+        if let Some(c) = self.0.as_mut() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+    }
+}
+
 /// Counts the images payload_dumper has written so far, for the unpacking
 /// progress. Send `()` or drop the returned sender to stop it.
 fn spawn_unpack_counter(tx: mpsc::Sender<WMsg>, dir: PathBuf) -> mpsc::Sender<()> {
@@ -469,12 +526,13 @@ fn prepare_firmware(path: &str, tx: &mpsc::Sender<WMsg>) {
             std::fs::create_dir_all(&staging).ok();
             let stop = spawn_unpack_counter(tx.clone(), staging);
             let tx_log = tx.clone();
-            let r = lfff_lib::extractor::extract_firmware_with_log(
+            let r = lfff_lib::extractor::extract_firmware_cancellable(
                 src,
                 &out,
                 None,
                 None,
                 Some(&|line: String| log(&tx_log, LogLevel::Info, 2, line)),
+                Some(&UNPACK_CANCEL),
             );
             stop.send(()).ok();
             if !r.success {
@@ -491,6 +549,24 @@ fn prepare_firmware(path: &str, tx: &mpsc::Sender<WMsg>) {
         }
     } else {
         (src.to_path_buf(), false)
+    };
+
+    // Which devices the firmware is for, kept beside the unpacked images so
+    // a firmware picked again as a folder still knows.
+    let devices_file = dir.join(".lfff-devices");
+    let devices = if is_zip {
+        let d = lfff_lib::extractor::firmware_devices(src);
+        std::fs::write(&devices_file, d.join("\n")).ok();
+        d
+    } else {
+        std::fs::read_to_string(&devices_file)
+            .map(|s| {
+                s.lines()
+                    .map(str::to_string)
+                    .filter(|l| !l.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default()
     };
 
     let images = lfff_lib::flasher::collect_images(&dir);
@@ -513,6 +589,7 @@ fn prepare_firmware(path: &str, tx: &mpsc::Sender<WMsg>) {
         arb: lfff_lib::arb::firmware_arb(&dir),
         has_preloader: images.keys().any(|k| lfff_lib::flasher::is_preloader(k)),
         cached,
+        devices,
     })
     .ok();
 }
@@ -992,6 +1069,7 @@ pub fn worker(
                 skip_preloader,
                 skip_partitions,
             } => {
+                let _awake = NoSleep::new();
                 flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                 tx.send(WMsg::Flashing(true)).ok();
 
@@ -1933,6 +2011,7 @@ pub fn worker(
             }
 
             Cmd::PrepareFirmware { path } => {
+                UNPACK_CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
                 let tx = tx.clone();
                 thread::spawn(move || prepare_firmware(&path, &tx));
             }
@@ -1946,6 +2025,7 @@ pub fn worker(
             } => {
                 use lfff_lib::flasher::FastbootdStatus;
                 use std::sync::atomic::Ordering;
+                let _awake = NoSleep::new();
                 flash_cancel.store(false, Ordering::Relaxed);
                 tx.send(WMsg::Flashing(true)).ok();
                 let stop = |reason: String| {

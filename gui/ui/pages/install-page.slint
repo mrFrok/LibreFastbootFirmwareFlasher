@@ -37,6 +37,11 @@ export component InstallPage inherits VerticalLayout {
     in property <string> unpack-current;
     // Firmware unpacked earlier in the download folder, newest first.
     in property <[string]> cached-firmwares;
+    // Codenames the firmware is built for, when they differ from the phone's;
+    // empty when they match or either side is unknown.
+    in property <string> wrong-device;
+    // A phone is on USB but has not allowed debugging from this computer.
+    in property <bool> unauthorized;
     in-out property <string> download-url;
     in property <float> dl-percent;
     in property <string> dl-downloaded;
@@ -77,6 +82,7 @@ export component InstallPage inherits VerticalLayout {
     callback pick-zip();
     callback pick-folder();
     callback pick-cached(int);
+    callback cancel-unpack();
     callback paste-url();
     callback download(string);
     callback cancel-download();
@@ -166,7 +172,12 @@ export component InstallPage inherits VerticalLayout {
                     summary: root.fw-state == 3 ? root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區")
                         : root.fw-state == 4 ? root.fw-name + " · " + Tr.t("unpacked earlier", "распакована ранее", "之前已解压", "先前已解壓")
                         : "";
-                    expanded: !root.fw-ok;
+                    expanded: !root.fw-ok || root.wrong-device != "";
+                    if root.fw-ok && root.wrong-device != "": Notice {
+                        kind: 1;
+                        title: Tr.t("This firmware may be for another phone", "Похоже, прошивка для другого смартфона", "此固件可能适用于其他手机", "此韌體可能適用於其他手機");
+                        text: Tr.t("It is built for ", "Она собрана для ", "它是为 ", "它是為 ") + root.wrong-device + Tr.t(", but the connected phone is ", ", а подключён ", " 构建的，但连接的手机是 ", " 建置的，但連接的手機是 ") + root.device.product + Tr.t(". Installing firmware for another model can brick the phone. Continue only if you are sure.", ". Прошивка от другой модели может превратить смартфон в «кирпич». Продолжайте, только если уверены.", "。刷入其他机型的固件可能导致手机变砖。请确认无误后再继续。", "。刷入其他機型的韌體可能導致手機變磚。請確認無誤後再繼續。");
+                    }
                     if root.fw-state == 5: Notice {
                         kind: 2;
                         title: Tr.t("This firmware cannot be used", "Эту прошивку не получилось открыть", "无法使用此固件", "無法使用此韌體");
@@ -337,10 +348,22 @@ export component InstallPage inherits VerticalLayout {
                         font-size: 13px;
                         color: MaterialPalette.on-surface-variant;
                     }
-                    if root.fw-state == 2: Text {
-                        text: Tr.t("Unpacking ", "Распаковываю ", "正在解压 ", "正在解壓 ") + root.fw-name;
-                        font-size: 14px;
-                        color: MaterialPalette.on-surface;
+                    if root.fw-state == 2: HorizontalLayout {
+                        Text {
+                            horizontal-stretch: 1;
+                            text: Tr.t("Unpacking ", "Распаковываю ", "正在解压 ", "正在解壓 ") + root.fw-name;
+                            font-size: 14px;
+                            color: MaterialPalette.on-surface;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+
+                        TextButton {
+                            text: Tr.t("Cancel", "Отмена", "取消", "取消");
+                            clicked => {
+                                root.cancel-unpack();
+                            }
+                        }
                     }
                     // payload_dumper does not report a total, so the bar runs
                     // without one and the count says how far it is.
@@ -367,15 +390,21 @@ export component InstallPage inherits VerticalLayout {
                     state: !root.device.connected ? 4 : root.device.unlocked == 0 ? 3 : 2;
                     title: Tr.t("Phone", "Смартфон", "手机", "手機");
                     summary: root.device.connected ? root.device.name + " · " + root.mode-name
+                        : root.unauthorized ? Tr.t("Waiting for permission…", "Жду разрешения…", "等待授权…", "等待授權…")
                         : Tr.t("Looking for the phone…", "Ищу смартфон…", "正在查找手机…", "正在尋找手機…");
                     expanded: !root.device.connected || root.device.unlocked == 0;
-                    if !root.device.connected: Text {
+                    if !root.device.connected && root.unauthorized: Notice {
+                        kind: 1;
+                        title: Tr.t("Allow USB debugging on the phone", "Разрешите отладку по USB на смартфоне", "请在手机上允许 USB 调试", "請在手機上允許 USB 偵錯");
+                        text: Tr.t("The phone asks whether to trust this computer. Tap “Allow” on its screen, ideally with “Always allow” checked.", "Смартфон спрашивает, доверять ли этому компьютеру. Нажмите «Разрешить» на его экране, лучше с галочкой «Всегда разрешать».", "手机正在询问是否信任此电脑。请在手机屏幕上点按“允许”，最好勾选“始终允许”。", "手機正在詢問是否信任此電腦。請在手機螢幕上點按「允許」，最好勾選「一律允許」。");
+                    }
+                    if !root.device.connected && !root.unauthorized: Text {
                         text: Tr.t("Phone not found? Check that:", "Смартфон не находится? Проверьте:", "找不到手机？请检查：", "找不到手機？請檢查：");
                         font-size: 14px;
                         font-weight: 500;
                         color: MaterialPalette.on-surface;
                     }
-                    if !root.device.connected: Text {
+                    if !root.device.connected && !root.unauthorized: Text {
                         text: Tr.t(
                             "• the cable can transfer data — some only charge\n• the phone is on and USB debugging is enabled (Settings → Developer options), or it is in bootloader mode\n• the phone asked to allow USB debugging — confirm it on its screen\n• the bootloader is unlocked — without that the firmware cannot be installed",
                             "• кабель передаёт данные — некоторые умеют только заряжать\n• смартфон включён и в нём включена отладка по USB (Настройки → Для разработчиков) или он в режиме загрузчика\n• смартфон спросил, разрешить ли отладку по USB, — подтвердите на его экране\n• загрузчик разблокирован — без этого установить прошивку нельзя",

@@ -44,6 +44,8 @@ export component ConfirmSheet inherits Rectangle {
     in property <string> phone;
     in property <string> chip-name;
     in property <string> firmware;
+    // Codenames the firmware is built for when they differ from the phone's.
+    in property <string> wrong-device;
     // xbl/abl for kinds 0 and 1, preloader for kind 2
     in-out property <bool> skip-checked;
     // Partitions to leave as they are on the phone; joined into the
@@ -226,6 +228,18 @@ export component ConfirmSheet inherits Rectangle {
                             font-size: 14px;
                             font-weight: 500;
                             color: MaterialPalette.on-surface;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if root.wrong-device != "": FieldRow {
+                        label-width: 150px;
+                        label: Tr.t("Built for", "Собрана для", "适用于", "適用於");
+                        Text {
+                            text: root.wrong-device + Tr.t(" — not this phone?", " — не этот смартфон?", " —— 不是这台手机？", " —— 不是這台手機？");
+                            font-size: 14px;
+                            font-weight: 500;
+                            color: StatusColors.warning;
                             vertical-alignment: center;
                         }
                     }

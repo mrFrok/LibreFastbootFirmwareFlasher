@@ -13,6 +13,82 @@ thread_local! {
     /// When the current install started, for the time on the result pages.
     static INSTALL_START: std::cell::Cell<Option<std::time::Instant>> =
         const { std::cell::Cell::new(None) };
+    /// Codenames the chosen firmware is built for.
+    static FW_DEVICES: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// The connected phone's codename, when Android reported it.
+    static PHONE_CODENAME: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Warn when the firmware names the devices it is for and the phone's
+/// codename is none of them. Silent when either side is unknown: fastboot
+/// alone gives only the platform, and custom builds often name no device.
+fn update_wrong_device(ui: &MainWindow) {
+    let wanted = FW_DEVICES.with(|d| d.borrow().clone());
+    let phone = PHONE_CODENAME.with(|p| p.borrow().clone());
+    let wrong = match phone {
+        Some(p) if !wanted.is_empty() && !wanted.iter().any(|w| w.eq_ignore_ascii_case(&p)) => {
+            wanted.join(", ")
+        }
+        _ => String::new(),
+    };
+    ui.set_fw_wrong_device(wrong.into());
+}
+
+/// A desktop notification with a sound, for an install the user may have
+/// walked away from. Best effort, off the UI thread.
+fn notify_done(title: String, body: String, ok: bool) {
+    std::thread::spawn(move || {
+        #[cfg(target_os = "macos")]
+        {
+            let script = format!(
+                "display notification {:?} with title {:?} sound name {:?}",
+                body,
+                title,
+                if ok { "Glass" } else { "Basso" }
+            );
+            let _ = std::process::Command::new("osascript")
+                .args(["-e", &script])
+                .status();
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = std::process::Command::new("notify-send")
+                .args([
+                    "--app-name=Libre Fastboot Firmware Flasher",
+                    "--icon=lfff-gui",
+                ])
+                .arg(&title)
+                .arg(&body)
+                .status();
+            let sound = if ok { "complete" } else { "dialog-error" };
+            let played = std::process::Command::new("canberra-gtk-play")
+                .args(["-i", sound])
+                .status()
+                .is_ok_and(|s| s.success());
+            if !played {
+                let file = format!("/usr/share/sounds/freedesktop/stereo/{sound}.oga");
+                for player in ["paplay", "pw-play"] {
+                    if std::process::Command::new(player)
+                        .arg(&file)
+                        .status()
+                        .is_ok_and(|s| s.success())
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+}
+
+fn tr(lang: &str, en: &str, ru: &str, cn: &str, tw: &str) -> String {
+    match lang {
+        "ru" => ru,
+        "zh-CN" => cn,
+        "zh-TW" => tw,
+        _ => en,
+    }
+    .to_string()
 }
 
 /// Pinned tool names in config.json, by Tools-page id - 1.
@@ -198,6 +274,10 @@ pub fn poll(
             }
             WMsg::DeviceDetected(d) => {
                 ui.set_chip(chip_for(&d.product));
+                ui.set_device_unauthorized(false);
+                PHONE_CODENAME
+                    .with(|p| *p.borrow_mut() = d.codename_known.then(|| d.product.clone()));
+                update_wrong_device(&ui);
                 ui.set_device(DeviceInfo {
                     connected: true,
                     name: d.name.into(),
@@ -218,7 +298,10 @@ pub fn poll(
                     battery: d.battery,
                 });
             }
-            WMsg::DeviceDisconnected => {
+            WMsg::DeviceDisconnected | WMsg::DeviceUnauthorized => {
+                ui.set_device_unauthorized(matches!(m, WMsg::DeviceUnauthorized));
+                PHONE_CODENAME.with(|p| *p.borrow_mut() = None);
+                update_wrong_device(&ui);
                 ui.set_device(DeviceInfo {
                     connected: false,
                     name: "\u{2014}".into(),
@@ -265,10 +348,45 @@ pub fn poll(
                         ui.set_install_minutes((secs / 60) as i32);
                         ui.set_install_seconds((secs % 60) as i32);
                     }
+                    let lang = ui.get_lang();
                     if success {
                         ui.set_stage2(2);
                         ui.set_install_view(2);
+                        notify_done(
+                            tr(
+                                &lang,
+                                "Firmware installed",
+                                "Прошивка установлена",
+                                "固件已安装",
+                                "韌體已安裝",
+                            ),
+                            tr(
+                                &lang,
+                                "Restart the phone in the app.",
+                                "Перезагрузите смартфон в программе.",
+                                "请在程序中重启手机。",
+                                "請在程式中重新啟動手機。",
+                            ),
+                            true,
+                        );
                     } else {
+                        notify_done(
+                            tr(
+                                &lang,
+                                "The installation did not finish",
+                                "Установка не завершилась",
+                                "安装未完成",
+                                "安裝未完成",
+                            ),
+                            tr(
+                                &lang,
+                                "Don't restart the phone; see the app.",
+                                "Не перезагружайте смартфон, посмотрите в программе.",
+                                "请勿重启手机，请查看程序。",
+                                "請勿重新啟動手機，請查看程式。",
+                            ),
+                            false,
+                        );
                         ui.set_stage2(3);
                         ui.set_untouched(false);
                         ui.set_result_detail(message.into());
@@ -469,7 +587,10 @@ pub fn poll(
                 arb,
                 has_preloader,
                 cached,
+                devices,
             } => {
+                FW_DEVICES.with(|d| *d.borrow_mut() = devices);
+                update_wrong_device(&ui);
                 ui.set_fw_dir(dir.into());
                 ui.set_fw_name(name.into());
                 ui.set_fw_parts(parts as i32);
@@ -482,6 +603,7 @@ pub fn poll(
                 ui.set_cache_summary(cache_summary().into());
                 refresh_cached_firmwares(&ui);
             }
+            WMsg::FirmwareFailed(e) if e == "Cancelled" => ui.set_fw_state(0),
             WMsg::FirmwareFailed(e) => {
                 ui.set_fw_error(firmware_error_text(&ui.get_lang(), &e).into());
                 ui.set_fw_state(5);
@@ -507,6 +629,24 @@ pub fn poll(
                 *cable_resp.borrow_mut() = Some(response);
             }
             WMsg::InstallStopped(reason) => {
+                let lang = ui.get_lang();
+                notify_done(
+                    tr(
+                        &lang,
+                        "The installation stopped",
+                        "Установка остановлена",
+                        "安装已停止",
+                        "安裝已停止",
+                    ),
+                    tr(
+                        &lang,
+                        "Nothing on the phone was changed.",
+                        "На смартфоне ничего не изменилось.",
+                        "手机上没有任何改动。",
+                        "手機上沒有任何變更。",
+                    ),
+                    false,
+                );
                 ui.set_untouched(true);
                 ui.set_result_detail(reason.into());
                 ui.set_install_view(3);
@@ -1218,6 +1358,8 @@ fn register_install_callbacks(
             prepare(&ui, &t, &p.display().to_string());
         }
     });
+
+    ui.on_cancel_unpack(crate::worker::cancel_unpack);
 
     // Same order as refresh_cached_firmwares built the list in.
     let t = ctx.clone();

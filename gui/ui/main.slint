@@ -44,7 +44,11 @@ import { ConfirmSheet } from "dialogs/confirm-sheet.slint";
 import { StartupNotice } from "dialogs/startup-notice.slint";
 import { TextButton } from "@material";
 export component MainWindow inherits MaterialWindow {
-    title: "Libre Fastboot Firmware Flasher";
+    // The progress in the title too, so it shows in the taskbar while the
+    // user waits elsewhere.
+    title: !root.classic-ui && root.install-view == 1 && root.stage2 == 1
+        ? Math.round(root.flash-progress * 100) + "% — Libre Fastboot Firmware Flasher"
+        : "Libre Fastboot Firmware Flasher";
     icon: @image-url("icons/logo_icon.svg");
     preferred-width: 1000px;
     preferred-height: 660px;
@@ -88,6 +92,10 @@ export component MainWindow inherits MaterialWindow {
     in-out property <int> unpack-count: 0;
     in-out property <string> unpack-current;
     in-out property <[string]> cached-firmwares: [];
+    in-out property <string> fw-wrong-device;
+    in-out property <bool> device-unauthorized: false;
+    callback cancel-unpack();
+    callback quit-app();
     callback pick-cached(int);
     // ARB of the chosen firmware: -1 unknown, 0 none, >0 the level
     in-out property <int> fw-arb: -1;
@@ -655,6 +663,9 @@ export component MainWindow inherits MaterialWindow {
                             unpack-count: root.unpack-count;
                             unpack-current: root.unpack-current;
                             cached-firmwares: root.cached-firmwares;
+                            wrong-device: root.fw-wrong-device;
+                            unauthorized: root.device-unauthorized;
+                            cancel-unpack => { root.cancel-unpack(); }
                             pick-cached(i) => { root.pick-cached(i); }
                             download-url <=> root.download-url;
                             dl-percent: root.dl-percent;
@@ -933,6 +944,7 @@ export component MainWindow inherits MaterialWindow {
         arb: root.fw-arb;
         phone: root.device.name;
         chip-name: root.chip == 1 ? "Snapdragon" : "MediaTek";
+        wrong-device: root.fw-wrong-device;
         firmware: root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區");
         // One checkbox per warning kind: xbl/abl for ARB, preloader for MTK.
         skip-checked: root.sheet == 3 ? root.skip-preloader : root.skip-xbl-abl;
@@ -980,6 +992,19 @@ export component MainWindow inherits MaterialWindow {
             root.install-wiped = true;
             root.install-view = 4;
         }
+    }
+
+    WarningDialog {
+        show: root.show-confirm && root.confirm-action == ConfirmAction.close-flashing;
+        title: Tr.t("Close while flashing?", "Закрыть во время прошивки?", "刷写过程中关闭？", "刷寫過程中關閉？");
+        body: Tr.t("The firmware is being written. Closing the app stops it halfway, and the phone may not start until it is flashed again.", "Прошивка ещё записывается. Если закрыть программу, она остановится на середине, и смартфон может не запуститься, пока его не прошьют заново.", "固件正在写入。关闭程序会使其中途停止，手机可能无法启动，直到重新刷写。", "韌體正在寫入。關閉程式會使其中途停止，手機可能無法開機，直到重新刷寫。");
+        warning-text: Tr.t("Better wait until it finishes.", "Лучше дождитесь окончания.", "最好等待完成。", "最好等待完成。");
+        has-checkbox: false;
+        checkbox-text: "";
+        checkbox-checked: false;
+        lang: root.lang;
+        cancelled => { root.show-confirm = false; }
+        confirmed => { root.quit-app(); }
     }
 
     if root.show-notice: StartupNotice {

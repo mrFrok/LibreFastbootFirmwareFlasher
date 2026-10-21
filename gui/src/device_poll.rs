@@ -51,6 +51,10 @@ pub struct DeviceSnapshot {
     pub unlocked: Option<bool>,
     /// -1 when unknown.
     pub battery: i32,
+    /// `product` is the codename Android reported (now, or remembered),
+    /// not fastboot's platform name: only then can it be checked against
+    /// the device a firmware is built for.
+    pub codename_known: bool,
 }
 
 /// One adb round-trip for every property instead of a shell per value.
@@ -71,7 +75,8 @@ pub fn read_adb(serial: &str) -> DeviceSnapshot {
     };
     let model = get("model");
     let product = get("device");
-    if !product.is_empty() {
+    let codename_known = !product.is_empty();
+    if codename_known {
         crate::config::remember_device(
             serial,
             crate::config::KnownDevice {
@@ -100,6 +105,7 @@ pub fn read_adb(serial: &str) -> DeviceSnapshot {
             _ => None,
         },
         battery: get("battery").parse().unwrap_or(-1),
+        codename_known,
     }
 }
 
@@ -123,6 +129,7 @@ pub fn read_fastboot(serial: &str) -> Option<DeviceSnapshot> {
         .known_devices
         .get(serial)
         .cloned();
+    let codename_known = known.is_some();
     let (name, product) = match known {
         Some(k) => (k.name, k.product),
         None if info.product.is_empty() => (serial.to_string(), String::new()),
@@ -136,6 +143,7 @@ pub fn read_fastboot(serial: &str) -> Option<DeviceSnapshot> {
         mode,
         unlocked,
         battery: info.battery_level,
+        codename_known,
     })
 }
 
@@ -154,8 +162,16 @@ fn listing() -> Vec<(String, &'static str)> {
             }
         }
     }
-    for s in lfff_lib::device::list_adb_devices() {
-        out.push((s, "adb"));
+    let adb = run_cmd(&["adb", "devices"], 5);
+    if adb.code == 0 {
+        for line in adb.stdout.lines().skip(1) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            match parts.as_slice() {
+                [s, "device", ..] => out.push((s.to_string(), "adb")),
+                [s, "unauthorized", ..] => out.push((s.to_string(), "unauthorized")),
+                _ => {}
+            }
+        }
     }
     out
 }
@@ -171,17 +187,22 @@ pub fn spawn(
             if !busy.load(Ordering::Relaxed) {
                 let now = listing();
                 if now != last {
-                    let snap = match now.first() {
+                    // A usable device wins over one still asking for
+                    // permission.
+                    let usable = now.iter().find(|(_, m)| *m != "unauthorized");
+                    let snap = match usable {
                         Some((s, "adb")) => Some(read_adb(s)),
                         Some((s, _)) => read_fastboot(s),
                         None => None,
                     };
+                    let unauthorized = usable.is_none() && !now.is_empty();
                     // The worker may have started while the device was read:
                     // its own messages win, so drop this one.
                     if !busy.load(Ordering::Relaxed) {
                         *current.lock().unwrap() = snap.clone();
                         let msg = match snap {
                             Some(s) => WMsg::DeviceDetected(s),
+                            None if unauthorized => WMsg::DeviceUnauthorized,
                             None => WMsg::DeviceDisconnected,
                         };
                         if tx.send(msg).is_err() {
