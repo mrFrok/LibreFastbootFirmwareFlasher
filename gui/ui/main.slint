@@ -38,7 +38,7 @@ import { UpdateDialog } from "dialogs/update-dialog.slint";
 import { WarningDialog } from "dialogs/all.slint";
 import { AppNav } from "components/wizard.slint";
 import { InstallPage } from "pages/install-page.slint";
-import { ToolsGrid, Tools } from "pages/tools-page.slint";
+import { ToolsGrid, Tools, LogsPage } from "pages/tools-page.slint";
 import { SettingsPage } from "pages/settings-page.slint";
 import { ConfirmSheet } from "dialogs/confirm-sheet.slint";
 import { StartupNotice } from "dialogs/startup-notice.slint";
@@ -68,7 +68,10 @@ export component MainWindow inherits MaterialWindow {
     // Tool ids pinned to the sidebar (see Tools in pages/tools-page.slint).
     in-out property <[int]> pinned-tools: [];
     // The same as flags by tool id - 1, for the Tools page.
-    in-out property <[bool]> pinned-flags: [false, false, false, false];
+    in-out property <[bool]> pinned-flags: [false, false, false, false, false, false, false, false];
+    // Tool open from Tools or a pin, 0 for none (see Tools in pages/tools-page.slint).
+    in-out property <int> current-tool: 0;
+    property <bool> on-tool-page: (root.page >= 1 && root.page <= 4) || root.page == 13;
     callback toggle-pin(int);
     in-out property <string> cache-summary;
     in-out property <string> chips-summary;
@@ -109,11 +112,13 @@ export component MainWindow inherits MaterialWindow {
     callback cable-stop();
     callback install-finish();
     callback install-retry();
+    // Tools open the classic pages; the phone page shows one section each.
+    function open-tool(id: int) {
+        root.current-tool = id;
+        root.page = id == 1 ? 4 : id == 2 ? 3 : id == 7 ? 2 : id == 8 ? 13 : 1;
+    }
     // First sheet for the chosen firmware and chip: the ARB or preloader
     // warning, else straight to the summary.
-    pure function tool-page(id: int) -> int {
-        return id == 1 ? 4 : id == 2 ? 3 : id == 3 ? 1 : 2;
-    }
     pure function first-sheet() -> int {
         return root.chip == 1 ? (root.fw-arb > 0 ? 1 : 2)
             : root.fw-has-preloader ? 3 : 4;
@@ -426,16 +431,16 @@ export component MainWindow inherits MaterialWindow {
 
         // ── Sidebar ──────────────────────────────────────────────────────────
         if !root.classic-ui: AppNav {
-            page: root.page == 10 ? 0 : (root.page == 11 || (root.page >= 1 && root.page <= 4)) ? 1
+            page: root.page == 10 ? 0 : (root.page == 11 || root.on-tool-page) ? 1
                 : root.page == 5 ? 2 : root.page == 12 ? 3 : root.page == 6 ? 4 : -1;
-            tool: root.page == 4 ? 1 : root.page == 3 ? 2 : root.page == 1 ? 3 : root.page == 2 ? 4 : 0;
+            tool: root.on-tool-page ? root.current-tool : 0;
             pinned: root.pinned-tools;
             version: root.app-version;
             navigate(i) => {
                 root.page = i == 0 ? 10 : i == 1 ? 11 : i == 2 ? 5 : i == 3 ? 12 : 6;
             }
             open-tool(id) => {
-                root.page = root.tool-page(id);
+                root.open-tool(id);
             }
         }
 
@@ -482,7 +487,7 @@ export component MainWindow inherits MaterialWindow {
                 }
             }
 
-            if !root.classic-ui && root.page >= 1 && root.page <= 4: HorizontalLayout {
+            if !root.classic-ui && root.on-tool-page: HorizontalLayout {
                 padding-left: 12px;
                 padding-top: 8px;
                 alignment: start;
@@ -518,6 +523,8 @@ export component MainWindow inherits MaterialWindow {
                         }
 
                         if root.page == 1: DevicePage {
+                            section: root.classic-ui ? 0 : root.current-tool - 2;
+                            title: root.classic-ui ? Tr.nav-device : Tools.title(root.current-tool);
                             device: root.device;
                             test-step: root.test-step;
                             test-status: root.test-status;
@@ -670,9 +677,28 @@ export component MainWindow inherits MaterialWindow {
                             export-log => { root.export-flash-log(); }
                         }
 
+                        if root.page == 13: LogsPage {
+                            device-log: root.device-log;
+                            download-log: root.download-log;
+                            flash-log: root.flash-log;
+                            partition-log: root.partition-log;
+                            export-status: root.flash-export-status;
+                            export(i) => {
+                                if i == 0 {
+                                    root.export-device-log();
+                                } else if i == 1 {
+                                    root.export-download-log();
+                                } else if i == 2 {
+                                    root.export-flash-log();
+                                } else {
+                                    root.export-partition-log();
+                                }
+                            }
+                        }
+
                         if root.page == 11: ToolsGrid {
                             pinned: root.pinned-flags;
-                            open(id) => { root.page = root.tool-page(id); }
+                            open(id) => { root.open-tool(id); }
                             toggle-pin(id) => { root.toggle-pin(id); }
                         }
 

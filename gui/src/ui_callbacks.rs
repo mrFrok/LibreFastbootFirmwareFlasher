@@ -10,7 +10,16 @@ use crate::{
 use lfff_lib::arb::ArbVerdict;
 
 /// Pinned tool names in config.json, by Tools-page id - 1.
-const TOOL_NAMES: [&str; 4] = ["partition", "flash", "device", "download"];
+const TOOL_NAMES: [&str; 8] = [
+    "partition",
+    "build",
+    "reboot",
+    "slot",
+    "connection",
+    "programs",
+    "download",
+    "logs",
+];
 
 pub fn apply_pins(ui: &MainWindow, pinned: &[String]) {
     let ids: Vec<i32> = pinned

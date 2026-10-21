@@ -22,8 +22,8 @@ pub struct Config {
     /// Never guessed: an entry exists only after the user picked it.
     #[serde(default)]
     pub chips: BTreeMap<String, String>,
-    /// Tools pinned to the sidebar: "partition", "flash", "device", "download"
-    /// (ids 1-4 of the Tools page, in that order).
+    /// Tools pinned to the sidebar, by name (TOOL_NAMES in ui_callbacks.rs,
+    /// the order of the Tools page).
     #[serde(default)]
     pub pinned_tools: Vec<String>,
     /// The pre-2.10 page layout, kept for a transition period.

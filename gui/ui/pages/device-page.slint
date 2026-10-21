@@ -19,6 +19,10 @@ export component DevicePage {
     in property <string> test-status: "";
     in property <[LogEntry]> device-log: [];
     in property <string> device-export-status: "";
+    // 0 the whole page (classic interface); from Tools, one part of it:
+    // 1 restart into a mode, 2 slot A/B, 3 connection test, 4 programs
+    in property <int> section: 0;
+    in property <string> title: Tr.nav-device;
 
     callback check-device();
     callback check-deps();
@@ -33,7 +37,7 @@ export component DevicePage {
         spacing: 0px;
 
         Text {
-            text: Tr.nav-device;
+            text: root.title;
             font-size: 20px;
             font-weight: 700;
             color: MaterialPalette.on-surface;
@@ -51,7 +55,7 @@ export component DevicePage {
             height: 8px;
         }
 
-        if root.device.connected: Rectangle {
+        if (root.section == 0 || root.section == 2) && root.device.connected: Rectangle {
             background: MaterialPalette.error-container;
             border-radius: 12px;
             border-width: 1px;
@@ -83,11 +87,18 @@ export component DevicePage {
             }
         }
 
-        Rectangle {
+        if root.section == 2 && !root.device.connected: Text {
+            text: Tr.t("Connect the phone in bootloader mode to switch the slot.", "Подключите телефон в режиме загрузчика, чтобы переключить слот.", "请以 bootloader 模式连接手机以切换槽位。", "請以 bootloader 模式連接手機以切換槽位。");
+            font-size: 14px;
+            color: MaterialPalette.on-surface-variant;
+            wrap: word-wrap;
+        }
+
+        if root.section == 0 || root.section == 2: Rectangle {
             height: 8px;
         }
 
-        HorizontalLayout {
+        if root.section == 0 || root.section == 4: HorizontalLayout {
             spacing: 8px;
             OutlineButton {
                 text: Tr.find-device;
@@ -108,17 +119,17 @@ export component DevicePage {
             }
         }
 
-        Rectangle {
+        if root.section == 0 || root.section == 4: Rectangle {
             height: 12px;
         }
 
-        HorizontalDivider { }
+        if root.section == 0: HorizontalDivider { }
 
-        Rectangle {
+        if root.section == 0 || root.section == 3: Rectangle {
             height: 8px;
         }
 
-        HorizontalLayout {
+        if root.section == 0 || root.section == 3: HorizontalLayout {
             spacing: 8px;
             height: 32px;
             Text {
@@ -140,11 +151,11 @@ export component DevicePage {
             }
         }
 
-        Rectangle {
+        if root.section == 0 || root.section == 3: Rectangle {
             height: 4px;
         }
 
-        HorizontalLayout {
+        if root.section == 0 || root.section == 3: HorizontalLayout {
             spacing: 16px;
             height: 24px;
             for s in [
@@ -181,12 +192,12 @@ export component DevicePage {
             }
         }
 
-        Rectangle {
+        if root.section == 0 || root.section == 3: Rectangle {
             height: 4px;
             visible: root.test-status != "";
         }
 
-        Text {
+        if root.section == 0 || root.section == 3: Text {
             visible: root.test-status != "";
             opacity: root.test-status != "" ? 1.0 : 0.0;
             text: root.test-status;
@@ -199,17 +210,17 @@ export component DevicePage {
             }
         }
 
-        Rectangle {
+        if root.section == 0 || root.section == 3: Rectangle {
             height: 12px;
         }
 
-        HorizontalDivider { }
+        if root.section == 0: HorizontalDivider { }
 
-        Rectangle {
+        if root.section == 0 || root.section == 1: Rectangle {
             height: 8px;
         }
 
-        HorizontalLayout {
+        if root.section == 0 || root.section == 1: HorizontalLayout {
             spacing: 8px;
             height: 32px;
             Text {
@@ -225,22 +236,22 @@ export component DevicePage {
             }
         }
 
-        Rectangle {
+        if root.section == 0 || root.section == 1: Rectangle {
             height: 8px;
         }
 
-        Text {
+        if root.section == 0 || root.section == 1: Text {
             text: "ADB";
             font-size: Typography.label-medium-size;
             color: MaterialPalette.on-surface-variant;
             min-height: 14px;
         }
 
-        Rectangle {
+        if root.section == 0 || root.section == 1: Rectangle {
             height: 4px;
         }
 
-        HorizontalLayout {
+        if root.section == 0 || root.section == 1: HorizontalLayout {
             spacing: 8px;
             for item in [
                 { label: Tr.reboot-recovery, target: "adb-recovery" },
@@ -254,22 +265,22 @@ export component DevicePage {
             }
         }
 
-        Rectangle {
+        if root.section == 0 || root.section == 1: Rectangle {
             height: 12px;
         }
 
-        Text {
+        if root.section == 0 || root.section == 1: Text {
             text: "Fastboot";
             font-size: Typography.label-medium-size;
             color: MaterialPalette.on-surface-variant;
             min-height: 14px;
         }
 
-        Rectangle {
+        if root.section == 0 || root.section == 1: Rectangle {
             height: 4px;
         }
 
-        HorizontalLayout {
+        if root.section == 0 || root.section == 1: HorizontalLayout {
             spacing: 8px;
             for item in [
                 { label: Tr.reboot-recovery, target: "fb-recovery" },

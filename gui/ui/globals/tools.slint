@@ -1,0 +1,39 @@
+import { Tr } from "tr.slint";
+
+// Tool ids, also stored in config.json as pinned tools (by name, see
+// TOOL_NAMES in gui/src/ui_callbacks.rs). The pages behind them are the
+// classic ones, the phone page showing one section per tool.
+// 1 one partition, 2 own build, 3 restart into a mode, 4 slot A/B,
+// 5 connection test, 6 programs, 7 download or unpack, 8 logs
+export global Tools {
+    public pure function title(id: int) -> string {
+        return id == 1 ? Tr.t("Flash one partition", "Прошить один раздел", "刷写单个分区", "刷寫單一分割區")
+            : id == 2 ? Tr.t("Flash a build", "Прошить свою сборку", "刷写自编译版本", "刷寫自行編譯版本")
+            : id == 3 ? Tr.t("Restart into a mode", "Перезагрузка в режим", "重启到指定模式", "重新啟動到指定模式")
+            : id == 4 ? Tr.t("Switch slot A/B", "Переключить слот A/B", "切换 A/B 槽位", "切換 A/B 槽位")
+            : id == 5 ? Tr.t("Connection test", "Проверка подключения", "连接测试", "連線測試")
+            : id == 6 ? Tr.t("Programs", "Программы", "程序", "程式")
+            : id == 7 ? Tr.t("Download or unpack", "Скачать или распаковать", "下载或解压", "下載或解壓")
+            : Tr.t("Logs", "Журналы", "日志", "日誌");
+    }
+    public pure function text(id: int) -> string {
+        return id == 1 ? Tr.t("boot, recovery, init_boot or another .img", "boot, recovery, init_boot или другой .img", "boot、recovery、init_boot 或其他 .img", "boot、recovery、init_boot 或其他 .img")
+            : id == 2 ? Tr.t("The out/target/product folder of an Android build, or the classic full flash", "Папка out/target/product после сборки Android или классическая полная прошивка", "Android 编译生成的 out/target/product 文件夹，或经典完整刷写", "Android 編譯產生的 out/target/product 資料夾，或經典完整刷寫")
+            : id == 3 ? Tr.t("System, recovery, bootloader or flashing mode", "Система, recovery, загрузчик или режим прошивки", "系统、recovery、bootloader 或刷机模式", "系統、recovery、bootloader 或刷機模式")
+            : id == 4 ? Tr.t("Choose which copy of the system boots", "Какая из двух копий системы загружается", "选择从哪一份系统启动", "選擇從哪一份系統開機")
+            : id == 5 ? Tr.t("Checks the phone in every mode, step by step", "Проверяет связь с телефоном во всех режимах", "逐步检查手机在各模式下的连接", "逐步檢查手機在各模式下的連線")
+            : id == 6 ? Tr.t("Check and install adb, fastboot and the rest", "Проверить и установить adb, fastboot и другие", "检查并安装 adb、fastboot 等程序", "檢查並安裝 adb、fastboot 等程式")
+            : id == 7 ? Tr.t("Only download or only unpack a firmware", "Только скачать или только распаковать прошивку", "仅下载或仅解压固件", "僅下載或僅解壓韌體")
+            : Tr.t("Read and save the work logs", "Посмотреть и сохранить журналы работы", "查看并保存工作日志", "檢視並儲存工作日誌");
+    }
+    public pure function icon(id: int) -> image {
+        return id == 1 ? @image-url("../icons/storage.svg")
+            : id == 2 ? @image-url("../icons/folder.svg")
+            : id == 3 ? @image-url("../icons/restart.svg")
+            : id == 4 ? @image-url("../icons/smartphone.svg")
+            : id == 5 ? @image-url("../icons/usb.svg")
+            : id == 6 ? @image-url("../icons/build.svg")
+            : id == 7 ? @image-url("../icons/download.svg")
+            : @image-url("../icons/history.svg");
+    }
+}
