@@ -9,6 +9,57 @@ use crate::{
 };
 use lfff_lib::arb::ArbVerdict;
 
+/// Pinned tool names in config.json, by Tools-page id - 1.
+const TOOL_NAMES: [&str; 4] = ["partition", "flash", "device", "download"];
+
+pub fn apply_pins(ui: &MainWindow, pinned: &[String]) {
+    let ids: Vec<i32> = pinned
+        .iter()
+        .filter_map(|n| TOOL_NAMES.iter().position(|t| t == n))
+        .map(|i| i as i32 + 1)
+        .collect();
+    let flags: Vec<bool> = TOOL_NAMES
+        .iter()
+        .map(|t| pinned.iter().any(|p| p == t))
+        .collect();
+    ui.set_pinned_tools(Rc::new(VecModel::from(ids)).into());
+    ui.set_pinned_flags(Rc::new(VecModel::from(flags)).into());
+}
+
+pub fn chips_summary(config: &crate::config::Config) -> String {
+    config
+        .chips
+        .iter()
+        .map(|(product, chip)| {
+            let name = if chip == "mediatek" {
+                "MediaTek"
+            } else {
+                "Snapdragon"
+            };
+            format!("{product} — {name}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub fn cache_summary() -> String {
+    let (count, bytes) = lfff_lib::extractor::extraction_cache(&get_output_dir());
+    if count == 0 {
+        String::new()
+    } else {
+        format!("{} · {:.1} GB", count, bytes as f64 / 1e9)
+    }
+}
+
+/// Chip remembered for this codename: 0 none, 1 Snapdragon, 2 MediaTek.
+fn chip_for(product: &str) -> i32 {
+    match load_config().chips.get(product).map(String::as_str) {
+        Some("snapdragon") => 1,
+        Some("mediatek") => 2,
+        _ => 0,
+    }
+}
+
 fn export_log(model: &VecModel<LogEntry>, tab_name: &str) -> Option<String> {
     use slint::Model;
     let now = chrono::Local::now();
@@ -44,16 +95,25 @@ fn export_log(model: &VecModel<LogEntry>, tab_name: &str) -> Option<String> {
     None
 }
 
+type Reply<T> = std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<T>>>>;
+
+/// Where the worker's blocking questions wait for the user's answer.
+pub struct Replies {
+    pub fail: Reply<lfff_lib::flasher::FailureAction>,
+    pub fastbootd: Reply<bool>,
+    pub cable: Reply<bool>,
+}
+
 pub fn poll(
     w: &Weak<MainWindow>,
     rx: &mpsc::Receiver<WMsg>,
     last_dl_pct: &mut u32,
     models: &LogModels,
-    fail_resp: &std::rc::Rc<
-        std::cell::RefCell<Option<std::sync::mpsc::Sender<lfff_lib::flasher::FailureAction>>>,
-    >,
-    fastbootd_resp: &std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<bool>>>>,
+    replies: &Replies,
+    ctx: &mpsc::Sender<Cmd>,
 ) {
+    let (fail_resp, fastbootd_resp, cable_resp) =
+        (&replies.fail, &replies.fastbootd, &replies.cable);
     let Some(ui) = w.upgrade() else { return };
 
     while let Ok(m) = rx.try_recv() {
@@ -107,6 +167,7 @@ pub fn poll(
                 }
             }
             WMsg::DeviceDetected(d) => {
+                ui.set_chip(chip_for(&d.product));
                 ui.set_device(DeviceInfo {
                     connected: true,
                     name: d.name.into(),
@@ -167,7 +228,19 @@ pub fn poll(
                 );
                 models.refresh_history();
 
-                if success {
+                if !ui.get_classic_ui() && ui.get_install_view() == 1 {
+                    // The new interface shows the result as a page, not a dialog.
+                    if success {
+                        ui.set_stage2(2);
+                        ui.set_install_view(2);
+                    } else {
+                        ui.set_stage2(3);
+                        ui.set_untouched(false);
+                        ui.set_result_detail(message.into());
+                        ui.set_flash_failed_partitions(failed_partitions.join(",").into());
+                        ui.set_install_view(3);
+                    }
+                } else if success {
                     ui.set_confirm_action(confirm_action::SUCCESS);
                     ui.set_show_confirm(true);
                 } else if !is_cancel {
@@ -198,20 +271,45 @@ pub fn poll(
                 ui.set_show_confirm(true);
                 *fastbootd_resp.borrow_mut() = Some(response);
             }
-            WMsg::DepsResult { message, ok } => add_log(
-                models,
-                &ui,
-                if ok {
-                    &LogLevel::Success
-                } else {
-                    &LogLevel::Error
-                },
-                0,
-                &message,
-            ),
+            WMsg::DepsResult {
+                message,
+                ok,
+                missing,
+            } => {
+                ui.set_deps_state(if ok { 2 } else { 1 });
+                ui.set_deps_missing(missing.join(", ").into());
+                add_log(
+                    models,
+                    &ui,
+                    if ok {
+                        &LogLevel::Success
+                    } else {
+                        &LogLevel::Error
+                    },
+                    0,
+                    &message,
+                )
+            }
             WMsg::Flashing(f) => ui.set_is_flashing(f),
-            WMsg::Downloading(f) => ui.set_is_downloading(f),
-            WMsg::FwPath(p) => ui.set_firmware_path(p.into()),
+            WMsg::Downloading(f) => {
+                ui.set_is_downloading(f);
+                if !ui.get_classic_ui() {
+                    if f {
+                        ui.set_fw_state(1);
+                    } else if ui.get_fw_state() == 1 {
+                        // Cancelled or failed: back to choosing.
+                        ui.set_fw_state(0);
+                    }
+                }
+            }
+            WMsg::FwPath(p) => {
+                ui.set_firmware_path(p.clone().into());
+                // In the new interface a downloaded firmware goes straight on
+                // to unpacking, like a picked one.
+                if !ui.get_classic_ui() {
+                    prepare(&ui, ctx, &p);
+                }
+            }
             WMsg::DlProgress {
                 percent,
                 speed,
@@ -324,6 +422,59 @@ pub fn poll(
                     ui.set_cable_test_passed(true);
                 }
             }
+            WMsg::Unpacking { extracted, current } => {
+                ui.set_fw_state(2);
+                ui.set_unpack_count(extracted as i32);
+                ui.set_unpack_current(current.into());
+            }
+            WMsg::FirmwareReady {
+                dir,
+                name,
+                parts,
+                arb,
+                has_preloader,
+                cached,
+            } => {
+                ui.set_fw_dir(dir.into());
+                ui.set_fw_name(name.into());
+                ui.set_fw_parts(parts as i32);
+                ui.set_fw_arb(match arb {
+                    ArbVerdict::Known(v) => v as i32,
+                    _ => -1,
+                });
+                ui.set_fw_has_preloader(has_preloader);
+                ui.set_fw_state(if cached { 4 } else { 3 });
+                ui.set_cache_summary(cache_summary().into());
+            }
+            WMsg::FirmwareFailed(e) => {
+                ui.set_fw_error(e.into());
+                ui.set_fw_state(5);
+            }
+            WMsg::Stage {
+                stage,
+                state,
+                detail,
+            } => match stage {
+                0 => ui.set_stage0(state as i32),
+                1 => {
+                    ui.set_stage1(state as i32);
+                    ui.set_stage1_detail(detail.into());
+                    if state != 3 {
+                        ui.set_cable_failed(false);
+                    }
+                }
+                _ => ui.set_stage2(state as i32),
+            },
+            WMsg::CableFailed { detail, response } => {
+                ui.set_cable_detail(detail.into());
+                ui.set_cable_failed(true);
+                *cable_resp.borrow_mut() = Some(response);
+            }
+            WMsg::InstallStopped(reason) => {
+                ui.set_untouched(true);
+                ui.set_result_detail(reason.into());
+                ui.set_install_view(3);
+            }
             WMsg::UpdateAvailable { version, url, body } => {
                 ui.set_update_version(version.into());
                 ui.set_update_url(url.into());
@@ -332,6 +483,23 @@ pub fn poll(
             }
         }
     }
+}
+
+/// Start unpacking/checking a firmware for the install page.
+fn prepare(ui: &MainWindow, ctx: &mpsc::Sender<Cmd>, path: &str) {
+    let name = std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    ui.set_fw_name(name.into());
+    ui.set_fw_dir("".into());
+    ui.set_unpack_count(0);
+    ui.set_unpack_current("".into());
+    ui.set_fw_state(2);
+    ctx.send(Cmd::PrepareFirmware {
+        path: path.to_string(),
+    })
+    .ok();
 }
 
 fn add_log(models: &LogModels, ui: &MainWindow, l: &LogLevel, tab: u8, m: &str) {
@@ -347,7 +515,10 @@ pub fn register_callbacks(
     >,
     fastbootd_resp: &std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<bool>>>>,
     flash_cancel: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+    cable_resp: &std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<bool>>>>,
 ) {
+    register_install_callbacks(ui, ctx, cable_resp);
+
     let t = ctx.clone();
     ui.on_check_device(move || {
         t.send(Cmd::CheckDevice).ok();
@@ -864,7 +1035,7 @@ pub fn register_callbacks(
     let w = ui.as_weak();
     ui.on_request_back(move || {
         if let Some(ui) = w.upgrade() {
-            ui.set_page(0);
+            ui.set_page(if ui.get_classic_ui() { 0 } else { 11 });
         }
     });
 
@@ -942,6 +1113,192 @@ pub fn register_callbacks(
             && let Some(ui) = w_dl.upgrade()
         {
             ui.set_download_export_status(path.into());
+        }
+    });
+}
+
+/// Callbacks of the new interface: install page, Tools pins, Settings.
+fn register_install_callbacks(
+    ui: &MainWindow,
+    ctx: &mpsc::Sender<Cmd>,
+    cable_resp: &std::rc::Rc<std::cell::RefCell<Option<std::sync::mpsc::Sender<bool>>>>,
+) {
+    let t = ctx.clone();
+    let w = ui.as_weak();
+    ui.on_pick_zip(move || {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("Firmware", &["zip"])
+            .set_directory(get_output_dir())
+            .pick_file()
+            && let Some(ui) = w.upgrade()
+        {
+            prepare(&ui, &t, &p.display().to_string());
+        }
+    });
+
+    let t = ctx.clone();
+    let w = ui.as_weak();
+    ui.on_pick_folder(move || {
+        if let Some(p) = rfd::FileDialog::new()
+            .set_directory(get_output_dir())
+            .pick_folder()
+            && let Some(ui) = w.upgrade()
+        {
+            prepare(&ui, &t, &p.display().to_string());
+        }
+    });
+
+    let w = ui.as_weak();
+    ui.on_change_firmware(move || {
+        if let Some(ui) = w.upgrade() {
+            ui.set_fw_state(0);
+            ui.set_fw_dir("".into());
+        }
+    });
+
+    // 0 forgets the choice for this model, so the cards come back.
+    let w = ui.as_weak();
+    ui.on_choose_chip(move |c| {
+        if let Some(ui) = w.upgrade() {
+            let product = ui.get_device().product.to_string();
+            if product.is_empty() {
+                return;
+            }
+            match c {
+                1 => crate::config::set_chip(&product, "snapdragon"),
+                2 => crate::config::set_chip(&product, "mediatek"),
+                _ => crate::config::remove_chip(&product),
+            }
+            ui.set_chip(c);
+            ui.set_chips_summary(chips_summary(&load_config()).into());
+        }
+    });
+
+    let t = ctx.clone();
+    let w = ui.as_weak();
+    ui.on_run_install(move || {
+        if let Some(ui) = w.upgrade() {
+            // The sheet only opens with a chip chosen; never start without one.
+            let method = match ui.get_chip() {
+                1 => FlashMethod::Snapdragon,
+                2 => FlashMethod::Mtk,
+                _ => return,
+            };
+            let dir = ui.get_fw_dir().to_string();
+            if dir.is_empty() {
+                return;
+            }
+            ui.set_stage0(1);
+            ui.set_stage1(0);
+            ui.set_stage2(0);
+            ui.set_stage1_detail("".into());
+            ui.set_cable_failed(false);
+            ui.set_flash_progress(0.0);
+            ui.set_current_partition("".into());
+            ui.set_install_view(1);
+            t.send(Cmd::RunInstall {
+                dir,
+                method,
+                skip_xbl_abl: ui.get_skip_xbl_abl(),
+                skip_preloader: ui.get_skip_preloader(),
+            })
+            .ok();
+        }
+    });
+
+    let cr = cable_resp.clone();
+    let w = ui.as_weak();
+    ui.on_cable_retry(move || {
+        if let Some(ui) = w.upgrade() {
+            ui.set_cable_failed(false);
+        }
+        if let Some(tx) = cr.borrow_mut().take() {
+            tx.send(true).ok();
+        }
+    });
+
+    let cr = cable_resp.clone();
+    ui.on_cable_stop(move || {
+        if let Some(tx) = cr.borrow_mut().take() {
+            tx.send(false).ok();
+        }
+    });
+
+    let w = ui.as_weak();
+    ui.on_install_finish(move || {
+        if let Some(ui) = w.upgrade() {
+            ui.set_install_view(0);
+        }
+    });
+
+    // After a stop before flashing, back to the checklist; after a failure
+    // partway, flash again only what failed.
+    let w = ui.as_weak();
+    ui.on_install_retry(move || {
+        if let Some(ui) = w.upgrade() {
+            if ui.get_untouched() || ui.get_flash_failed_partitions().is_empty() {
+                ui.set_install_view(0);
+            } else {
+                ui.set_stage2(1);
+                ui.set_install_view(1);
+                ui.invoke_retry_flash();
+            }
+        }
+    });
+
+    ui.on_accept_notice(|| {
+        let mut config = load_config();
+        config.notice_accepted = true;
+        save_config(&config);
+    });
+
+    let w = ui.as_weak();
+    ui.on_set_classic(move |c| {
+        let mut config = load_config();
+        config.classic_ui = c;
+        save_config(&config);
+        if let Some(ui) = w.upgrade() {
+            ui.set_classic_ui(c);
+        }
+    });
+
+    let w = ui.as_weak();
+    ui.on_toggle_pin(move |id| {
+        let Some(name) = usize::try_from(id - 1).ok().and_then(|i| TOOL_NAMES.get(i)) else {
+            return;
+        };
+        let mut config = load_config();
+        if let Some(i) = config.pinned_tools.iter().position(|p| p == name) {
+            config.pinned_tools.remove(i);
+        } else {
+            config.pinned_tools.push(name.to_string());
+        }
+        save_config(&config);
+        if let Some(ui) = w.upgrade() {
+            apply_pins(&ui, &config.pinned_tools);
+        }
+    });
+
+    let w = ui.as_weak();
+    ui.on_clear_cache(move || {
+        if let Err(e) = lfff_lib::extractor::clear_extraction_cache(&get_output_dir()) {
+            eprintln!("Failed to clear unpacked firmware: {}", e);
+        }
+        if let Some(ui) = w.upgrade() {
+            ui.set_cache_summary(cache_summary().into());
+            // The firmware on the install page may have been one of them.
+            if ui.get_fw_state() == 3 || ui.get_fw_state() == 4 {
+                ui.set_fw_state(0);
+            }
+        }
+    });
+
+    let w = ui.as_weak();
+    ui.on_forget_chips(move || {
+        crate::config::clear_chips();
+        if let Some(ui) = w.upgrade() {
+            ui.set_chip(0);
+            ui.set_chips_summary("".into());
         }
     });
 }

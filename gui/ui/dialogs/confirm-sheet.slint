@@ -1,0 +1,278 @@
+import {
+    CheckBox,
+    CheckState,
+    FilledButton,
+    MaterialPalette,
+    TextButton,
+} from "@material";
+import { StatusColors } from "../globals/status-colors.slint";
+import { Tr } from "../globals/tr.slint";
+import { FieldRow } from "../components/wizard.slint";
+
+// The one sheet between "Install" and the hands-off run. Its warning step
+// always comes before the summary: the order ARB, then final confirmation, is
+// fixed.
+// kind: 0 ARB found (red), 1 no ARB found (reminder), 2 MediaTek preloader,
+//       3 summary
+export component ConfirmSheet inherits Rectangle {
+    in property <int> kind;
+    // ARB of the firmware when kind is 0; -1 when unknown.
+    in property <int> arb;
+    in property <string> phone;
+    in property <string> chip-name;
+    in property <string> firmware;
+    // xbl/abl for kinds 0 and 1, preloader for kind 2
+    in-out property <bool> skip-checked;
+    callback cancel();
+    callback next();
+    callback back();
+    callback change-chip();
+    callback install();
+    TouchArea { }
+
+    width: 100%;
+    height: 100%;
+    background: StatusColors.scrim;
+    property <bool> danger: root.kind == 0;
+    property <color> accent: root.danger ? MaterialPalette.error : StatusColors.warning;
+    // Placed by hand: centring through nested layouts squeezed the card below
+    // the height its wrapped text needs.
+            Rectangle {
+        width: 580px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: 20px;
+        background: MaterialPalette.surface-container-high;
+        border-width: root.danger ? 2px : 1px;
+        border-color: root.danger ? MaterialPalette.error : MaterialPalette.outline-variant;
+        clip: true;
+        height: card.preferred-height;
+        card := VerticalLayout {
+                    // Red band on top: the one thing that must not be missed.
+                    if root.danger: Rectangle {
+                height: 6px;
+                background: MaterialPalette.error;
+            }
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+                Text {
+                    text: root.kind == 3 ? Tr.t("Step 2 of 2", "Шаг 2 из 2", "第 2 步，共 2 步", "第 2 步，共 2 步") : Tr.t("Step 1 of 2", "Шаг 1 из 2", "第 1 步，共 2 步", "第 1 步，共 2 步");
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: MaterialPalette.on-surface-variant;
+                }
+
+                // ── Warning step ─────────────────────────────────
+                        if root.kind < 3: HorizontalLayout {
+                    spacing: 12px;
+                    Image {
+                        source: @image-url("../icons/warning.svg");
+                        width: 28px;
+                        height: 28px;
+                        colorize: root.accent;
+                    }
+
+                    Text {
+                        width: 492px;
+                        text: root.kind == 0 ? Tr.t("This firmware has ARB ", "В прошивке ARB ", "此固件的 ARB 为 ", "此韌體的 ARB 為 ") + root.arb
+                            : root.kind == 1 ? Tr.t("No ARB found in this firmware", "В прошивке не найден ARB", "此固件中未找到 ARB", "此韌體中未找到 ARB")
+                            : Tr.t("This firmware contains a preloader", "В прошивке есть preloader", "此固件包含 preloader", "此韌體包含 preloader");
+                        font-size: 19px;
+                        font-weight: 600;
+                        color: root.accent;
+                        wrap: word-wrap;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if root.kind < 3: Text {
+                    text: root.kind == 0 ? Tr.t(
+                                "After installing, the phone can never go back to firmware with a lower ARB: it would no longer boot — a brick. Updating to newer firmware stays possible.",
+                                "После установки вернуться на прошивку с меньшим ARB будет нельзя: телефон перестанет загружаться и превратится в «кирпич». Обновляться на более новые прошивки можно.",
+                                "安装后，手机将无法再回退到 ARB 更低的固件：否则将无法启动——变砖。升级到更新的固件不受影响。",
+                                "安裝後，手機將無法再退回 ARB 更低的韌體：否則將無法開機——變磚。升級到更新的韌體不受影響。")
+                        : root.kind == 1 ? Tr.t(
+                                "But the phone may already run firmware with ARB. If the phone's ARB is higher than this firmware's, it will not boot after installing — a brick. Make sure you know your phone's current ARB.",
+                                "Но на телефоне уже может стоять прошивка с ARB. Если ARB телефона выше, чем у этой прошивки, после установки он не загрузится и превратится в «кирпич». Убедитесь, что знаете текущий ARB телефона.",
+                                "但手机上可能已经是带 ARB 的固件。如果手机的 ARB 高于此固件，安装后将无法启动——变砖。请确认您知道手机当前的 ARB。",
+                                "但手機上可能已經是帶 ARB 的韌體。如果手機的 ARB 高於此韌體，安裝後將無法開機——變磚。請確認您知道手機目前的 ARB。")
+                        : Tr.t(
+                                "The preloader can only be written in special service modes that need authorization. Installing without it usually works.",
+                                "Preloader записывается только в особых сервисных режимах с авторизацией. Обычно прошивка без него проходит нормально.",
+                                "preloader 只能在需要授权的特殊维修模式下写入。不刷 preloader 通常也能正常安装。",
+                                "preloader 只能在需要授權的特殊維修模式下寫入。不刷 preloader 通常也能正常安裝。");
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface;
+                    wrap: word-wrap;
+                }
+
+                if root.kind < 3: Rectangle {
+                    border-radius: 12px;
+                    background: root.danger ? MaterialPalette.error-container.with-alpha(0.5) : StatusColors.warning-container.with-alpha(0.5);
+                    HorizontalLayout {
+                        padding: 8px;
+                        padding-right: 14px;
+                        spacing: 4px;
+                        CheckBox {
+                            check-state: root.skip-checked ? CheckState.checked : CheckState.unchecked;
+                            checked-state-changed(s) => {
+                                root.skip-checked = s == CheckState.checked;
+                            }
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                width: 446px;
+                                text: root.kind == 2 ? Tr.t("Skip the preloader", "Пропустить preloader", "跳过 preloader", "跳過 preloader")
+                                    : Tr.t("Don't install the bootloader files (xbl, abl)", "Не прошивать файлы загрузчика (xbl, abl)", "不刷写引导程序文件（xbl、abl）", "不刷寫引導程式檔案（xbl、abl）");
+                                font-size: 14px;
+                                font-weight: 500;
+                                color: MaterialPalette.on-surface;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                width: 446px;
+                                text: root.kind == 2
+                                    ? Tr.t("This can also brick the phone. At your own risk.", "Это тоже может превратить телефон в «кирпич». Только на свой страх и риск.", "这同样可能导致手机变砖。风险自负。", "這同樣可能導致手機變磚。風險自負。")
+                                    : Tr.t("Sometimes keeps the phone's current ARB, but can also brick it. At your own risk.", "Иногда помогает сохранить текущий ARB телефона, но тоже может превратить его в «кирпич». Только на свой страх и риск.", "有时可以保留手机当前的 ARB，但同样可能导致变砖。风险自负。", "有時可以保留手機目前的 ARB，但同樣可能導致變磚。風險自負。");
+                                font-size: 12px;
+                                color: root.danger ? MaterialPalette.error : StatusColors.warning;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+
+                // ── Summary step ─────────────────────────────────
+                        if root.kind == 3: Text {
+                    text: Tr.t("Ready to install", "Всё готово к установке", "一切就绪，可以安装", "一切就緒，可以安裝");
+                    font-size: 22px;
+                    font-weight: 600;
+                    color: MaterialPalette.on-surface;
+                }
+
+                if root.kind == 3: VerticalLayout {
+                    FieldRow {
+                        label-width: 150px;
+                        label: Tr.t("Phone", "Телефон", "手机", "手機");
+                        Text {
+                            text: root.phone;
+                            font-size: 14px;
+                            font-weight: 500;
+                            color: MaterialPalette.on-surface;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    FieldRow {
+                        label-width: 150px;
+                        label: Tr.t("Processor", "Процессор", "处理器", "處理器");
+                        Text {
+                            text: root.chip-name;
+                            font-size: 14px;
+                            font-weight: 500;
+                            color: MaterialPalette.on-surface;
+                            vertical-alignment: center;
+                        }
+
+                        TextButton {
+                            text: Tr.t("Change", "Изменить", "更改", "變更");
+                            clicked => {
+                                root.change-chip();
+                            }
+                        }
+                    }
+
+                    FieldRow {
+                        label-width: 150px;
+                        label: Tr.t("Firmware", "Прошивка", "固件", "韌體");
+                        Text {
+                            text: root.firmware;
+                            font-size: 14px;
+                            font-weight: 500;
+                            color: MaterialPalette.on-surface;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if root.arb > 0: FieldRow {
+                        label-width: 150px;
+                        label: "ARB";
+                        Rectangle {
+                            border-radius: 8px;
+                            background: MaterialPalette.error-container;
+                            width: arb-text.preferred-width + 16px;
+                            height: 26px;
+                            y: (parent.height - self.height) / 2;
+                            arb-text := Text {
+                                text: root.arb + Tr.t(" — no going back to lower", " — откат на меньший невозможен", "——无法回退到更低版本", "——無法退回更低版本");
+                                font-size: 13px;
+                                font-weight: 500;
+                                color: MaterialPalette.on-error-container;
+                            }
+                        }
+                    }
+                }
+
+                if root.kind == 3: Rectangle {
+                    border-radius: 12px;
+                    background: MaterialPalette.error-container;
+                    HorizontalLayout {
+                        padding: 12px;
+                        spacing: 10px;
+                        Image {
+                            source: @image-url("../icons/warning.svg");
+                            width: 20px;
+                            height: 20px;
+                            colorize: MaterialPalette.on-error-container;
+                        }
+
+                        Text {
+                            width: 478px;
+                            text: Tr.t(
+                                        "The phone's system is overwritten completely; this cannot be undone. Keep the cable plugged in for 10–20 minutes and the battery above 30%. Everything is at your own risk.",
+                                        "Система телефона будет полностью перезаписана — это необратимо. Не отключайте кабель 10–20 минут, заряд — не меньше 30 %. Всё — на ваш страх и риск.",
+                                        "手机系统将被完全覆盖，此操作不可撤销。请在 10–20 分钟内保持数据线连接，电量不低于 30%。一切风险自负。",
+                                        "手機系統將被完全覆寫，此操作無法復原。請在 10–20 分鐘內保持傳輸線連接，電量不低於 30%。一切風險自負。");
+                            font-size: 13px;
+                            color: MaterialPalette.on-error-container;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    padding-top: 6px;
+                    TextButton {
+                        text: root.kind == 3 ? Tr.t("Back", "Назад", "返回", "返回") : Tr.t("Cancel", "Отмена", "取消", "取消");
+                        clicked => {
+                            if root.kind == 3 {
+                                root.back();
+                            } else {
+                                root.cancel();
+                            }
+                        }
+                    }
+
+                    FilledButton {
+                        text: root.kind == 3 ? Tr.t("Install", "Установить", "安装", "安裝") : Tr.t("I understand, next", "Понятно, дальше", "我明白，下一步", "我明白，下一步");
+                        clicked => {
+                            if root.kind == 3 {
+                                root.install();
+                            } else {
+                                root.next();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

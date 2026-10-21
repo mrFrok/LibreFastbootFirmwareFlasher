@@ -1,0 +1,75 @@
+import { FilledButton, MaterialPalette } from "@material";
+import { StatusColors } from "../globals/status-colors.slint";
+import { Tr } from "../globals/tr.slint";
+
+// Shown on the first launch only, before anything else can be clicked:
+// who the app is for, and that the risk is the user's.
+export component StartupNotice inherits Rectangle {
+    callback accept();
+    width: 100%;
+    height: 100%;
+    background: StatusColors.scrim;
+    TouchArea { }
+
+    Rectangle {
+        width: 520px;
+        height: card.preferred-height;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: 20px;
+        background: MaterialPalette.surface-container-high;
+        border-width: 2px;
+        border-color: MaterialPalette.error;
+        clip: true;
+        card := VerticalLayout {
+            Rectangle {
+                height: 6px;
+                background: MaterialPalette.error;
+            }
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+                Image {
+                    source: @image-url("../icons/warning.svg");
+                    width: 36px;
+                    height: 36px;
+                    colorize: MaterialPalette.error;
+                }
+
+                Text {
+                    text: Tr.t("Before you start", "Прежде чем начать", "开始之前", "開始之前");
+                    font-size: 22px;
+                    font-weight: 600;
+                    color: MaterialPalette.on-surface;
+                }
+
+                Text {
+                    text: Tr.t("LibreFastbootFirmwareFlasher is made for Realme, OnePlus and OPPO phones with Qualcomm Snapdragon. MediaTek support is partial.", "LibreFastbootFirmwareFlasher сделан для телефонов Realme, OnePlus и OPPO на Qualcomm Snapdragon. Поддержка MediaTek частичная.", "LibreFastbootFirmwareFlasher 适用于搭载高通骁龙的 Realme、一加和 OPPO 手机。联发科仅部分支持。", "LibreFastbootFirmwareFlasher 適用於搭載高通 Snapdragon 的 Realme、OnePlus 和 OPPO 手機。聯發科僅部分支援。");
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    text: Tr.t("Installing firmware can make the phone unbootable. Everything you do is at your own risk: the author takes no responsibility for the result.", "Установка прошивки может сделать телефон неработоспособным. Всё, что вы делаете, — на ваш страх и риск: автор не несёт ответственности за результат.", "安装固件可能导致手机无法启动。一切操作风险自负：作者不对结果承担任何责任。", "安裝韌體可能導致手機無法開機。一切操作風險自負：作者不對結果承擔任何責任。");
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: MaterialPalette.error;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    alignment: end;
+                    padding-top: 6px;
+                    FilledButton {
+                        text: Tr.t("I understand", "Понятно", "我明白", "我明白");
+                        clicked => {
+                            root.accept();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

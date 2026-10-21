@@ -1,0 +1,177 @@
+import { MaterialPalette } from "@material";
+import { Tr } from "../globals/tr.slint";
+
+// Tool ids, also stored in config.json as pinned tools:
+// 1 one partition, 2 full flash / build output, 3 phone and drivers,
+// 4 download or unpack. The pages behind them are the classic ones.
+export global Tools {
+    public pure function title(id: int) -> string {
+        return id == 1 ? Tr.t("Flash one partition", "Прошить один раздел", "刷写单个分区", "刷寫單一分割區")
+            : id == 2 ? Tr.t("Full flash and builds", "Полная прошивка и сборки", "完整刷写与自编译版本", "完整刷寫與自行編譯版本")
+            : id == 3 ? Tr.t("Phone and drivers", "Телефон и драйверы", "手机与驱动", "手機與驅動程式")
+            : Tr.t("Download or unpack", "Скачать или распаковать", "下载或解压", "下載或解壓");
+    }
+    public pure function icon(id: int) -> image {
+        return id == 1 ? @image-url("../icons/storage.svg")
+            : id == 2 ? @image-url("../icons/folder.svg")
+            : id == 3 ? @image-url("../icons/smartphone.svg")
+            : @image-url("../icons/download.svg");
+    }
+}
+
+component ToolCard inherits TouchArea {
+    in property <int> id;
+    in property <bool> pinned;
+    in property <string> text;
+    callback toggle-pin();
+    min-height: 84px;
+    Rectangle {
+        border-radius: 16px;
+        background: root.has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container;
+        border-width: 1px;
+        border-color: MaterialPalette.outline-variant;
+        Rectangle {
+            x: 14px;
+            y: 14px;
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: MaterialPalette.secondary-container;
+            Image {
+                source: Tools.icon(root.id);
+                width: 22px;
+                height: 22px;
+                colorize: MaterialPalette.on-secondary-container;
+            }
+        }
+
+        // Icon placed by hand: a wrapping Text in a HorizontalLayout reports
+        // a one-line height.
+        VerticalLayout {
+            padding: 14px;
+            padding-left: 68px;
+            padding-right: 48px;
+            alignment: center;
+            spacing: 3px;
+            Text {
+                text: Tools.title(root.id);
+                font-size: 15px;
+                font-weight: 500;
+                color: MaterialPalette.on-surface;
+            }
+
+            Text {
+                text: root.text;
+                font-size: 13px;
+                color: MaterialPalette.on-surface-variant;
+                wrap: word-wrap;
+            }
+        }
+
+        // Pin to the sidebar; filled when pinned. After the text so it takes
+        // the click before the card does.
+        pin := TouchArea {
+            x: parent.width - self.width - 8px;
+            y: 8px;
+            width: 36px;
+            height: 36px;
+            clicked => {
+                root.toggle-pin();
+            }
+            Rectangle {
+                border-radius: 18px;
+                background: root.pinned ? MaterialPalette.primary-container
+                    : pin.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent;
+                Image {
+                    source: root.pinned ? @image-url("../icons/pin-filled.svg") : @image-url("../icons/pin.svg");
+                    width: 18px;
+                    height: 18px;
+                    colorize: root.pinned ? MaterialPalette.on-primary-container : MaterialPalette.on-surface-variant;
+                }
+            }
+        }
+    }
+}
+
+export component ToolsGrid inherits VerticalLayout {
+    // One flag per tool id, index id - 1.
+    in property <[bool]> pinned;
+    callback open(int);
+    callback toggle-pin(int);
+    spacing: 16px;
+    VerticalLayout {
+        spacing: 4px;
+        Text {
+            text: Tr.t("Tools", "Инструменты", "工具", "工具");
+            font-size: 26px;
+            font-weight: 600;
+            color: MaterialPalette.on-surface;
+        }
+
+        Text {
+            text: Tr.t("For experienced users. To simply install firmware, use “Install firmware”. Pin a tool to keep it in the sidebar.", "Для опытных пользователей. Чтобы просто установить прошивку — «Установка прошивки». Закрепите инструмент, чтобы он был в боковом меню.", "面向有经验的用户。只想安装固件请使用“安装固件”。固定工具后它会出现在侧边栏。", "適合有經驗的使用者。只想安裝韌體請使用「安裝韌體」。釘選工具後它會出現在側邊欄。");
+            font-size: 14px;
+            color: MaterialPalette.on-surface-variant;
+            wrap: word-wrap;
+        }
+    }
+
+    GridLayout {
+        spacing: 12px;
+        Row {
+            ToolCard {
+                id: 1;
+                pinned: root.pinned[0];
+                text: Tr.t("boot, recovery, init_boot or another .img", "boot, recovery, init_boot или другой .img", "boot、recovery、init_boot 或其他 .img", "boot、recovery、init_boot 或其他 .img");
+                clicked => {
+                    root.open(1);
+                }
+                toggle-pin => {
+                    root.toggle-pin(1);
+                }
+            }
+
+            ToolCard {
+                id: 2;
+                pinned: root.pinned[1];
+                text: Tr.t("The classic full flash, also from an Android build's out folder", "Классическая полная прошивка, в том числе из папки сборки Android", "经典完整刷写，也支持 Android 编译输出文件夹", "經典完整刷寫，也支援 Android 編譯輸出資料夾");
+                clicked => {
+                    root.open(2);
+                }
+                toggle-pin => {
+                    root.toggle-pin(2);
+                }
+            }
+        }
+
+        Row {
+            ToolCard {
+                id: 3;
+                pinned: root.pinned[2];
+                text: Tr.t("Restart into a mode, switch slot A/B, connection test, programs", "Перезагрузка в режим, слот A/B, проверка связи, программы", "重启到指定模式、切换 A/B 槽位、连接测试、程序", "重新啟動到指定模式、切換 A/B 槽位、連線測試、程式");
+                clicked => {
+                    root.open(3);
+                }
+                toggle-pin => {
+                    root.toggle-pin(3);
+                }
+            }
+
+            ToolCard {
+                id: 4;
+                pinned: root.pinned[3];
+                text: Tr.t("Only download or only unpack a firmware", "Только скачать или только распаковать прошивку", "仅下载或仅解压固件", "僅下載或僅解壓韌體");
+                clicked => {
+                    root.open(4);
+                }
+                toggle-pin => {
+                    root.toggle-pin(4);
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        vertical-stretch: 1;
+    }
+}

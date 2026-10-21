@@ -1,0 +1,737 @@
+import {
+    FilledButton,
+    LinearProgressIndicator,
+    MaterialPalette,
+    OutlineButton,
+    TextButton,
+    TonalButton,
+} from "@material";
+import { StatusColors } from "../globals/status-colors.slint";
+import { Tr } from "../globals/tr.slint";
+import { DeviceInfo, LogEntry } from "../structs.slint";
+import {
+    StepRow,
+    Notice,
+    ChipCard,
+    StageRow,
+} from "../components/wizard.slint";
+import { LogView } from "../components/log-view.slint";
+
+// The beginner flow: a checklist that completes on its own, then a hands-off
+// run, then the result. `view`: 0 checklist, 1 running, 2 done, 3 stopped.
+export component InstallPage inherits VerticalLayout {
+    in property <int> view;
+
+    // ── Checklist state ─────────────────────────────────────────────────────
+    // 0 checking, 1 missing, 2 ready, 3 installing
+    in property <int> deps-state;
+    in property <string> deps-missing;
+    // 0 none, 1 downloading, 2 unpacking, 3 ready, 4 ready from the cache,
+    // 5 failed
+    in property <int> fw-state;
+    in property <string> fw-name;
+    in property <int> fw-parts;
+    in property <string> fw-error;
+    in property <int> unpack-count;
+    in property <string> unpack-current;
+    in-out property <string> download-url;
+    in property <float> dl-percent;
+    in property <string> dl-downloaded;
+    in property <string> dl-total;
+    in property <string> dl-speed;
+    in property <string> dl-eta;
+    in property <DeviceInfo> device;
+    // 0 not chosen for this model, 1 Snapdragon, 2 MediaTek
+    in property <int> chip;
+
+    // ── Run state ───────────────────────────────────────────────────────────
+    // Per stage: 0 waiting, 1 running, 2 done, 3 failed
+    in property <int> stage0;
+    in property <int> stage1;
+    in property <int> stage2;
+    in property <string> stage1-detail;
+    in property <float> flash-progress;
+    in property <string> current-partition;
+    in property <bool> cable-failed;
+    in property <string> cable-detail;
+    in property <[LogEntry]> log;
+    in property <string> export-status;
+
+    // ── Result ──────────────────────────────────────────────────────────────
+    in property <string> result-detail;
+    // true when the run stopped before anything was written to the phone
+    in property <bool> untouched;
+
+    callback install-deps();
+    callback pick-zip();
+    callback pick-folder();
+    callback paste-url();
+    callback download(string);
+    callback cancel-download();
+    callback change-firmware();
+    callback choose-chip(int);
+    callback install();
+    callback cable-retry();
+    callback cable-stop();
+    callback stop-install();
+    callback reboot-phone();
+    callback wipe-phone();
+    callback finish();
+    callback retry();
+    callback export-log();
+
+    property <bool> fw-ok: root.fw-state == 3 || root.fw-state == 4;
+    property <bool> phone-ok: root.device.connected && root.device.unlocked != 0;
+    property <bool> ready: root.deps-state == 2 && root.fw-ok && root.phone-ok && root.chip != 0;
+    property <string> mode-name: root.device.mode == 1 ? Tr.t("Android is running", "Android запущен", "Android 运行中", "Android 執行中")
+        : root.device.mode == 2 ? Tr.t("bootloader mode", "режим загрузчика", "bootloader 模式", "bootloader 模式")
+        : root.device.mode == 3 ? Tr.t("flashing mode", "режим прошивки", "刷机模式", "刷機模式")
+        : "";
+
+    // ════ Checklist ═════════════════════════════════════════════════════════
+    if root.view == 0: VerticalLayout {
+        spacing: 8px;
+        VerticalLayout {
+            vertical-stretch: 0;
+            spacing: 4px;
+            padding-bottom: 8px;
+            Text {
+                text: Tr.t("Install firmware", "Установка прошивки", "安装固件", "安裝韌體");
+                font-size: 26px;
+                font-weight: 600;
+                color: MaterialPalette.on-surface;
+            }
+
+            Text {
+                text: Tr.t("Each step completes on its own.", "Шаги отмечаются сами.", "每一步会自动完成。", "每一步會自動完成。");
+                font-size: 14px;
+                color: MaterialPalette.on-surface-variant;
+            }
+        }
+
+        // The steps scroll; the Install button below stays in view.
+        Flickable {
+            vertical-stretch: 1;
+            content-height: steps.preferred-height;
+            steps := VerticalLayout {
+                width: parent.width;
+                // Its own height, not the Flickable's: otherwise the steps
+                // are squeezed instead of scrolling.
+                height: self.preferred-height;
+                spacing: 8px;
+
+                // ── 1. Programs ──────────────────────────────────────────
+                StepRow {
+                    number: 1;
+                    state: root.deps-state == 2 ? 2 : root.deps-state == 1 ? 3 : 4;
+                    title: Tr.t("Programs", "Программы", "程序", "程式");
+                    summary: root.deps-state == 2 ? Tr.t("adb and fastboot are ready", "adb и fastboot на месте", "adb 和 fastboot 已就绪", "adb 和 fastboot 已就緒")
+                        : root.deps-state == 3 ? Tr.t("Installing…", "Устанавливаю…", "正在安装…", "正在安裝…")
+                        : root.deps-state == 0 ? Tr.t("Checking…", "Проверяю…", "正在检查…", "正在檢查…") : "";
+                    expanded: root.deps-state == 1;
+                    if root.deps-state == 1: Text {
+                        text: Tr.t("Missing: ", "Не хватает: ", "缺少：", "缺少：") + root.deps-missing + Tr.t(". The app can install them for you.", ". Программа установит их сама.", "。程序可以为您安装。", "。程式可以為您安裝。");
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface;
+                        wrap: word-wrap;
+                    }
+                    if root.deps-state == 1: HorizontalLayout {
+                        alignment: start;
+                        FilledButton {
+                            text: Tr.t("Install", "Установить", "安装", "安裝");
+                            clicked => {
+                                root.install-deps();
+                            }
+                        }
+                    }
+                }
+
+                // ── 2. Firmware ──────────────────────────────────────────
+                StepRow {
+                    number: 2;
+                    state: root.fw-ok ? 2 : root.fw-state == 2 ? 4 : root.fw-state == 5 ? 3 : 1;
+                    title: Tr.t("Firmware", "Прошивка", "固件", "韌體");
+                    summary: root.fw-state == 3 ? root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區")
+                        : root.fw-state == 4 ? root.fw-name + " · " + Tr.t("unpacked earlier", "распакована ранее", "之前已解压", "先前已解壓")
+                        : "";
+                    expanded: !root.fw-ok;
+                    if root.fw-state == 5: Notice {
+                        kind: 2;
+                        title: Tr.t("This firmware cannot be used", "Эту прошивку не получилось открыть", "无法使用此固件", "無法使用此韌體");
+                        text: root.fw-error;
+                    }
+                    if root.fw-state == 0 || root.fw-state == 5: Rectangle {
+                        height: 112px;
+                        border-radius: 14px;
+                        border-width: 1.5px;
+                        border-color: MaterialPalette.primary.with-alpha(0.5);
+                        background: MaterialPalette.primary.with-alpha(0.06);
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 10px;
+                            Text {
+                                text: Tr.t("Choose the firmware: a .zip file or an unpacked folder", "Выберите прошивку: файл .zip или распакованную папку", "选择固件：.zip 文件或已解压的文件夹", "選擇韌體：.zip 檔案或已解壓的資料夾");
+                                font-size: 14px;
+                                color: MaterialPalette.on-surface;
+                                horizontal-alignment: center;
+                            }
+
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: 8px;
+                                FilledButton {
+                                    icon: @image-url("../icons/file-zip.svg");
+                                    text: Tr.t("Choose .zip", "Выбрать .zip", "选择 .zip", "選擇 .zip");
+                                    clicked => {
+                                        root.pick-zip();
+                                    }
+                                }
+
+                                TonalButton {
+                                    icon: @image-url("../icons/folder.svg");
+                                    text: Tr.t("Choose folder", "Выбрать папку", "选择文件夹", "選擇資料夾");
+                                    clicked => {
+                                        root.pick-folder();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if root.fw-state == 0 || root.fw-state == 5: HorizontalLayout {
+                        spacing: 8px;
+                        height: 40px;
+                        Text {
+                            text: Tr.t("or download from a link", "или скачайте по ссылке", "或通过链接下载", "或透過連結下載");
+                            font-size: 14px;
+                            color: MaterialPalette.on-surface-variant;
+                            vertical-alignment: center;
+                        }
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            min-width: 0px;
+                            clip: true;
+                            border-radius: 12px;
+                            background: MaterialPalette.surface-container-low;
+                            border-width: 1px;
+                            border-color: url-input.has-focus ? MaterialPalette.primary : MaterialPalette.outline-variant;
+                            Text {
+                                x: 14px;
+                                width: parent.width - 28px;
+                                visible: root.download-url == "" && !url-input.has-focus;
+                                text: "https://…";
+                                font-size: 14px;
+                                color: MaterialPalette.on-surface-variant;
+                            }
+
+                            url-input := TextInput {
+                                x: 14px;
+                                width: parent.width - 28px;
+                                height: parent.height;
+                                text <=> root.download-url;
+                                font-size: 14px;
+                                color: MaterialPalette.on-surface;
+                                vertical-alignment: center;
+                                single-line: true;
+                            }
+                        }
+
+                        TextButton {
+                            text: Tr.t("Paste", "Вставить", "粘贴", "貼上");
+                            clicked => {
+                                root.paste-url();
+                            }
+                        }
+
+                        OutlineButton {
+                            enabled: root.download-url != "";
+                            text: Tr.t("Download", "Скачать", "下载", "下載");
+                            clicked => {
+                                root.download(root.download-url);
+                            }
+                        }
+                    }
+                    if root.fw-state == 1: HorizontalLayout {
+                        Text {
+                            horizontal-stretch: 1;
+                            text: Tr.t("Downloading the firmware", "Скачиваю прошивку", "正在下载固件", "正在下載韌體");
+                            font-size: 14px;
+                            color: MaterialPalette.on-surface;
+                            vertical-alignment: center;
+                        }
+
+                        TextButton {
+                            text: Tr.t("Cancel", "Отмена", "取消", "取消");
+                            clicked => {
+                                root.cancel-download();
+                            }
+                        }
+                    }
+                    if root.fw-state == 1: LinearProgressIndicator {
+                        progress: root.dl-percent / 100;
+                    }
+                    if root.fw-state == 1: Text {
+                        text: Math.round(root.dl-percent) + " % · " + root.dl-downloaded + " / " + root.dl-total + " · " + root.dl-speed + " · " + root.dl-eta;
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                    }
+                    if root.fw-state == 2: Text {
+                        text: Tr.t("Unpacking ", "Распаковываю ", "正在解压 ", "正在解壓 ") + root.fw-name;
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface;
+                    }
+                    // payload_dumper does not report a total, so the bar runs
+                    // without one and the count says how far it is.
+                    if root.fw-state == 2: LinearProgressIndicator {
+                        indeterminate: true;
+                    }
+                    if root.fw-state == 2: Text {
+                        text: root.unpack-count == 0 ? Tr.t("Starting…", "Начинаю…", "正在开始…", "正在開始…")
+                            : Tr.t("Parts unpacked: ", "Распаковано разделов: ", "已解压分区：", "已解壓分割區：") + root.unpack-count + " · " + root.unpack-current;
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                    }
+                    if root.fw-state == 2: Text {
+                        text: Tr.t("You can connect the phone meanwhile. Next time this firmware opens instantly: the unpacked copy is kept.", "Пока можно подключить телефон. В следующий раз эта прошивка откроется сразу: распакованная копия сохраняется.", "此期间可以连接手机。下次打开此固件会立即完成：解压后的副本会保留。", "此期間可以連接手機。下次開啟此韌體會立即完成：解壓後的副本會保留。");
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                        wrap: word-wrap;
+                    }
+                }
+
+                // ── 3. Phone ─────────────────────────────────────────────
+                StepRow {
+                    number: 3;
+                    state: !root.device.connected ? 4 : root.device.unlocked == 0 ? 3 : 2;
+                    title: Tr.t("Phone", "Телефон", "手机", "手機");
+                    summary: root.device.connected ? root.device.name + " · " + root.mode-name
+                        : Tr.t("Looking for the phone…", "Ищу телефон…", "正在查找手机…", "正在尋找手機…");
+                    expanded: !root.device.connected || root.device.unlocked == 0;
+                    if !root.device.connected: Text {
+                        text: Tr.t("Phone not found? Check that:", "Телефон не находится? Проверьте:", "找不到手机？请检查：", "找不到手機？請檢查：");
+                        font-size: 14px;
+                        font-weight: 500;
+                        color: MaterialPalette.on-surface;
+                    }
+                    if !root.device.connected: Text {
+                        text: Tr.t(
+                            "• the cable can transfer data — some only charge\n• the phone is on and USB debugging is enabled (Settings → Developer options), or it is in bootloader mode\n• the phone asked to allow USB debugging — confirm it on its screen\n• the bootloader is unlocked — without that the firmware cannot be installed",
+                            "• кабель передаёт данные — некоторые умеют только заряжать\n• телефон включён и в нём включена отладка по USB (Настройки → Для разработчиков) или он в режиме загрузчика\n• телефон спросил, разрешить ли отладку по USB, — подтвердите на его экране\n• загрузчик разблокирован — без этого установить прошивку нельзя",
+                            "• 数据线能传输数据——有些线只能充电\n• 手机已开机并开启 USB 调试（设置 → 开发者选项），或处于 bootloader 模式\n• 手机询问是否允许 USB 调试——请在手机屏幕上确认\n• bootloader 已解锁——否则无法安装固件",
+                            "• 傳輸線能傳輸資料——有些線只能充電\n• 手機已開機並開啟 USB 偵錯（設定 → 開發人員選項），或處於 bootloader 模式\n• 手機詢問是否允許 USB 偵錯——請在手機螢幕上確認\n• bootloader 已解鎖——否則無法安裝韌體");
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                        wrap: word-wrap;
+                    }
+                    if root.device.connected && root.device.unlocked == 0: Notice {
+                        kind: 2;
+                        icon: @image-url("../icons/lock.svg");
+                        title: Tr.t("The bootloader is locked", "Загрузчик заблокирован", "bootloader 已锁定", "bootloader 已鎖定");
+                        text: Tr.t("Firmware cannot be installed on a phone with a locked bootloader. Unlock it first, then reconnect the phone.", "На телефон с заблокированным загрузчиком прошивку не установить. Сначала разблокируйте его и подключите телефон заново.", "bootloader 锁定的手机无法安装固件。请先解锁，然后重新连接手机。", "bootloader 鎖定的手機無法安裝韌體。請先解鎖，然後重新連接手機。");
+                    }
+                }
+
+                // ── 4. Processor ─────────────────────────────────────────
+                StepRow {
+                    number: 4;
+                    state: !root.device.connected ? 0 : root.chip != 0 ? 2 : 1;
+                    title: Tr.t("Processor", "Процессор", "处理器", "處理器");
+                    summary: !root.device.connected ? Tr.t("After the phone is found", "После того как найдётся телефон", "找到手机后", "找到手機後")
+                        : root.chip == 1 ? "Snapdragon · " + Tr.t("remembered for ", "запомнено для ", "已为此机型记住：", "已為此機型記住：") + root.device.product
+                        : root.chip == 2 ? "MediaTek · " + Tr.t("remembered for ", "запомнено для ", "已为此机型记住：", "已為此機型記住：") + root.device.product
+                        : "";
+                    expanded: root.device.connected && root.chip == 0;
+                    if root.device.connected && root.chip == 0: Text {
+                        text: Tr.t("Which processor does ", "Какой процессор у ", "", "") + root.device.product + Tr.t(" have? The app will remember the answer for this model.", "? Программа запомнит ответ для этой модели.", " 使用哪种处理器？程序会为此机型记住您的选择。", " 使用哪種處理器？程式會為此機型記住您的選擇。");
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface;
+                        wrap: word-wrap;
+                    }
+                    if root.device.connected && root.chip == 0: HorizontalLayout {
+                        spacing: 12px;
+                        ChipCard {
+                            horizontal-stretch: 1;
+                            preferred-width: 100px;
+                            title: "Snapdragon (Qualcomm)";
+                            text: Tr.t("Most Realme, OnePlus and OPPO phones", "Большинство телефонов Realme, OnePlus и OPPO", "大多数 Realme、一加和 OPPO 手机", "大多數 Realme、OnePlus 和 OPPO 手機");
+                            clicked => {
+                                root.choose-chip(1);
+                            }
+                        }
+
+                        ChipCard {
+                            horizontal-stretch: 1;
+                            preferred-width: 100px;
+                            title: "MediaTek";
+                            text: Tr.t("Dimensity or Helio in the specifications", "Dimensity или Helio в характеристиках", "规格中写着天玑或 Helio", "規格中寫著天璣或 Helio");
+                            clicked => {
+                                root.choose-chip(2);
+                            }
+                        }
+                    }
+                    if root.device.connected && root.chip == 0: Text {
+                        text: Tr.t("Not sure? Search the web for “", "Не знаете? Поищите в интернете «", "不确定？请在网上搜索“", "不確定？請在網路上搜尋「") + root.device.product + Tr.t(" processor”. A wrong choice can break the installation.", " процессор». Неверный выбор может испортить установку.", " 处理器”。选错可能导致安装失败。", " 處理器」。選錯可能導致安裝失敗。");
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        // Takes the spare height when the steps are short.
+        Rectangle {
+            vertical-stretch: 1;
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            spacing: 16px;
+            FilledButton {
+                min-width: 260px;
+                height: 52px;
+                enabled: root.ready;
+                icon: @image-url("../icons/flash.svg");
+                text: Tr.t("Install firmware", "Установить прошивку", "安装固件", "安裝韌體");
+                clicked => {
+                    root.install();
+                }
+            }
+
+            if root.fw-ok: TextButton {
+                text: Tr.t("Other firmware", "Другая прошивка", "其他固件", "其他韌體");
+                clicked => {
+                    root.change-firmware();
+                }
+            }
+
+            Text {
+                text: root.ready ? Tr.t("Takes 10–20 minutes", "Займёт 10–20 минут", "需要 10–20 分钟", "需要 10–20 分鐘")
+                    : Tr.t("Finish the steps above first", "Сначала завершите шаги выше", "请先完成上面的步骤", "請先完成上面的步驟");
+                font-size: 13px;
+                color: MaterialPalette.on-surface-variant;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // ════ Running ═══════════════════════════════════════════════════════════
+    if root.view == 1: VerticalLayout {
+        spacing: 16px;
+        VerticalLayout {
+            vertical-stretch: 0;
+            spacing: 4px;
+            Text {
+                text: Tr.t("Installing the firmware", "Устанавливаю прошивку", "正在安装固件", "正在安裝韌體");
+                font-size: 26px;
+                font-weight: 600;
+                color: MaterialPalette.on-surface;
+            }
+
+            Text {
+                text: Tr.t("Don't unplug the phone and don't close the app.", "Не отключайте телефон и не закрывайте программу.", "请勿断开手机，也不要关闭程序。", "請勿中斷手機連接，也不要關閉程式。");
+                font-size: 14px;
+                color: StatusColors.warning;
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 0;
+            border-radius: 16px;
+            background: MaterialPalette.surface-container;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 6px;
+                StageRow {
+                    state: root.stage0;
+                    title: Tr.t("Prepare the phone", "Подготовка телефона", "准备手机", "準備手機");
+                    detail: root.stage0 == 1 ? Tr.t("restarting into flashing mode…", "перезагружаю в режим прошивки…", "正在重启到刷机模式…", "正在重新啟動到刷機模式…")
+                        : root.stage0 == 2 ? Tr.t("in flashing mode", "в режиме прошивки", "已进入刷机模式", "已進入刷機模式") : "";
+                }
+
+                StageRow {
+                    state: root.stage1;
+                    title: Tr.t("Check the USB cable", "Проверка USB-кабеля", "检查 USB 数据线", "檢查 USB 傳輸線");
+                    detail: root.stage1-detail;
+                }
+
+                if root.cable-failed: Notice {
+                    kind: 2;
+                    title: Tr.t("The connection is too slow", "Соединение слишком медленное", "连接速度太慢", "連線速度太慢");
+                    text: Tr.t("Try another cable — ideally the one from the box — and a USB port directly on the computer, without hubs or adapters.", "Попробуйте другой кабель — лучше из комплекта — и порт USB прямо на компьютере, без хабов и переходников.", "请换一根数据线（最好是原装线），并直接连接电脑上的 USB 接口，不要使用集线器或转接头。", "請換一條傳輸線（最好是原廠線），並直接連接電腦上的 USB 連接埠，不要使用集線器或轉接頭。");
+                    HorizontalLayout {
+                        alignment: end;
+                        spacing: 8px;
+                        TextButton {
+                            text: Tr.t("Stop", "Остановить", "停止", "停止");
+                            clicked => {
+                                root.cable-stop();
+                            }
+                        }
+
+                        FilledButton {
+                            icon: @image-url("../icons/restart.svg");
+                            text: Tr.t("Check again", "Проверить снова", "重新检查", "重新檢查");
+                            clicked => {
+                                root.cable-retry();
+                            }
+                        }
+                    }
+                }
+
+                StageRow {
+                    state: root.stage2;
+                    title: Tr.t("Install the firmware", "Установка прошивки", "安装固件", "安裝韌體");
+                    detail: root.stage2 == 1 ? root.current-partition : "";
+                }
+
+                if root.stage2 == 1: HorizontalLayout {
+                    padding-left: 40px;
+                    spacing: 12px;
+                    LinearProgressIndicator {
+                        horizontal-stretch: 1;
+                        y: (parent.height - self.height) / 2;
+                        progress: root.flash-progress;
+                    }
+
+                    Text {
+                        text: Math.round(root.flash-progress * 100) + " %";
+                        font-size: 14px;
+                        font-weight: 600;
+                        color: MaterialPalette.on-surface;
+                    }
+                }
+            }
+        }
+
+        LogView {
+            vertical-stretch: 1;
+            entries: root.log;
+            export-status: root.export-status;
+            export-log => {
+                root.export-log();
+            }
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            TextButton {
+                text: Tr.t("Stop the installation", "Остановить установку", "停止安装", "停止安裝");
+                clicked => {
+                    root.stop-install();
+                }
+            }
+        }
+    }
+
+    // ════ Done ══════════════════════════════════════════════════════════════
+    if root.view == 2: VerticalLayout {
+        alignment: center;
+        spacing: 20px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 72px;
+                height: 72px;
+                border-radius: 36px;
+                background: StatusColors.success-container;
+                Image {
+                    source: @image-url("../icons/check.svg");
+                    width: 40px;
+                    height: 40px;
+                    colorize: StatusColors.on-success-container;
+                }
+            }
+        }
+
+        Text {
+            text: Tr.t("Firmware installed", "Прошивка установлена", "固件已安装", "韌體已安裝");
+            font-size: 26px;
+            font-weight: 600;
+            color: MaterialPalette.on-surface;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: root.fw-name + " · " + Tr.t("now restart the phone", "осталось перезагрузить телефон", "现在重启手机", "現在重新啟動手機");
+            font-size: 14px;
+            color: MaterialPalette.on-surface-variant;
+            horizontal-alignment: center;
+        }
+
+        HorizontalLayout {
+            spacing: 16px;
+            padding-left: 24px;
+            padding-right: 24px;
+            Rectangle {
+                horizontal-stretch: 1;
+                preferred-width: 100px;
+                border-radius: 16px;
+                background: MaterialPalette.surface-container;
+                border-width: 2px;
+                border-color: MaterialPalette.primary;
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 8px;
+                    Text {
+                        text: Tr.t("Restart the phone", "Перезагрузить телефон", "重启手机", "重新啟動手機");
+                        font-size: 16px;
+                        font-weight: 600;
+                        color: MaterialPalette.on-surface;
+                    }
+
+                    Text {
+                        vertical-stretch: 1;
+                        text: Tr.t("Your photos, apps and settings stay. Right for an update of the same firmware.", "Фото, приложения и настройки останутся. Подходит для обновления той же прошивки.", "照片、应用和设置都会保留。适用于同一固件的更新。", "照片、應用程式和設定都會保留。適用於同一韌體的更新。");
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                        wrap: word-wrap;
+                    }
+
+                    FilledButton {
+                        icon: @image-url("../icons/restart.svg");
+                        text: Tr.t("Restart", "Перезагрузить", "重启", "重新啟動");
+                        clicked => {
+                            root.reboot-phone();
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                preferred-width: 100px;
+                border-radius: 16px;
+                background: MaterialPalette.surface-container;
+                border-width: 1px;
+                border-color: MaterialPalette.outline-variant;
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 8px;
+                    Text {
+                        text: Tr.t("Erase everything and restart", "Стереть всё и перезагрузить", "清除全部数据并重启", "清除所有資料並重新啟動");
+                        font-size: 16px;
+                        font-weight: 600;
+                        color: MaterialPalette.on-surface;
+                    }
+
+                    Text {
+                        vertical-stretch: 1;
+                        text: Tr.t("Factory reset: photos, apps and accounts are deleted. Needed after switching to another firmware or going back to an older one.", "Сброс к заводским настройкам: удалятся фото, приложения и аккаунты. Нужен после перехода на другую прошивку или отката на старую.", "恢复出厂设置：照片、应用和账户都会被删除。切换到其他固件或回退到旧固件后需要执行。", "恢復原廠設定：照片、應用程式和帳號都會被刪除。切換到其他韌體或退回舊韌體後需要執行。");
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                        wrap: word-wrap;
+                    }
+
+                    OutlineButton {
+                        icon: @image-url("../icons/delete.svg");
+                        text: Tr.t("Erase and restart", "Стереть и перезагрузить", "清除并重启", "清除並重新啟動");
+                        clicked => {
+                            root.wipe-phone();
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            TextButton {
+                text: Tr.t("Leave the phone as it is", "Оставить телефон как есть", "保持手机现状", "保持手機現狀");
+                clicked => {
+                    root.finish();
+                }
+            }
+        }
+    }
+
+    // ════ Stopped ═══════════════════════════════════════════════════════════
+    if root.view == 3: VerticalLayout {
+        alignment: center;
+        spacing: 18px;
+        padding-left: 40px;
+        padding-right: 40px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 72px;
+                height: 72px;
+                border-radius: 36px;
+                background: MaterialPalette.error-container;
+                Image {
+                    source: @image-url("../icons/warning.svg");
+                    width: 36px;
+                    height: 36px;
+                    colorize: MaterialPalette.on-error-container;
+                }
+            }
+        }
+
+        Text {
+            text: root.untouched ? Tr.t("The installation stopped", "Установка остановлена", "安装已停止", "安裝已停止")
+                : Tr.t("The installation did not finish", "Установка не завершилась", "安装未完成", "安裝未完成");
+            font-size: 26px;
+            font-weight: 600;
+            color: MaterialPalette.on-surface;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: root.untouched ? Tr.t("Nothing on the phone was changed, so it is safe to try again.", "На телефоне ничего не изменилось — можно спокойно попробовать ещё раз.", "手机上没有任何改动，可以放心重试。", "手機上沒有任何變更，可以放心重試。")
+                : Tr.t("Part of the firmware was written. Don't restart the phone: try again, or save the log and ask for help.", "Часть прошивки уже записана. Не перезагружайте телефон: попробуйте ещё раз или сохраните журнал и обратитесь за помощью.", "部分固件已写入。请勿重启手机：请重试，或保存日志并寻求帮助。", "部分韌體已寫入。請勿重新啟動手機：請重試，或儲存日誌並尋求協助。");
+            font-size: 14px;
+            color: MaterialPalette.on-surface-variant;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        Rectangle {
+            border-radius: 12px;
+            background: MaterialPalette.surface-container;
+            VerticalLayout {
+                padding: 14px;
+                spacing: 6px;
+                Text {
+                    text: Tr.t("What happened", "Что случилось", "发生了什么", "發生了什麼");
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: MaterialPalette.on-surface-variant;
+                }
+
+                Text {
+                    text: root.result-detail;
+                    font-family: "monospace";
+                    font-size: 12px;
+                    color: MaterialPalette.on-surface;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            spacing: 12px;
+            OutlineButton {
+                text: Tr.t("Save the log", "Сохранить журнал", "保存日志", "儲存日誌");
+                clicked => {
+                    root.export-log();
+                }
+            }
+
+            FilledButton {
+                icon: @image-url("../icons/restart.svg");
+                text: Tr.t("Try again", "Попробовать снова", "重试", "重試");
+                clicked => {
+                    root.retry();
+                }
+            }
+
+            TextButton {
+                text: Tr.t("Close", "Закрыть", "关闭", "關閉");
+                clicked => {
+                    root.finish();
+                }
+            }
+        }
+    }
+}

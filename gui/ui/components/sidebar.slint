@@ -6,6 +6,8 @@ export component Sidebar inherits Rectangle {
     in property <int> page: 0;
     in property <string> lang: "en";
     callback navigate(int);
+    // Back to the 2.10 interface; the classic one is kept for a while.
+    callback new-ui();
 
     width: 252px;
     background: MaterialPalette.surface-container-low;
@@ -118,6 +120,14 @@ export component Sidebar inherits Rectangle {
             icon-active: @image-url("../icons/history-filled.svg");
             selected: root.page == 5;
             clicked => { root.navigate(5); }
+        }
+
+        NavItem {
+            label: Tr.t("New interface", "Новый интерфейс", "新界面", "新介面");
+            icon: @image-url("../icons/settings.svg");
+            icon-active: @image-url("../icons/settings.svg");
+            selected: false;
+            clicked => { root.new-ui(); }
         }
 
         NavItem {

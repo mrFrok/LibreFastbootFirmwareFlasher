@@ -36,6 +36,13 @@ export { ArbState }
 import { PreloaderWarningDialog } from "dialogs/preloader-warning-dialog.slint";
 import { UpdateDialog } from "dialogs/update-dialog.slint";
 import { WarningDialog } from "dialogs/all.slint";
+import { AppNav } from "components/wizard.slint";
+import { InstallPage } from "pages/install-page.slint";
+import { ToolsGrid, Tools } from "pages/tools-page.slint";
+import { SettingsPage } from "pages/settings-page.slint";
+import { ConfirmSheet } from "dialogs/confirm-sheet.slint";
+import { StartupNotice } from "dialogs/startup-notice.slint";
+import { TextButton } from "@material";
 
 export component MainWindow inherits MaterialWindow {
     title: "Libre Fastboot Firmware Flasher";
@@ -46,7 +53,76 @@ export component MainWindow inherits MaterialWindow {
     min-height: 500px;
 
     // Pages: 0=Home 1=Device 2=Download 3=Flash 4=Partition 5=History 6=About
-    in-out property <int> page: 0;
+    // (the classic pages), 10=Install 11=Tools 12=Settings (the new ones).
+    // The new interface reaches pages 1-4 through Tools, and shares 5 and 6.
+    in-out property <int> page: 10;
+
+    // ── New interface ───────────────────────────────────────────────────────
+    in-out property <bool> classic-ui: false;
+    changed classic-ui => {
+        root.page = root.classic-ui ? 0 : 10;
+    }
+    in-out property <bool> show-notice: false;
+    callback accept-notice();
+    callback set-classic(bool);
+    // Tool ids pinned to the sidebar (see Tools in pages/tools-page.slint).
+    in-out property <[int]> pinned-tools: [];
+    // The same as flags by tool id - 1, for the Tools page.
+    in-out property <[bool]> pinned-flags: [false, false, false, false];
+    callback toggle-pin(int);
+    in-out property <string> cache-summary;
+    in-out property <string> chips-summary;
+    callback clear-cache();
+    callback forget-chips();
+    // Install page
+    in-out property <int> install-view: 0;
+    in-out property <int> deps-state: 0;
+    in-out property <string> deps-missing;
+    in-out property <int> fw-state: 0;
+    in-out property <string> fw-name;
+    in-out property <int> fw-parts: 0;
+    in-out property <string> fw-error;
+    in-out property <string> fw-dir;
+    in-out property <int> unpack-count: 0;
+    in-out property <string> unpack-current;
+    // ARB of the chosen firmware: -1 unknown, 0 none, >0 the level
+    in-out property <int> fw-arb: -1;
+    in-out property <bool> fw-has-preloader: false;
+    // Chip remembered for the connected model: 0 none, 1 Snapdragon, 2 MediaTek
+    in-out property <int> chip: 0;
+    in-out property <int> stage0: 0;
+    in-out property <int> stage1: 0;
+    in-out property <int> stage2: 0;
+    in-out property <string> stage1-detail;
+    in-out property <bool> cable-failed: false;
+    in-out property <string> cable-detail;
+    in-out property <string> result-detail;
+    in-out property <bool> untouched: true;
+    // Confirm sheet: 0 hidden, otherwise ConfirmSheet.kind + 1
+    in-out property <int> sheet: 0;
+    callback pick-zip();
+    callback pick-folder();
+    callback change-firmware();
+    callback choose-chip(int);
+    callback run-install();
+    callback cable-retry();
+    callback cable-stop();
+    callback install-finish();
+    callback install-retry();
+    // First sheet for the chosen firmware and chip: the ARB or preloader
+    // warning, else straight to the summary.
+    pure function tool-page(id: int) -> int {
+        return id == 1 ? 4 : id == 2 ? 3 : id == 3 ? 1 : 2;
+    }
+    pure function first-sheet() -> int {
+        return root.chip == 1 ? (root.fw-arb > 0 ? 1 : 2)
+            : root.fw-has-preloader ? 3 : 4;
+    }
+    function open-sheet() {
+        root.skip-xbl-abl = false;
+        root.skip-preloader = false;
+        root.sheet = root.first-sheet();
+    }
     in-out property <string> lang: "en";
     in-out property <bool> is-dark: true;
     // Index into AppScheme: 0 blue, 1 indigo, 2 teal, 3 green, 4 amber,
@@ -198,7 +274,17 @@ export component MainWindow inherits MaterialWindow {
     }
 
     // State
-    in-out property <DeviceInfo> device: { connected: false, name: "—", serial: "—", slot: "—", is-fastboot-mode: false, mode: 0, unlocked: -1, product: "", battery: -1 };
+    in-out property <DeviceInfo> device: {
+        connected: false,
+        name: "—",
+        serial: "—",
+        slot: "—",
+        is-fastboot-mode: false,
+        mode: 0,
+        unlocked: -1,
+        product: "",
+        battery: -1
+    };
     in-out property <string> firmware-path;
     in-out property <int> flash-source-mode: 0;
     in-out property <string> source-dir;
@@ -339,10 +425,25 @@ export component MainWindow inherits MaterialWindow {
         height: 100%;
 
         // ── Sidebar ──────────────────────────────────────────────────────────
-        Sidebar {
+        if !root.classic-ui: AppNav {
+            page: root.page == 10 ? 0 : (root.page == 11 || (root.page >= 1 && root.page <= 4)) ? 1
+                : root.page == 5 ? 2 : root.page == 12 ? 3 : root.page == 6 ? 4 : -1;
+            tool: root.page == 4 ? 1 : root.page == 3 ? 2 : root.page == 1 ? 3 : root.page == 2 ? 4 : 0;
+            pinned: root.pinned-tools;
+            version: root.app-version;
+            navigate(i) => {
+                root.page = i == 0 ? 10 : i == 1 ? 11 : i == 2 ? 5 : i == 3 ? 12 : 6;
+            }
+            open-tool(id) => {
+                root.page = root.tool-page(id);
+            }
+        }
+
+        if root.classic-ui: Sidebar {
             page: root.page;
             lang: root.lang;
             navigate(p) => { root.page = p; }
+            new-ui => { root.set-classic(false); }
         }
 
         // ── Content area ──────────────────────────────────────────────────────
@@ -350,7 +451,7 @@ export component MainWindow inherits MaterialWindow {
             horizontal-stretch: 1;
 
             // ── Top bar ───────────────────────────────────────────────────────
-            TopBar {
+            if root.classic-ui: TopBar {
                 lang: root.lang;
                 is-dark: root.is-dark;
                 scheme: root.scheme;
@@ -378,6 +479,19 @@ export component MainWindow inherits MaterialWindow {
                 toggle-theme => {
                     root.pending-dark = !root.is-dark;
                     root.start-transition(2, root.width - 41px);
+                }
+            }
+
+            if !root.classic-ui && root.page >= 1 && root.page <= 4: HorizontalLayout {
+                padding-left: 12px;
+                padding-top: 8px;
+                alignment: start;
+                TextButton {
+                    icon: @image-url("icons/arrow_back.svg");
+                    text: Tr.t("Tools", "Инструменты", "工具", "工具");
+                    clicked => {
+                        root.page = 11;
+                    }
                 }
             }
 
@@ -502,6 +616,105 @@ export component MainWindow inherits MaterialWindow {
                         if root.page == 6: AboutPage {
                             app-version: root.app-version;
                             open-url(u) => { root.open-url(u); }
+                        }
+
+                        if root.page == 10: InstallPage {
+                            view: root.install-view;
+                            deps-state: root.deps-state;
+                            deps-missing: root.deps-missing;
+                            fw-state: root.fw-state;
+                            fw-name: root.fw-name;
+                            fw-parts: root.fw-parts;
+                            fw-error: root.fw-error;
+                            unpack-count: root.unpack-count;
+                            unpack-current: root.unpack-current;
+                            download-url <=> root.download-url;
+                            dl-percent: root.dl-percent;
+                            dl-downloaded: root.dl-downloaded;
+                            dl-total: root.dl-total;
+                            dl-speed: root.dl-speed;
+                            dl-eta: root.dl-eta;
+                            device: root.device;
+                            chip: root.chip;
+                            stage0: root.stage0;
+                            stage1: root.stage1;
+                            stage2: root.stage2;
+                            stage1-detail: root.stage1-detail;
+                            flash-progress: root.flash-progress;
+                            current-partition: root.current-partition;
+                            cable-failed: root.cable-failed;
+                            cable-detail: root.cable-detail;
+                            log: root.flash-log;
+                            export-status: root.flash-export-status;
+                            result-detail: root.result-detail;
+                            untouched: root.untouched;
+                            install-deps => { root.install-deps(); }
+                            pick-zip => { root.pick-zip(); }
+                            pick-folder => { root.pick-folder(); }
+                            paste-url => { root.paste-clipboard(); }
+                            download(u) => { root.download-firmware(u); }
+                            cancel-download => { root.cancel-download(); }
+                            change-firmware => { root.change-firmware(); }
+                            choose-chip(c) => { root.choose-chip(c); }
+                            install => { root.open-sheet(); }
+                            cable-retry => { root.cable-retry(); }
+                            cable-stop => { root.cable-stop(); }
+                            stop-install => { root.cancel-flash(); }
+                            reboot-phone => { root.post-flash-reboot(); root.install-finish(); }
+                            wipe-phone => {
+                                root.confirm-action = ConfirmAction.wipe;
+                                root.show-confirm = true;
+                            }
+                            finish => { root.install-finish(); }
+                            retry => { root.install-retry(); }
+                            export-log => { root.export-flash-log(); }
+                        }
+
+                        if root.page == 11: ToolsGrid {
+                            pinned: root.pinned-flags;
+                            open(id) => { root.page = root.tool-page(id); }
+                            toggle-pin(id) => { root.toggle-pin(id); }
+                        }
+
+                        if root.page == 12: SettingsPage {
+                            is-dark: root.is-dark;
+                            scheme: root.scheme;
+                            translucent: root.translucent;
+                            ui-scale: root.ui-scale;
+                            lang: root.lang;
+                            output-dir: root.output-dir;
+                            cache-summary: root.cache-summary;
+                            chips-summary: root.chips-summary;
+                            classic-ui: root.classic-ui;
+                            set-dark(d) => {
+                                if d != root.is-dark {
+                                    root.pending-dark = d;
+                                    root.start-transition(2, root.width / 2);
+                                }
+                            }
+                            set-scheme(i) => {
+                                if i != root.scheme {
+                                    root.pending-scheme = i;
+                                    root.pending-translucent = root.translucent;
+                                    root.start-transition(4, root.width / 2);
+                                }
+                            }
+                            set-translucent(t) => {
+                                root.pending-scheme = root.scheme;
+                                root.pending-translucent = t;
+                                root.start-transition(4, root.width / 2);
+                            }
+                            set-scale(v) => { root.set-scale(v); root.ui-scale = v; }
+                            set-lang(l) => {
+                                if l != root.lang {
+                                    root.pending-lang = l;
+                                    root.start-transition(3, root.width / 2);
+                                }
+                            }
+                            browse-output-dir => { root.browse-output-dir(); }
+                            clear-cache => { root.clear-cache(); }
+                            forget-chips => { root.forget-chips(); }
+                            set-classic(c) => { root.set-classic(c); }
                         }
                     }
                 }
@@ -658,6 +871,61 @@ export component MainWindow inherits MaterialWindow {
             root.show-preloader-warning = false;
             root.confirm-action = root.pending-source-flash ? ConfirmAction.source-final : ConfirmAction.flash-all-final;
             root.show-confirm = true;
+        }
+    }
+
+    if root.sheet > 0: ConfirmSheet {
+        kind: root.sheet - 1;
+        arb: root.fw-arb;
+        phone: root.device.name + " · " + root.device.product;
+        chip-name: root.chip == 1 ? "Snapdragon" : "MediaTek";
+        firmware: root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區");
+        // One checkbox per warning kind: xbl/abl for ARB, preloader for MTK.
+        skip-checked: root.sheet == 3 ? root.skip-preloader : root.skip-xbl-abl;
+        cancel => { root.sheet = 0; }
+        next => {
+            if root.sheet == 3 {
+                root.skip-preloader = self.skip-checked;
+            } else {
+                root.skip-xbl-abl = self.skip-checked;
+            }
+            root.sheet = 4;
+        }
+        // Back to the warning, keeping its checkbox; with no warning, close.
+        back => {
+            root.sheet = root.first-sheet() == 4 ? 0 : root.first-sheet();
+        }
+        change-chip => {
+            root.sheet = 0;
+            root.choose-chip(0);
+        }
+        install => {
+            root.sheet = 0;
+            root.run-install();
+        }
+    }
+
+    WarningDialog {
+        show: root.show-confirm && root.confirm-action == ConfirmAction.wipe;
+        title: Tr.t("Erase everything on the phone?", "Стереть всё на телефоне?", "清除手机上的全部数据？", "清除手機上的所有資料？");
+        body: Tr.t("Photos, apps, accounts and settings are deleted, as after a factory reset. Then the phone restarts.", "Удалятся фото, приложения, аккаунты и настройки — как после сброса к заводским. Затем телефон перезагрузится.", "照片、应用、账户和设置都会被删除，如同恢复出厂设置。随后手机会重启。", "照片、應用程式、帳號和設定都會被刪除，如同恢復原廠設定。隨後手機會重新啟動。");
+        warning-text: Tr.t("This cannot be undone.", "Это нельзя отменить.", "此操作无法撤销。", "此操作無法復原。");
+        has-checkbox: false;
+        checkbox-text: "";
+        checkbox-checked: false;
+        lang: root.lang;
+        cancelled => { root.show-confirm = false; }
+        confirmed => {
+            root.show-confirm = false;
+            root.post-flash-wipe();
+            root.install-finish();
+        }
+    }
+
+    if root.show-notice: StartupNotice {
+        accept => {
+            root.show-notice = false;
+            root.accept-notice();
         }
     }
 

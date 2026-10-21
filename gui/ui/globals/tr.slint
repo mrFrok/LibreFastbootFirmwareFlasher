@@ -4,6 +4,15 @@ export global Tr {
     // "en" / "ru" / "zh-CN" (Simplified Chinese) / "zh-TW" (Traditional Chinese)
     in-out property <string> lang: "en";
 
+    // The same per-language choice as the properties below, for strings that
+    // live next to the component using them.
+    public pure function t(en: string, ru: string, zh-cn: string, zh-tw: string) -> string {
+        return root.lang == "ru" ? ru
+            : root.lang == "zh-CN" ? zh-cn
+            : root.lang == "zh-TW" ? zh-tw
+            : en;
+    }
+
     out property <string> home: lang == "ru" ? "Главная"
         : lang == "zh-CN" ? "主页"
         : lang == "zh-TW" ? "首頁"

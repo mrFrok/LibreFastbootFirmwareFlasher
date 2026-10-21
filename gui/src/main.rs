@@ -66,6 +66,8 @@ enum WMsg {
     DepsResult {
         message: String,
         ok: bool,
+        /// Tools still not usable after the check or the install.
+        missing: Vec<String>,
     },
     Flashing(bool),
     FwPath(String),
@@ -112,6 +114,38 @@ enum WMsg {
         url: String,
         body: String,
     },
+    /// Unpacking a firmware archive: images written so far, and the latest.
+    Unpacking {
+        extracted: usize,
+        current: String,
+    },
+    /// The chosen firmware is unpacked and checked. Sent before any device
+    /// is involved, so every warning can be shown before the install starts.
+    FirmwareReady {
+        dir: String,
+        name: String,
+        parts: usize,
+        /// Read whenever the firmware has an xbl_config; whether to warn
+        /// about it depends on the chip, which the UI knows.
+        arb: lfff_lib::arb::ArbVerdict,
+        has_preloader: bool,
+        cached: bool,
+    },
+    FirmwareFailed(String),
+    /// Install progress. stage: 0 prepare the phone, 1 cable check,
+    /// 2 install, 3 finish. state: 1 running, 2 done, 3 failed.
+    Stage {
+        stage: u8,
+        state: u8,
+        detail: String,
+    },
+    /// The cable check failed; the run waits for retry (true) or stop.
+    CableFailed {
+        detail: String,
+        response: std::sync::mpsc::Sender<bool>,
+    },
+    /// The install stopped before anything was written to the phone.
+    InstallStopped(String),
 }
 
 #[derive(Debug)]
@@ -163,6 +197,19 @@ enum Cmd {
         failed_partitions: Vec<String>,
     },
     CheckForUpdates,
+    /// Unpack (or reuse an earlier unpack of) and check a firmware, on a
+    /// thread of its own so the phone can be found meanwhile.
+    PrepareFirmware {
+        path: String,
+    },
+    /// The whole install after the confirmations: restart the phone into
+    /// fastbootd, check the cable, run the safety checks, flash.
+    RunInstall {
+        dir: String,
+        method: FlashMethod,
+        skip_xbl_abl: bool,
+        skip_preloader: bool,
+    },
 }
 
 fn ts() -> String {
@@ -276,6 +323,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let flash_cancel_w = flash_cancel.clone();
     let fail_resp = std::rc::Rc::new(std::cell::RefCell::new(None));
     let fastbootd_resp = std::rc::Rc::new(std::cell::RefCell::new(None));
+    let cable_resp = std::rc::Rc::new(std::cell::RefCell::new(None));
 
     // Set by the worker for the length of each command; the device poller
     // stays quiet meanwhile. `current_device` is the poller's last reading.
@@ -303,20 +351,33 @@ fn main() -> Result<(), slint::PlatformError> {
         &fail_resp,
         &fastbootd_resp,
         &flash_cancel,
+        &cable_resp,
     );
 
+    ui.set_classic_ui(config.classic_ui);
+    ui.set_show_notice(!config.notice_accepted);
+    ui_callbacks::apply_pins(&ui, &config.pinned_tools);
+    ui.set_chips_summary(ui_callbacks::chips_summary(&config).into());
+    ui.set_cache_summary(ui_callbacks::cache_summary().into());
+
     ctx.send(Cmd::CheckForUpdates).ok();
+    // The install page's first step; also refreshes the classic deps log.
+    ctx.send(Cmd::CheckDeps).ok();
 
     let w = ui.as_weak();
     let timer = slint::Timer::default();
     let mut last_dl_pct: u32 = 0;
-    let fr_poll = fail_resp.clone();
-    let fb_poll = fastbootd_resp.clone();
+    let replies = ui_callbacks::Replies {
+        fail: fail_resp.clone(),
+        fastbootd: fastbootd_resp.clone(),
+        cable: cable_resp.clone(),
+    };
+    let ctx_poll = ctx.clone();
     timer.start(
         slint::TimerMode::Repeated,
         Duration::from_millis(50),
         move || {
-            ui_callbacks::poll(&w, &mrx, &mut last_dl_pct, &models, &fr_poll, &fb_poll);
+            ui_callbacks::poll(&w, &mrx, &mut last_dl_pct, &models, &replies, &ctx_poll);
         },
     );
 

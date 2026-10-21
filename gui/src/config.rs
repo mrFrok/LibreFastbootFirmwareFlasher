@@ -22,7 +22,8 @@ pub struct Config {
     /// Never guessed: an entry exists only after the user picked it.
     #[serde(default)]
     pub chips: BTreeMap<String, String>,
-    /// Tools pinned to the sidebar, by their id on the Tools page.
+    /// Tools pinned to the sidebar: "partition", "flash", "device", "download"
+    /// (ids 1-4 of the Tools page, in that order).
     #[serde(default)]
     pub pinned_tools: Vec<String>,
     /// The pre-2.10 page layout, kept for a transition period.
@@ -114,6 +115,12 @@ pub fn set_output_dir(path: &str) {
 pub fn set_chip(product: &str, chip: &str) {
     let mut config = load_config();
     config.chips.insert(product.to_string(), chip.to_string());
+    save_config(&config);
+}
+
+pub fn remove_chip(product: &str) {
+    let mut config = load_config();
+    config.chips.remove(product);
     save_config(&config);
 }
 

@@ -1,0 +1,462 @@
+import { CircularProgressIndicator, MaterialPalette } from "@material";
+import { StatusColors } from "../globals/status-colors.slint";
+import { NavItem } from "../components/nav.slint";
+import { Tr } from "../globals/tr.slint";
+import { Tools } from "../pages/tools-page.slint";
+
+// One step of the install checklist.
+// state: 0 waiting (dimmed), 1 active, 2 done, 3 needs attention, 4 working
+export component StepRow inherits Rectangle {
+    in property <int> number;
+    in property <int> state;
+    in property <string> title;
+    in property <string> summary;
+    // Body below the title, indented under it. Off when the step is collapsed.
+    in property <bool> expanded;
+    border-radius: 16px;
+    background: root.state == 1 || root.state == 3 || root.state == 4
+        ? MaterialPalette.surface-container
+        : transparent;
+    border-width: 1px;
+    border-color: root.state == 3 ? MaterialPalette.error
+        : root.state == 1 || root.state == 4 ? MaterialPalette.outline-variant
+        : transparent;
+    opacity: root.state == 0 ? 0.45 : 1.0;
+    VerticalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        HorizontalLayout {
+            spacing: 14px;
+            Rectangle {
+                width: 30px;
+                height: 30px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 15px;
+                background: root.state == 2 ? MaterialPalette.primary
+                    : root.state == 3 ? MaterialPalette.error-container
+                    : root.state == 1 ? MaterialPalette.primary-container
+                    : transparent;
+                border-width: root.state == 0 || root.state == 4 ? 1.5px : 0px;
+                border-color: MaterialPalette.outline;
+                if root.state == 2: Image {
+                    source: @image-url("../icons/check.svg");
+                    width: 18px;
+                    height: 18px;
+                    colorize: MaterialPalette.on-primary;
+                }
+                if root.state == 4: CircularProgressIndicator {
+                    width: 22px;
+                    height: 22px;
+                    indeterminate: true;
+                }
+                if root.state == 0 || root.state == 1 || root.state == 3: Text {
+                    text: root.state == 3 ? "!" : root.number;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: root.state == 3 ? MaterialPalette.on-error-container
+                        : root.state == 1 ? MaterialPalette.on-primary-container
+                        : MaterialPalette.on-surface-variant;
+                }
+            }
+
+            Text {
+                text: root.title;
+                font-size: 16px;
+                font-weight: 500;
+                color: MaterialPalette.on-surface;
+                vertical-alignment: center;
+            }
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.summary;
+                font-size: 14px;
+                color: MaterialPalette.on-surface-variant;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        // A VerticalLayout with its own padding, not a HorizontalLayout: a
+        // wrapping Text inside a HorizontalLayout reports a one-line height
+        // and spills out of the row.
+        VerticalLayout {
+            padding-left: 44px;
+            padding-top: root.expanded ? 12px : 0px;
+            spacing: 10px;
+            @children
+        }
+    }
+}
+
+// A coloured notice: kind 0 info, 1 warning, 2 danger, 3 success.
+export component Notice inherits Rectangle {
+    in property <int> kind;
+    in property <string> title;
+    in property <string> text;
+    in property <image> icon: @image-url("../icons/warning.svg");
+    border-radius: 12px;
+    background: root.kind == 2 ? MaterialPalette.error-container
+        : root.kind == 1 ? StatusColors.warning-container
+        : root.kind == 3 ? StatusColors.success-container
+        : MaterialPalette.surface-container-high;
+    property <color> fg: root.kind == 2 ? MaterialPalette.on-error-container
+        : root.kind == 1 ? StatusColors.on-warning-container
+        : root.kind == 3 ? StatusColors.on-success-container
+        : MaterialPalette.on-surface;
+    // Icon placed by hand and the text column padded past it, for the same
+    // wrapped-height reason as in StepRow.
+    Image {
+        x: 12px;
+        y: 12px;
+        source: root.icon;
+        width: 20px;
+        height: 20px;
+        colorize: root.fg;
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        padding-left: 44px;
+        spacing: 4px;
+        if root.title != "": Text {
+            text: root.title;
+            font-size: 14px;
+            font-weight: 500;
+            color: root.fg;
+            wrap: word-wrap;
+        }
+        if root.text != "": Text {
+            text: root.text;
+            font-size: 13px;
+            color: root.fg;
+            wrap: word-wrap;
+        }
+        @children
+    }
+}
+
+// One of the two chip choices.
+export component ChipCard inherits TouchArea {
+    in property <string> title;
+    in property <string> text;
+    in property <bool> selected;
+    min-height: 92px;
+    Rectangle {
+        border-radius: 14px;
+        background: root.selected ? MaterialPalette.secondary-container
+            : root.has-hover ? MaterialPalette.surface-container-high
+            : MaterialPalette.surface-container-low;
+        border-width: root.selected ? 2px : 1px;
+        border-color: root.selected ? MaterialPalette.primary : MaterialPalette.outline-variant;
+        Rectangle {
+            x: 14px;
+            y: 14px;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: MaterialPalette.tertiary-container;
+            Image {
+                source: @image-url("../icons/memory.svg");
+                width: 20px;
+                height: 20px;
+                colorize: MaterialPalette.on-tertiary-container;
+            }
+        }
+
+        // Icon placed by hand: a wrapping Text in a HorizontalLayout
+            // reports a one-line height.
+            VerticalLayout {
+            padding: 14px;
+            padding-left: 62px;
+            spacing: 4px;
+            Text {
+                text: root.title;
+                font-size: 15px;
+                font-weight: 500;
+                color: MaterialPalette.on-surface;
+            }
+
+            Text {
+                text: root.text;
+                font-size: 13px;
+                color: MaterialPalette.on-surface-variant;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+// Small segmented selector.
+export component Segmented inherits Rectangle {
+    in property <[string]> items;
+    in property <int> current;
+    in property <length> segment-width: 64px;
+    callback selected(int);
+    height: 36px;
+    width: self.segment-width * root.items.length;
+    border-radius: 18px;
+    border-width: 1px;
+    border-color: MaterialPalette.outline;
+    clip: true;
+    for item[i] in root.items: TouchArea {
+        x: i * root.segment-width;
+        width: root.segment-width;
+        height: parent.height;
+        clicked => {
+            root.selected(i);
+        }
+        Rectangle {
+            background: i == root.current ? MaterialPalette.secondary-container
+                : parent.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent;
+            Text {
+                text: item;
+                font-size: 13px;
+                font-weight: i == root.current ? 600 : 500;
+                color: i == root.current ? MaterialPalette.on-secondary-container : MaterialPalette.on-surface;
+            }
+
+            if i > 0: Rectangle {
+                x: 0;
+                width: 1px;
+                background: MaterialPalette.outline;
+            }
+        }
+    }
+}
+
+// A labelled row inside a settings / summary card.
+export component FieldRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <length> label-width: 180px;
+    spacing: 16px;
+    min-height: 44px;
+    Text {
+        width: root.label-width;
+        text: root.label;
+        font-size: 14px;
+        color: MaterialPalette.on-surface-variant;
+        vertical-alignment: center;
+    }
+
+    HorizontalLayout {
+        horizontal-stretch: 1;
+        alignment: start;
+        spacing: 8px;
+        @children
+    }
+}
+
+// Card that groups a few settings or summary rows under a heading.
+export component Section inherits Rectangle {
+    in property <string> title;
+    border-radius: 16px;
+    background: MaterialPalette.surface-container;
+    VerticalLayout {
+        padding: 16px;
+        padding-top: 12px;
+        spacing: 4px;
+        if root.title != "": Text {
+            text: root.title;
+            font-size: 13px;
+            font-weight: 500;
+            color: MaterialPalette.primary;
+            height: 28px;
+            vertical-alignment: center;
+        }
+        @children
+    }
+}
+
+// Sidebar of the new layout: one main task, the rest below the divider.
+// page: 0 install, 1 tools, 2 history, 3 settings, 4 about
+export component AppNav inherits Rectangle {
+    in property <int> page;
+    // Tools the user pinned from the Tools page, shown under the main item.
+    // Tool ids pinned from the Tools page, shown under the main item.
+    in property <[int]> pinned;
+    // Tool open on the Tools page, 0 for the grid.
+    in property <int> tool;
+    callback navigate(int);
+    callback open-tool(int);
+    in property <string> version: "2.10.0";
+    width: 256px;
+    background: MaterialPalette.surface-container-low;
+    VerticalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-bottom: 12px;
+        // Same header as the current sidebar: logo and the name on two lines.
+        Rectangle {
+            height: 72px;
+            HorizontalLayout {
+                padding-left: 16px;
+                spacing: 8px;
+                Image {
+                    source: @image-url("../icons/logo_icon.svg");
+                    width: 32px;
+                    height: 32px;
+                    y: (parent.height - 32px) / 2;
+                }
+
+                VerticalLayout {
+                    spacing: 1px;
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    Text {
+                        text: "Libre Fastboot";
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: MaterialPalette.on-surface;
+                        overflow: elide;
+                    }
+
+                    Text {
+                        text: "Firmware Flasher";
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: MaterialPalette.on-surface;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+
+        NavItem {
+            label: Tr.t("Install firmware", "Установка прошивки", "安装固件", "安裝韌體");
+            icon: @image-url("../icons/flash.svg");
+            icon-active: @image-url("../icons/flash-filled.svg");
+            selected: root.page == 0;
+            clicked => { root.navigate(0); }
+        }
+
+        if root.pinned.length > 0: HorizontalLayout {
+            padding-left: 16px;
+            height: 32px;
+            Text {
+                text: Tr.t("Pinned", "Закреплённые", "已固定", "已釘選");
+                font-size: 12px;
+                font-weight: 600;
+                color: MaterialPalette.on-surface-variant;
+                vertical-alignment: bottom;
+            }
+        }
+        for id in root.pinned: NavItem {
+            label: Tools.title(id);
+            icon: Tools.icon(id);
+            icon-active: Tools.icon(id);
+            selected: root.page == 1 && root.tool == id;
+            clicked => { root.open-tool(id); }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+        }
+
+        Rectangle {
+            height: 1px;
+            background: MaterialPalette.outline-variant;
+        }
+
+        Rectangle {
+            height: 8px;
+        }
+
+        NavItem {
+            label: Tr.t("Tools", "Инструменты", "工具", "工具");
+            icon: @image-url("../icons/build.svg");
+            icon-active: @image-url("../icons/build.svg");
+            selected: root.page == 1 && root.tool == 0;
+            clicked => { root.navigate(1); }
+        }
+
+        NavItem {
+            label: Tr.t("History", "История", "历史", "歷史");
+            icon: @image-url("../icons/history.svg");
+            icon-active: @image-url("../icons/history-filled.svg");
+            selected: root.page == 2;
+            clicked => { root.navigate(2); }
+        }
+
+        NavItem {
+            label: Tr.t("Settings", "Настройки", "设置", "設定");
+            icon: @image-url("../icons/settings.svg");
+            icon-active: @image-url("../icons/settings.svg");
+            selected: root.page == 3;
+            clicked => { root.navigate(3); }
+        }
+
+        NavItem {
+            label: Tr.t("About", "О программе", "关于", "關於");
+            icon: @image-url("../icons/info.svg");
+            icon-active: @image-url("../icons/info-filled.svg");
+            selected: root.page == 4;
+            clicked => { root.navigate(4); }
+        }
+
+        Text {
+            text: "v" + root.version;
+            font-size: 12px;
+            color: MaterialPalette.on-surface-variant;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Row of the running-install stage list.
+// state: 0 waiting, 1 running, 2 done, 3 failed
+export component StageRow inherits HorizontalLayout {
+    in property <int> state;
+    in property <string> title;
+    in property <string> detail;
+    spacing: 14px;
+    min-height: 40px;
+    Rectangle {
+        width: 26px;
+        height: 26px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 13px;
+        background: root.state == 2 ? StatusColors.success-container
+            : root.state == 3 ? MaterialPalette.error-container
+            : transparent;
+        border-width: root.state == 0 ? 1.5px : 0px;
+        border-color: MaterialPalette.outline;
+        if root.state == 2: Image {
+            source: @image-url("../icons/check.svg");
+            width: 16px;
+            height: 16px;
+            colorize: StatusColors.on-success-container;
+        }
+        if root.state == 1: CircularProgressIndicator {
+            width: 26px;
+            height: 26px;
+            indeterminate: true;
+        }
+        if root.state == 3: Text {
+            text: "!";
+            font-weight: 600;
+            color: MaterialPalette.on-error-container;
+        }
+    }
+
+    Text {
+        text: root.title;
+        font-size: 15px;
+        font-weight: root.state == 1 ? 700 : 500;
+        color: root.state == 0 ? MaterialPalette.on-surface-variant : MaterialPalette.on-surface;
+        vertical-alignment: center;
+    }
+
+    Text {
+        horizontal-stretch: 1;
+        text: root.detail;
+        font-size: 13px;
+        color: MaterialPalette.on-surface-variant;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
