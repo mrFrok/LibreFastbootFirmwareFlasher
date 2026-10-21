@@ -44,6 +44,21 @@ jobs:
       # this module is the macOS-specific part.
       - name: GUI PATH handling
         run: cargo test -p lfff-gui env_path
+      # The published tap against the published release, the way a user
+      # installs it. The formula lives in mrFrok/homebrew-lfff and the packaging
+      # job only rewrites its versions and hashes, so this is the only place
+      # its install logic ever runs before a user hits it.
+      - name: Homebrew install from the tap
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: |
+          brew tap mrFrok/lfff
+          brew install lfff
+          lfff --version
+          test -x "$(brew --prefix)/bin/lfff-gui"
+          test -d "$(brew --prefix lfff)/LibreFastbootFirmwareFlasher.app"
+          brew test lfff
 
   slint-format:
     runs-on: ubuntu-latest

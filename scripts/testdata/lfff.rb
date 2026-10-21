@@ -54,8 +54,11 @@ class Lfff < Formula
 
   def install
     resource("cli").stage { bin.install "lfff" }
-    resource("gui").stage do |stage|
-      if OS.mac? && (stage + "LibreFastbootFirmwareFlasher.app").exist?
+    # stage runs the block inside the unpacked resource, so a relative path is
+    # enough. Its block argument is a ResourceStageContext, not a Pathname, and
+    # cannot be joined onto.
+    resource("gui").stage do
+      if OS.mac? && Pathname("LibreFastbootFirmwareFlasher.app").exist?
         bin.install "LibreFastbootFirmwareFlasher.app/Contents/MacOS/lfff-gui"
         prefix.install "LibreFastbootFirmwareFlasher.app"
       else
