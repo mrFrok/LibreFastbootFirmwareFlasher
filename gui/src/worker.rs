@@ -430,9 +430,14 @@ fn spawn_unpack_counter(tx: mpsc::Sender<WMsg>, dir: PathBuf) -> mpsc::Sender<()
 /// thread; answers with FirmwareReady or FirmwareFailed.
 fn prepare_firmware(path: &str, tx: &mpsc::Sender<WMsg>) {
     let src = Path::new(path);
-    let is_zip = src
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("zip"));
+    // A file is taken as an archive whatever its name; it has to be a ZIP.
+    let is_zip = src.is_file();
+    if is_zip && !lfff_lib::extractor::looks_like_zip(src) {
+        let msg = "This file is not a ZIP firmware archive.";
+        log(tx, LogLevel::Error, 2, format!("{msg} ({})", src.display()));
+        tx.send(WMsg::FirmwareFailed(msg.into())).ok();
+        return;
+    }
     let name = src
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -1720,14 +1725,36 @@ pub fn worker(
                             .as_ref()
                             .map(|p| p.display().to_string())
                             .unwrap_or_default();
-                        log(&tx_dl, LogLevel::Success, 1, format!("Downloaded: {}", p));
-                        if let Some(path) = r.output_path {
-                            tx_dl.send(WMsg::FwPath(path.display().to_string())).ok();
+                        match r.output_path {
+                            Some(path) if lfff_lib::extractor::looks_like_zip(&path) => {
+                                log(&tx_dl, LogLevel::Success, 1, format!("Downloaded: {}", p));
+                                tx_dl.send(WMsg::FwPath(path.display().to_string())).ok();
+                            }
+                            Some(path) => {
+                                // Usually a web page saved in the firmware's
+                                // place: an expired or not-direct link.
+                                let msg = "The link gave a web page, not a firmware archive. Check that the link is a direct one and has not expired.";
+                                log(
+                                    &tx_dl,
+                                    LogLevel::Error,
+                                    1,
+                                    format!("{msg} ({})", path.display()),
+                                );
+                                std::fs::remove_file(&path).ok();
+                                tx_dl.send(WMsg::FirmwareFailed(msg.into())).ok();
+                            }
+                            None => {}
                         }
                     } else if r.error == "Cancelled" {
                         log(&tx_dl, LogLevel::Warn, 1, "Download cancelled");
                     } else {
                         log(&tx_dl, LogLevel::Error, 1, format!("Failed: {}", r.error));
+                        tx_dl
+                            .send(WMsg::FirmwareFailed(format!(
+                                "Download failed: {}",
+                                r.error
+                            )))
+                            .ok();
                     }
                     tx_dl
                         .send(WMsg::DlProgress {

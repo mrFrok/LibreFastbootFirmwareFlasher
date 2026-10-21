@@ -456,7 +456,7 @@ pub fn poll(
                 ui.set_cache_summary(cache_summary().into());
             }
             WMsg::FirmwareFailed(e) => {
-                ui.set_fw_error(e.into());
+                ui.set_fw_error(firmware_error_text(&ui.get_lang(), &e).into());
                 ui.set_fw_state(5);
             }
             WMsg::Stage {
@@ -491,6 +491,41 @@ pub fn poll(
                 ui.set_show_update_dialog(true);
             }
         }
+    }
+}
+
+/// The firmware errors a beginner meets, in the interface language; anything
+/// else is shown as the tools reported it.
+fn firmware_error_text(lang: &str, e: &str) -> String {
+    let pick = |en: &str, ru: &str, cn: &str, tw: &str| match lang {
+        "ru" => ru.to_string(),
+        "zh-CN" => cn.to_string(),
+        "zh-TW" => tw.to_string(),
+        _ => en.to_string(),
+    };
+    if e.starts_with("The link gave a web page") {
+        pick(
+            e,
+            "По ссылке пришла веб-страница, а не архив прошивки. Проверьте, что ссылка прямая и не устарела.",
+            "链接返回的是网页，而不是固件压缩包。请检查链接是否为直链且未过期。",
+            "連結回傳的是網頁，而不是韌體壓縮檔。請檢查連結是否為直連且未過期。",
+        )
+    } else if e.starts_with("This file is not a ZIP") {
+        pick(
+            e,
+            "Этот файл не архив прошивки ZIP.",
+            "此文件不是 ZIP 固件压缩包。",
+            "此檔案不是 ZIP 韌體壓縮檔。",
+        )
+    } else if e.starts_with("No flashable .img") {
+        pick(
+            e,
+            "В прошивке не нашлось образов разделов (.img).",
+            "固件中没有找到分区镜像（.img）。",
+            "韌體中沒有找到分割區映像（.img）。",
+        )
+    } else {
+        e.to_string()
     }
 }
 

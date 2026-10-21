@@ -142,6 +142,16 @@ pub fn archive_fingerprint(zip_path: &Path) -> Option<String> {
     Some(format!("{}\n{}\n{}\n", name, meta.len(), mtime))
 }
 
+/// Whether the file starts like a ZIP archive. A download can end in an HTML
+/// page (an expired link, a redirect page) saved under the firmware's name.
+pub fn looks_like_zip(path: &Path) -> bool {
+    let mut magic = [0u8; 4];
+    fs::File::open(path)
+        .and_then(|mut f| io::Read::read_exact(&mut f, &mut magic))
+        .is_ok()
+        && magic == *b"PK\x03\x04"
+}
+
 /// Whether `output_dir` holds a finished extraction of exactly this archive.
 pub fn is_extracted(zip_path: &Path, output_dir: &Path) -> bool {
     match (
@@ -933,6 +943,17 @@ mod tests {
     fn touch(path: &Path) {
         fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
         fs::write(path, b"x").expect("write");
+    }
+
+    #[test]
+    fn an_html_page_is_not_taken_for_an_archive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let page = tmp.path().join("go");
+        fs::write(&page, b"<!DOCTYPE html><html>4PDA</html>").unwrap();
+        assert!(!looks_like_zip(&page));
+        let zip = tmp.path().join("fw.zip");
+        fs::write(&zip, b"PK\x03\x04rest").unwrap();
+        assert!(looks_like_zip(&zip));
     }
 
     #[test]
