@@ -29,10 +29,23 @@ pub struct Config {
     /// The pre-2.10 page layout, kept for a transition period.
     #[serde(default)]
     pub classic_ui: bool,
+    /// What Android said about each phone seen through adb, by serial:
+    /// fastboot only reports a platform codename ("taro" on a Realme GT Neo 5),
+    /// so in bootloader and fastbootd the phone is named from here.
+    #[serde(default)]
+    pub known_devices: BTreeMap<String, KnownDevice>,
     /// The user closed the first-launch notice (supported phones, own risk);
     /// it is not shown again.
     #[serde(default)]
     pub notice_accepted: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct KnownDevice {
+    /// ro.product.model, e.g. "RMX3706"
+    pub name: String,
+    /// ro.product.device; the key the chip choice is remembered under
+    pub product: String,
 }
 
 fn default_lang() -> String {
@@ -55,6 +68,7 @@ impl Default for Config {
             pinned_tools: Vec::new(),
             classic_ui: false,
             notice_accepted: false,
+            known_devices: BTreeMap::new(),
         }
     }
 }
@@ -116,6 +130,15 @@ pub fn set_chip(product: &str, chip: &str) {
     let mut config = load_config();
     config.chips.insert(product.to_string(), chip.to_string());
     save_config(&config);
+}
+
+/// Remember what Android reported for this serial; writes only on a change.
+pub fn remember_device(serial: &str, device: KnownDevice) {
+    let mut config = load_config();
+    if config.known_devices.get(serial) != Some(&device) {
+        config.known_devices.insert(serial.to_string(), device);
+        save_config(&config);
+    }
 }
 
 pub fn remove_chip(product: &str) {

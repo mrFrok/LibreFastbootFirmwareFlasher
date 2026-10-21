@@ -903,7 +903,7 @@ export component MainWindow inherits MaterialWindow {
     if root.sheet > 0: ConfirmSheet {
         kind: root.sheet - 1;
         arb: root.fw-arb;
-        phone: root.device.name + " · " + root.device.product;
+        phone: root.device.name;
         chip-name: root.chip == 1 ? "Snapdragon" : "MediaTek";
         firmware: root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區");
         // One checkbox per warning kind: xbl/abl for ARB, preloader for MTK.

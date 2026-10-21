@@ -337,12 +337,12 @@ export component InstallPage inherits VerticalLayout {
                     state: !root.device.connected ? 0 : root.chip != 0 ? 2 : 1;
                     title: Tr.t("Processor", "Процессор", "处理器", "處理器");
                     summary: !root.device.connected ? Tr.t("After the phone is found", "После того как найдётся телефон", "找到手机后", "找到手機後")
-                        : root.chip == 1 ? "Snapdragon · " + Tr.t("remembered for ", "запомнено для ", "已为此机型记住：", "已為此機型記住：") + root.device.product
-                        : root.chip == 2 ? "MediaTek · " + Tr.t("remembered for ", "запомнено для ", "已为此机型记住：", "已為此機型記住：") + root.device.product
+                        : root.chip == 1 ? "Snapdragon · " + Tr.t("remembered for ", "запомнено для ", "已为此机型记住：", "已為此機型記住：") + root.device.name
+                        : root.chip == 2 ? "MediaTek · " + Tr.t("remembered for ", "запомнено для ", "已为此机型记住：", "已為此機型記住：") + root.device.name
                         : "";
                     expanded: root.device.connected && root.chip == 0;
                     if root.device.connected && root.chip == 0: Text {
-                        text: Tr.t("Which processor does ", "Какой процессор у ", "", "") + root.device.product + Tr.t(" have? The app will remember the answer for this model.", "? Программа запомнит ответ для этой модели.", " 使用哪种处理器？程序会为此机型记住您的选择。", " 使用哪種處理器？程式會為此機型記住您的選擇。");
+                        text: Tr.t("Which processor does ", "Какой процессор у ", "", "") + root.device.name + Tr.t(" have? The app will remember the answer for this model.", "? Программа запомнит ответ для этой модели.", " 使用哪种处理器？程序会为此机型记住您的选择。", " 使用哪種處理器？程式會為此機型記住您的選擇。");
                         font-size: 14px;
                         color: MaterialPalette.on-surface;
                         wrap: word-wrap;
@@ -370,7 +370,7 @@ export component InstallPage inherits VerticalLayout {
                         }
                     }
                     if root.device.connected && root.chip == 0: Text {
-                        text: Tr.t("Not sure? Search the web for “", "Не знаете? Поищите в интернете «", "不确定？请在网上搜索“", "不確定？請在網路上搜尋「") + root.device.product + Tr.t(" processor”. A wrong choice can break the installation.", " процессор». Неверный выбор может испортить установку.", " 处理器”。选错可能导致安装失败。", " 處理器」。選錯可能導致安裝失敗。");
+                        text: Tr.t("Not sure? Search the web for “", "Не знаете? Поищите в интернете «", "不确定？请在网上搜索“", "不確定？請在網路上搜尋「") + root.device.name + Tr.t(" processor”. A wrong choice can break the installation.", " процессор». Неверный выбор может испортить установку.", " 处理器”。选错可能导致安装失败。", " 處理器」。選錯可能導致安裝失敗。");
                         font-size: 13px;
                         color: MaterialPalette.on-surface-variant;
                         wrap: word-wrap;

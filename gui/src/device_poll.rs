@@ -71,6 +71,19 @@ pub fn read_adb(serial: &str) -> DeviceSnapshot {
     };
     let model = get("model");
     let product = get("device");
+    if !product.is_empty() {
+        crate::config::remember_device(
+            serial,
+            crate::config::KnownDevice {
+                name: if model.is_empty() {
+                    product.clone()
+                } else {
+                    model.clone()
+                },
+                product: product.clone(),
+            },
+        );
+    }
     DeviceSnapshot {
         serial: serial.to_string(),
         name: if model.is_empty() {
@@ -104,14 +117,21 @@ pub fn read_fastboot(serial: &str) -> Option<DeviceSnapshot> {
         "no" | "false" | "0" => Some(false),
         _ => None,
     };
+    // Named as Android named it, when the phone was ever seen booted; the
+    // chip choice then follows the phone between modes.
+    let known = crate::config::load_config()
+        .known_devices
+        .get(serial)
+        .cloned();
+    let (name, product) = match known {
+        Some(k) => (k.name, k.product),
+        None if info.product.is_empty() => (serial.to_string(), String::new()),
+        None => (info.product.clone(), info.product),
+    };
     Some(DeviceSnapshot {
         serial: serial.to_string(),
-        name: if info.product.is_empty() {
-            serial.to_string()
-        } else {
-            info.product.clone()
-        },
-        product: info.product,
+        name,
+        product,
         slot: info.current_slot,
         mode,
         unlocked,
