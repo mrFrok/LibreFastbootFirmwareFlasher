@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,6 +28,22 @@ jobs:
         run: cargo test -p lfff-lib -p lfff-cli
       - name: Packaging script tests
         run: python3 scripts/test_update_packaging.py
+
+  # Nobody on the project has a Mac, so this is where macOS-only code gets
+  # exercised at all. The runners have Homebrew, zsh and the /usr/bin/apt Java
+  # stub — the environment both v2.9.4 macOS bugs lived in.
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests
+        run: cargo test -p lfff-lib -p lfff-cli
+      # Only the GUI's PATH handling: the rest of the GUI has no tests, and
+      # this module is the macOS-specific part.
+      - name: GUI PATH handling
+        run: cargo test -p lfff-gui env_path
 
   slint-format:
     runs-on: ubuntu-latest

@@ -233,4 +233,26 @@ mod tests {
             None
         );
     }
+
+    /// Runs on CI's macOS runners, which have Homebrew installed: starting
+    /// from the PATH a Finder launch gets, the resolved PATH must reach it.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_finder_launch_still_finds_homebrew() {
+        let launchd = "/usr/bin:/bin:/usr/sbin:/sbin";
+        assert!(
+            !std::env::split_paths(launchd).any(|d| d.join("brew").is_file()),
+            "the bare launchd PATH should not already contain brew"
+        );
+        let path = resolved_path(
+            Some(launchd.into()),
+            std::env::var("SHELL").ok(),
+            dirs::home_dir().as_deref(),
+        );
+        assert!(
+            std::env::split_paths(&path).any(|d| d.join("brew").is_file()),
+            "brew not reachable from {}",
+            path.to_string_lossy()
+        );
+    }
 }

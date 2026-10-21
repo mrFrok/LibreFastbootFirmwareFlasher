@@ -1031,4 +1031,29 @@ mod tests {
             );
         }
     }
+
+    // Runs on CI's macOS runners, which have both Homebrew and the /usr/bin/apt
+    // Java stub that once got mistaken for Debian's apt.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_installs_with_homebrew_never_apt() {
+        let pm = detect_pkg_manager();
+        assert_ne!(pm.as_deref(), Some("apt"), "picked the /usr/bin/apt stub");
+        if find_brew().is_some() {
+            assert_eq!(pm.as_deref(), Some("brew"));
+        } else {
+            assert_eq!(pm, None, "no Homebrew here, so nothing to install with");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_install_commands_are_brews() {
+        assert_eq!(pkg_for_tool("brew", "adb"), Some("android-platform-tools"));
+        assert_eq!(
+            pkg_for_tool("brew", "fastboot"),
+            Some("android-platform-tools")
+        );
+        assert!(!needs_sudo("brew"), "Homebrew refuses to run under sudo");
+    }
 }
