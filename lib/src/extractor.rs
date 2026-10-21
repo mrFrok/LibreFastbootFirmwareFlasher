@@ -185,6 +185,22 @@ pub fn extraction_cache(root: &Path) -> (usize, u64) {
     (count, bytes)
 }
 
+/// Firmware folders under `root` whose extraction finished, newest first.
+pub fn finished_extractions(root: &Path) -> Vec<PathBuf> {
+    let mut dirs: Vec<(std::time::SystemTime, PathBuf)> = cache_dirs(root)
+        .into_iter()
+        .filter_map(|d| {
+            let t = fs::metadata(d.join(COMPLETE_MARKER))
+                .ok()?
+                .modified()
+                .ok()?;
+            Some((t, d))
+        })
+        .collect();
+    dirs.sort_by_key(|(t, _)| std::cmp::Reverse(*t));
+    dirs.into_iter().map(|(_, d)| d).collect()
+}
+
 /// Deletes the firmware folders LFFF extracted under `root`. A folder without
 /// [`EXTRACTION_MARKER`] was not made by LFFF and is never touched.
 pub fn clear_extraction_cache(root: &Path) -> io::Result<()> {
@@ -966,6 +982,9 @@ mod tests {
         assert!(!is_extracted(&zip, &out));
         mark_complete(&zip, &out);
         assert!(is_extracted(&zip, &out));
+        assert_eq!(finished_extractions(tmp.path()), Vec::<PathBuf>::new());
+        touch(&out.join(EXTRACTION_MARKER));
+        assert_eq!(finished_extractions(tmp.path()), vec![out.clone()]);
         // A re-downloaded archive of another size is not the same firmware.
         fs::write(&zip, b"other, longer zip bytes").unwrap();
         assert!(!is_extracted(&zip, &out));

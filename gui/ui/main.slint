@@ -42,8 +42,9 @@ import { ToolsGrid, Tools, LogsPage } from "pages/tools-page.slint";
 import { SettingsPage } from "pages/settings-page.slint";
 import { ConfirmSheet } from "dialogs/confirm-sheet.slint";
 import { StartupNotice } from "dialogs/startup-notice.slint";
-import { TextButton } from "@material";
-
+import { TextButton, MenuItem } from "@material";
+// Re-exported so the Rust side gets the generated MenuItem type.
+export { MenuItem }
 export component MainWindow inherits MaterialWindow {
     title: "Libre Fastboot Firmware Flasher";
     icon: @image-url("icons/logo_icon.svg");
@@ -88,6 +89,8 @@ export component MainWindow inherits MaterialWindow {
     in-out property <string> fw-dir;
     in-out property <int> unpack-count: 0;
     in-out property <string> unpack-current;
+    in-out property <[MenuItem]> cached-firmwares: [];
+    callback pick-cached(int);
     // ARB of the chosen firmware: -1 unknown, 0 none, >0 the level
     in-out property <int> fw-arb: -1;
     in-out property <bool> fw-has-preloader: false;
@@ -635,6 +638,8 @@ export component MainWindow inherits MaterialWindow {
                             fw-error: root.fw-error;
                             unpack-count: root.unpack-count;
                             unpack-current: root.unpack-current;
+                            cached-firmwares: root.cached-firmwares;
+                            pick-cached(i) => { root.pick-cached(i); }
                             download-url <=> root.download-url;
                             dl-percent: root.dl-percent;
                             dl-downloaded: root.dl-downloaded;

@@ -365,6 +365,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui_callbacks::apply_pins(&ui, &config.pinned_tools);
     ui.set_chips_summary(ui_callbacks::chips_summary(&config).into());
     ui.set_cache_summary(ui_callbacks::cache_summary().into());
+    ui_callbacks::refresh_cached_firmwares(&ui);
 
     ctx.send(Cmd::CheckForUpdates).ok();
     // The install page's first step; also refreshes the classic deps log.

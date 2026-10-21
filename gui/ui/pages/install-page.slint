@@ -1,4 +1,6 @@
 import {
+    DropDownMenu,
+    MenuItem,
     FilledButton,
     LinearProgressIndicator,
     MaterialPalette,
@@ -34,6 +36,8 @@ export component InstallPage inherits VerticalLayout {
     in property <string> fw-error;
     in property <int> unpack-count;
     in property <string> unpack-current;
+    // Firmware unpacked earlier in the download folder, newest first.
+    in property <[MenuItem]> cached-firmwares;
     in-out property <string> download-url;
     in property <float> dl-percent;
     in property <string> dl-downloaded;
@@ -65,6 +69,7 @@ export component InstallPage inherits VerticalLayout {
     callback install-deps();
     callback pick-zip();
     callback pick-folder();
+    callback pick-cached(int);
     callback paste-url();
     callback download(string);
     callback cancel-download();
@@ -124,7 +129,7 @@ export component InstallPage inherits VerticalLayout {
                 StepRow {
                     number: 1;
                     state: root.deps-state == 2 ? 2 : root.deps-state == 1 ? 3 : 4;
-                    title: Tr.t("Programs", "Программы", "程序", "程式");
+                    title: Tr.t("Drivers", "Драйверы", "驱动", "驅動程式");
                     summary: root.deps-state == 2 ? Tr.t("adb and fastboot are ready", "adb и fastboot на месте", "adb 和 fastboot 已就绪", "adb 和 fastboot 已就緒")
                         : root.deps-state == 3 ? Tr.t("Installing…", "Устанавливаю…", "正在安装…", "正在安裝…")
                         : root.deps-state == 0 ? Tr.t("Checking…", "Проверяю…", "正在检查…", "正在檢查…") : "";
@@ -195,6 +200,13 @@ export component InstallPage inherits VerticalLayout {
                                     }
                                 }
                             }
+                        }
+                    }
+                    if (root.fw-state == 0 || root.fw-state == 5) && root.cached-firmwares.length > 0: DropDownMenu {
+                        label: Tr.t("or one unpacked earlier", "или распакованная ранее", "或之前解压的固件", "或先前解壓的韌體");
+                        items: root.cached-firmwares;
+                        selected(i) => {
+                            root.pick-cached(i);
                         }
                     }
                     if root.fw-state == 0 || root.fw-state == 5: HorizontalLayout {

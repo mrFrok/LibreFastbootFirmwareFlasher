@@ -51,6 +51,24 @@ pub fn chips_summary(config: &crate::config::Config) -> String {
         .join(", ")
 }
 
+/// Fill the install page's list of firmware unpacked earlier.
+pub fn refresh_cached_firmwares(ui: &MainWindow) {
+    let items: Vec<crate::MenuItem> = lfff_lib::extractor::finished_extractions(&get_output_dir())
+        .iter()
+        .map(|d| crate::MenuItem {
+            icon: Default::default(),
+            text: d
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default()
+                .into(),
+            trailing_text: "".into(),
+            enabled: true,
+        })
+        .collect();
+    ui.set_cached_firmwares(Rc::new(VecModel::from(items)).into());
+}
+
 pub fn cache_summary() -> String {
     let (count, bytes) = lfff_lib::extractor::extraction_cache(&get_output_dir());
     if count == 0 {
@@ -454,6 +472,7 @@ pub fn poll(
                 ui.set_fw_has_preloader(has_preloader);
                 ui.set_fw_state(if cached { 4 } else { 3 });
                 ui.set_cache_summary(cache_summary().into());
+                refresh_cached_firmwares(&ui);
             }
             WMsg::FirmwareFailed(e) => {
                 ui.set_fw_error(firmware_error_text(&ui.get_lang(), &e).into());
@@ -1192,6 +1211,19 @@ fn register_install_callbacks(
         }
     });
 
+    // Same order as refresh_cached_firmwares built the list in.
+    let t = ctx.clone();
+    let w = ui.as_weak();
+    ui.on_pick_cached(move |i| {
+        let dirs = lfff_lib::extractor::finished_extractions(&get_output_dir());
+        if let (Some(d), Some(ui)) = (
+            usize::try_from(i).ok().and_then(|i| dirs.get(i)),
+            w.upgrade(),
+        ) {
+            prepare(&ui, &t, &d.display().to_string());
+        }
+    });
+
     let w = ui.as_weak();
     ui.on_change_firmware(move || {
         if let Some(ui) = w.upgrade() {
@@ -1330,6 +1362,7 @@ fn register_install_callbacks(
         }
         if let Some(ui) = w.upgrade() {
             ui.set_cache_summary(cache_summary().into());
+            refresh_cached_firmwares(&ui);
             // The firmware on the install page may have been one of them.
             if ui.get_fw_state() == 3 || ui.get_fw_state() == 4 {
                 ui.set_fw_state(0);
