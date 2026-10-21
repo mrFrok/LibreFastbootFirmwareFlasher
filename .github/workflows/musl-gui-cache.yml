@@ -9,6 +9,13 @@ name: Warm the musl GUI cache
 #
 # Runs when the dependencies or the build script change — the only times the
 # cached skia goes stale — and on demand.
+#
+# Also every five days: GitHub evicts a cache nobody has read for seven days,
+# and releases come further apart than that, so the cache was gone by the
+# time a release wanted it (v2.9.4 rebuilt skia from scratch). When the cache
+# is current, a scheduled run only restores it, which is enough to count as
+# use, and skips the build — about a minute. Days 1, 6, …, 31 of each month,
+# so the longest gap is five days.
 on:
   push:
     branches: [main]
@@ -16,7 +23,16 @@ on:
       - Cargo.lock
       - scripts/build-gui-musl.sh
       - .github/workflows/musl-gui-cache.yml
+  schedule:
+    - cron: '17 3 */5 * *'
   workflow_dispatch:
+
+# One run at a time, queued rather than cancelled: a second run started while
+# the first is still building then finds its cache and skips the hour-long
+# build instead of repeating it in parallel.
+concurrency:
+  group: musl-gui-cache
+  cancel-in-progress: false
 
 jobs:
   warm:
@@ -35,6 +51,7 @@ jobs:
 
       # Same key and paths as the restore step in release.yml — keep in sync.
       - uses: actions/cache@v4
+        id: cache
         with:
           path: |
             target/musl
@@ -44,7 +61,10 @@ jobs:
           key: musl-gui-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'scripts/build-gui-musl.sh') }}
           restore-keys: musl-gui-${{ matrix.arch }}-
 
+      # An exact hit means the cache already matches Cargo.lock and the build
+      # script; restoring it was the point. Only a miss needs a build.
       - name: Build GUI in Alpine
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           docker run --rm -v "$PWD":/src -w /src rust:alpine \
             scripts/build-gui-musl.sh "$(id -u):$(id -g)"
