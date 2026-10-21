@@ -209,6 +209,8 @@ enum Cmd {
         method: FlashMethod,
         skip_xbl_abl: bool,
         skip_preloader: bool,
+        /// Comma-separated partitions to leave as they are.
+        skip_partitions: String,
     },
 }
 

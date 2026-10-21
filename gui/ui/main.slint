@@ -42,9 +42,7 @@ import { ToolsGrid, Tools, LogsPage } from "pages/tools-page.slint";
 import { SettingsPage } from "pages/settings-page.slint";
 import { ConfirmSheet } from "dialogs/confirm-sheet.slint";
 import { StartupNotice } from "dialogs/startup-notice.slint";
-import { TextButton, MenuItem } from "@material";
-// Re-exported so the Rust side gets the generated MenuItem type.
-export { MenuItem }
+import { TextButton } from "@material";
 export component MainWindow inherits MaterialWindow {
     title: "Libre Fastboot Firmware Flasher";
     icon: @image-url("icons/logo_icon.svg");
@@ -89,7 +87,7 @@ export component MainWindow inherits MaterialWindow {
     in-out property <string> fw-dir;
     in-out property <int> unpack-count: 0;
     in-out property <string> unpack-current;
-    in-out property <[MenuItem]> cached-firmwares: [];
+    in-out property <[string]> cached-firmwares: [];
     callback pick-cached(int);
     // ARB of the chosen firmware: -1 unknown, 0 none, >0 the level
     in-out property <int> fw-arb: -1;
@@ -106,6 +104,14 @@ export component MainWindow inherits MaterialWindow {
     in-out property <bool> untouched: true;
     // Confirm sheet: 0 hidden, otherwise ConfirmSheet.kind + 1
     in-out property <int> sheet: 0;
+    in-out property <bool> skip-boot;
+    in-out property <bool> skip-init-boot;
+    in-out property <bool> skip-recovery;
+    in-out property <bool> skip-vendor-boot;
+    in-out property <string> skip-other;
+    // The partitions chosen on the summary sheet, comma-separated.
+    out property <string> install-skips: (root.skip-boot ? "boot," : "") + (root.skip-init-boot ? "init_boot," : "")
+        + (root.skip-recovery ? "recovery," : "") + (root.skip-vendor-boot ? "vendor_boot," : "") + root.skip-other;
     callback pick-zip();
     callback pick-folder();
     callback change-firmware();
@@ -129,6 +135,13 @@ export component MainWindow inherits MaterialWindow {
     function open-sheet() {
         root.skip-xbl-abl = false;
         root.skip-preloader = false;
+        // Each install starts from flashing everything: a skip chosen last
+        // time must not carry over unseen.
+        root.skip-boot = false;
+        root.skip-init-boot = false;
+        root.skip-recovery = false;
+        root.skip-vendor-boot = false;
+        root.skip-other = "";
         root.sheet = root.first-sheet();
     }
     in-out property <string> lang: "en";
@@ -913,6 +926,11 @@ export component MainWindow inherits MaterialWindow {
         firmware: root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區");
         // One checkbox per warning kind: xbl/abl for ARB, preloader for MTK.
         skip-checked: root.sheet == 3 ? root.skip-preloader : root.skip-xbl-abl;
+        skip-boot <=> root.skip-boot;
+        skip-init-boot <=> root.skip-init-boot;
+        skip-recovery <=> root.skip-recovery;
+        skip-vendor-boot <=> root.skip-vendor-boot;
+        skip-other <=> root.skip-other;
         cancel => { root.sheet = 0; }
         next => {
             if root.sheet == 3 {
@@ -938,8 +956,8 @@ export component MainWindow inherits MaterialWindow {
 
     WarningDialog {
         show: root.show-confirm && root.confirm-action == ConfirmAction.wipe;
-        title: Tr.t("Erase everything on the phone?", "Стереть всё на телефоне?", "清除手机上的全部数据？", "清除手機上的所有資料？");
-        body: Tr.t("Photos, apps, accounts and settings are deleted, as after a factory reset. Then the phone restarts.", "Удалятся фото, приложения, аккаунты и настройки — как после сброса к заводским. Затем телефон перезагрузится.", "照片、应用、账户和设置都会被删除，如同恢复出厂设置。随后手机会重启。", "照片、應用程式、帳號和設定都會被刪除，如同恢復原廠設定。隨後手機會重新啟動。");
+        title: Tr.t("Erase everything on the phone?", "Стереть всё на смартфоне?", "清除手机上的全部数据？", "清除手機上的所有資料？");
+        body: Tr.t("Photos, apps, accounts and settings are deleted, as after a factory reset. Then the phone restarts.", "Удалятся фото, приложения, аккаунты и настройки — как после сброса к заводским. Затем смартфон перезагрузится.", "照片、应用、账户和设置都会被删除，如同恢复出厂设置。随后手机会重启。", "照片、應用程式、帳號和設定都會被刪除，如同恢復原廠設定。隨後手機會重新啟動。");
         warning-text: Tr.t("This cannot be undone.", "Это нельзя отменить.", "此操作无法撤销。", "此操作無法復原。");
         has-checkbox: false;
         checkbox-text: "";

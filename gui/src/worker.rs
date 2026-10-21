@@ -1942,6 +1942,7 @@ pub fn worker(
                 method,
                 skip_xbl_abl,
                 skip_preloader,
+                skip_partitions,
             } => {
                 use lfff_lib::flasher::FastbootdStatus;
                 use std::sync::atomic::Ordering;
@@ -2066,6 +2067,7 @@ pub fn worker(
                     skip_xbl_abl: skip_xbl_abl || method == FlashMethod::Mtk,
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
+                    skip_partitions,
                     ..Default::default()
                 };
                 do_flash(

@@ -53,20 +53,17 @@ pub fn chips_summary(config: &crate::config::Config) -> String {
 
 /// Fill the install page's list of firmware unpacked earlier.
 pub fn refresh_cached_firmwares(ui: &MainWindow) {
-    let items: Vec<crate::MenuItem> = lfff_lib::extractor::finished_extractions(&get_output_dir())
-        .iter()
-        .map(|d| crate::MenuItem {
-            icon: Default::default(),
-            text: d
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default()
-                .into(),
-            trailing_text: "".into(),
-            enabled: true,
-        })
-        .collect();
-    ui.set_cached_firmwares(Rc::new(VecModel::from(items)).into());
+    let names: Vec<slint::SharedString> =
+        lfff_lib::extractor::finished_extractions(&get_output_dir())
+            .iter()
+            .map(|d| {
+                d.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default()
+                    .into()
+            })
+            .collect();
+    ui.set_cached_firmwares(Rc::new(VecModel::from(names)).into());
 }
 
 pub fn cache_summary() -> String {
@@ -1277,6 +1274,7 @@ fn register_install_callbacks(
                 method,
                 skip_xbl_abl: ui.get_skip_xbl_abl(),
                 skip_preloader: ui.get_skip_preloader(),
+                skip_partitions: ui.get_install_skips().to_string(),
             })
             .ok();
         }

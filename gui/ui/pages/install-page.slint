@@ -1,6 +1,4 @@
 import {
-    DropDownMenu,
-    MenuItem,
     FilledButton,
     LinearProgressIndicator,
     MaterialPalette,
@@ -37,7 +35,7 @@ export component InstallPage inherits VerticalLayout {
     in property <int> unpack-count;
     in property <string> unpack-current;
     // Firmware unpacked earlier in the download folder, newest first.
-    in property <[MenuItem]> cached-firmwares;
+    in property <[string]> cached-firmwares;
     in-out property <string> download-url;
     in property <float> dl-percent;
     in property <string> dl-downloaded;
@@ -202,11 +200,54 @@ export component InstallPage inherits VerticalLayout {
                             }
                         }
                     }
-                    if (root.fw-state == 0 || root.fw-state == 5) && root.cached-firmwares.length > 0: DropDownMenu {
-                        label: Tr.t("or one unpacked earlier", "или распакованная ранее", "或之前解压的固件", "或先前解壓的韌體");
-                        items: root.cached-firmwares;
-                        selected(i) => {
+                    if (root.fw-state == 0 || root.fw-state == 5) && root.cached-firmwares.length > 0: Text {
+                        text: Tr.t("or one unpacked earlier:", "или распакованная ранее:", "或之前解压的固件：", "或先前解壓的韌體：");
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface-variant;
+                    }
+                    // At most three: the newest are the likely ones; older
+                    // ones stay reachable through "Choose folder".
+                    for name[i] in root.cached-firmwares: TouchArea {
+                        visible: i < 3 && (root.fw-state == 0 || root.fw-state == 5);
+                        height: self.visible ? 44px : 0px;
+                        clicked => {
                             root.pick-cached(i);
+                        }
+                        Rectangle {
+                            border-radius: 12px;
+                            background: parent.has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container-low;
+                            border-width: 1px;
+                            border-color: MaterialPalette.outline-variant;
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                spacing: 12px;
+                                Image {
+                                    source: @image-url("../icons/folder.svg");
+                                    width: 20px;
+                                    height: 20px;
+                                    y: (parent.height - self.height) / 2;
+                                    colorize: MaterialPalette.primary;
+                                }
+
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: name;
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    color: MaterialPalette.on-surface;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+
+                                Text {
+                                    text: Tr.t("Open", "Открыть", "打开", "開啟");
+                                    font-size: 13px;
+                                    font-weight: 500;
+                                    color: MaterialPalette.primary;
+                                    vertical-alignment: center;
+                                }
+                            }
                         }
                     }
                     if root.fw-state == 0 || root.fw-state == 5: HorizontalLayout {
@@ -304,7 +345,7 @@ export component InstallPage inherits VerticalLayout {
                         color: MaterialPalette.on-surface-variant;
                     }
                     if root.fw-state == 2: Text {
-                        text: Tr.t("You can connect the phone meanwhile. Next time this firmware opens instantly: the unpacked copy is kept.", "Пока можно подключить телефон. В следующий раз эта прошивка откроется сразу: распакованная копия сохраняется.", "此期间可以连接手机。下次打开此固件会立即完成：解压后的副本会保留。", "此期間可以連接手機。下次開啟此韌體會立即完成：解壓後的副本會保留。");
+                        text: Tr.t("You can connect the phone meanwhile. Next time this firmware opens instantly: the unpacked copy is kept.", "Пока можно подключить смартфон. В следующий раз эта прошивка откроется сразу: распакованная копия сохраняется.", "此期间可以连接手机。下次打开此固件会立即完成：解压后的副本会保留。", "此期間可以連接手機。下次開啟此韌體會立即完成：解壓後的副本會保留。");
                         font-size: 13px;
                         color: MaterialPalette.on-surface-variant;
                         wrap: word-wrap;
@@ -315,12 +356,12 @@ export component InstallPage inherits VerticalLayout {
                 StepRow {
                     number: 3;
                     state: !root.device.connected ? 4 : root.device.unlocked == 0 ? 3 : 2;
-                    title: Tr.t("Phone", "Телефон", "手机", "手機");
+                    title: Tr.t("Phone", "Смартфон", "手机", "手機");
                     summary: root.device.connected ? root.device.name + " · " + root.mode-name
-                        : Tr.t("Looking for the phone…", "Ищу телефон…", "正在查找手机…", "正在尋找手機…");
+                        : Tr.t("Looking for the phone…", "Ищу смартфон…", "正在查找手机…", "正在尋找手機…");
                     expanded: !root.device.connected || root.device.unlocked == 0;
                     if !root.device.connected: Text {
-                        text: Tr.t("Phone not found? Check that:", "Телефон не находится? Проверьте:", "找不到手机？请检查：", "找不到手機？請檢查：");
+                        text: Tr.t("Phone not found? Check that:", "Смартфон не находится? Проверьте:", "找不到手机？请检查：", "找不到手機？請檢查：");
                         font-size: 14px;
                         font-weight: 500;
                         color: MaterialPalette.on-surface;
@@ -328,7 +369,7 @@ export component InstallPage inherits VerticalLayout {
                     if !root.device.connected: Text {
                         text: Tr.t(
                             "• the cable can transfer data — some only charge\n• the phone is on and USB debugging is enabled (Settings → Developer options), or it is in bootloader mode\n• the phone asked to allow USB debugging — confirm it on its screen\n• the bootloader is unlocked — without that the firmware cannot be installed",
-                            "• кабель передаёт данные — некоторые умеют только заряжать\n• телефон включён и в нём включена отладка по USB (Настройки → Для разработчиков) или он в режиме загрузчика\n• телефон спросил, разрешить ли отладку по USB, — подтвердите на его экране\n• загрузчик разблокирован — без этого установить прошивку нельзя",
+                            "• кабель передаёт данные — некоторые умеют только заряжать\n• смартфон включён и в нём включена отладка по USB (Настройки → Для разработчиков) или он в режиме загрузчика\n• смартфон спросил, разрешить ли отладку по USB, — подтвердите на его экране\n• загрузчик разблокирован — без этого установить прошивку нельзя",
                             "• 数据线能传输数据——有些线只能充电\n• 手机已开机并开启 USB 调试（设置 → 开发者选项），或处于 bootloader 模式\n• 手机询问是否允许 USB 调试——请在手机屏幕上确认\n• bootloader 已解锁——否则无法安装固件",
                             "• 傳輸線能傳輸資料——有些線只能充電\n• 手機已開機並開啟 USB 偵錯（設定 → 開發人員選項），或處於 bootloader 模式\n• 手機詢問是否允許 USB 偵錯——請在手機螢幕上確認\n• bootloader 已解鎖——否則無法安裝韌體");
                         font-size: 13px;
@@ -339,7 +380,7 @@ export component InstallPage inherits VerticalLayout {
                         kind: 2;
                         icon: @image-url("../icons/lock.svg");
                         title: Tr.t("The bootloader is locked", "Загрузчик заблокирован", "bootloader 已锁定", "bootloader 已鎖定");
-                        text: Tr.t("Firmware cannot be installed on a phone with a locked bootloader. Unlock it first, then reconnect the phone.", "На телефон с заблокированным загрузчиком прошивку не установить. Сначала разблокируйте его и подключите телефон заново.", "bootloader 锁定的手机无法安装固件。请先解锁，然后重新连接手机。", "bootloader 鎖定的手機無法安裝韌體。請先解鎖，然後重新連接手機。");
+                        text: Tr.t("Firmware cannot be installed on a phone with a locked bootloader. Unlock it first, then reconnect the phone.", "На смартфон с заблокированным загрузчиком прошивку не установить. Сначала разблокируйте его и подключите смартфон заново.", "bootloader 锁定的手机无法安装固件。请先解锁，然后重新连接手机。", "bootloader 鎖定的手機無法安裝韌體。請先解鎖，然後重新連接手機。");
                     }
                 }
 
@@ -348,7 +389,7 @@ export component InstallPage inherits VerticalLayout {
                     number: 4;
                     state: !root.device.connected ? 0 : root.chip != 0 ? 2 : 1;
                     title: Tr.t("Processor", "Процессор", "处理器", "處理器");
-                    summary: !root.device.connected ? Tr.t("After the phone is found", "После того как найдётся телефон", "找到手机后", "找到手機後")
+                    summary: !root.device.connected ? Tr.t("After the phone is found", "После того как найдётся смартфон", "找到手机后", "找到手機後")
                         : root.chip == 1 ? "Snapdragon · " + Tr.t("remembered for ", "запомнено для ", "已为此机型记住：", "已為此機型記住：") + root.device.name
                         : root.chip == 2 ? "MediaTek · " + Tr.t("remembered for ", "запомнено для ", "已为此机型记住：", "已為此機型記住：") + root.device.name
                         : "";
@@ -365,7 +406,7 @@ export component InstallPage inherits VerticalLayout {
                             horizontal-stretch: 1;
                             preferred-width: 100px;
                             title: "Snapdragon (Qualcomm)";
-                            text: Tr.t("Most Realme, OnePlus and OPPO phones", "Большинство телефонов Realme, OnePlus и OPPO", "大多数 Realme、一加和 OPPO 手机", "大多數 Realme、OnePlus 和 OPPO 手機");
+                            text: Tr.t("Most Realme, OnePlus and OPPO phones", "Большинство смартфонов Realme, OnePlus и OPPO", "大多数 Realme、一加和 OPPO 手机", "大多數 Realme、OnePlus 和 OPPO 手機");
                             clicked => {
                                 root.choose-chip(1);
                             }
@@ -441,7 +482,7 @@ export component InstallPage inherits VerticalLayout {
             }
 
             Text {
-                text: Tr.t("Don't unplug the phone and don't close the app.", "Не отключайте телефон и не закрывайте программу.", "请勿断开手机，也不要关闭程序。", "請勿中斷手機連接，也不要關閉程式。");
+                text: Tr.t("Don't unplug the phone and don't close the app.", "Не отключайте смартфон и не закрывайте программу.", "请勿断开手机，也不要关闭程序。", "請勿中斷手機連接，也不要關閉程式。");
                 font-size: 14px;
                 color: StatusColors.warning;
             }
@@ -456,7 +497,7 @@ export component InstallPage inherits VerticalLayout {
                 spacing: 6px;
                 StageRow {
                     state: root.stage0;
-                    title: Tr.t("Prepare the phone", "Подготовка телефона", "准备手机", "準備手機");
+                    title: Tr.t("Prepare the phone", "Подготовка смартфона", "准备手机", "準備手機");
                     detail: root.stage0 == 1 ? Tr.t("restarting into flashing mode…", "перезагружаю в режим прошивки…", "正在重启到刷机模式…", "正在重新啟動到刷機模式…")
                         : root.stage0 == 2 ? Tr.t("in flashing mode", "в режиме прошивки", "已进入刷机模式", "已進入刷機模式") : "";
                 }
@@ -565,7 +606,7 @@ export component InstallPage inherits VerticalLayout {
         }
 
         Text {
-            text: root.fw-name + " · " + Tr.t("now restart the phone", "осталось перезагрузить телефон", "现在重启手机", "現在重新啟動手機");
+            text: root.fw-name + " · " + Tr.t("now restart the phone", "осталось перезагрузить смартфон", "现在重启手机", "現在重新啟動手機");
             font-size: 14px;
             color: MaterialPalette.on-surface-variant;
             horizontal-alignment: center;
@@ -586,7 +627,7 @@ export component InstallPage inherits VerticalLayout {
                     padding: 18px;
                     spacing: 8px;
                     Text {
-                        text: Tr.t("Restart the phone", "Перезагрузить телефон", "重启手机", "重新啟動手機");
+                        text: Tr.t("Restart the phone", "Перезагрузить смартфон", "重启手机", "重新啟動手機");
                         font-size: 16px;
                         font-weight: 600;
                         color: MaterialPalette.on-surface;
@@ -649,7 +690,7 @@ export component InstallPage inherits VerticalLayout {
         HorizontalLayout {
             alignment: center;
             TextButton {
-                text: Tr.t("Leave the phone as it is", "Оставить телефон как есть", "保持手机现状", "保持手機現狀");
+                text: Tr.t("Leave the phone as it is", "Оставить смартфон как есть", "保持手机现状", "保持手機現狀");
                 clicked => {
                     root.finish();
                 }
@@ -689,8 +730,8 @@ export component InstallPage inherits VerticalLayout {
         }
 
         Text {
-            text: root.untouched ? Tr.t("Nothing on the phone was changed, so it is safe to try again.", "На телефоне ничего не изменилось — можно спокойно попробовать ещё раз.", "手机上没有任何改动，可以放心重试。", "手機上沒有任何變更，可以放心重試。")
-                : Tr.t("Part of the firmware was written. Don't restart the phone: try again, or save the log and ask for help.", "Часть прошивки уже записана. Не перезагружайте телефон: попробуйте ещё раз или сохраните журнал и обратитесь за помощью.", "部分固件已写入。请勿重启手机：请重试，或保存日志并寻求帮助。", "部分韌體已寫入。請勿重新啟動手機：請重試，或儲存日誌並尋求協助。");
+            text: root.untouched ? Tr.t("Nothing on the phone was changed, so it is safe to try again.", "На смартфоне ничего не изменилось — можно спокойно попробовать ещё раз.", "手机上没有任何改动，可以放心重试。", "手機上沒有任何變更，可以放心重試。")
+                : Tr.t("Part of the firmware was written. Don't restart the phone: try again, or save the log and ask for help.", "Часть прошивки уже записана. Не перезагружайте смартфон: попробуйте ещё раз или сохраните журнал и обратитесь за помощью.", "部分固件已写入。请勿重启手机：请重试，或保存日志并寻求帮助。", "部分韌體已寫入。請勿重新啟動手機：請重試，或儲存日誌並尋求協助。");
             font-size: 14px;
             color: MaterialPalette.on-surface-variant;
             horizontal-alignment: center;

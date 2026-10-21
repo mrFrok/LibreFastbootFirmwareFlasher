@@ -9,6 +9,29 @@ import { StatusColors } from "../globals/status-colors.slint";
 import { Tr } from "../globals/tr.slint";
 import { FieldRow } from "../components/wizard.slint";
 
+// A toggle for one partition to leave alone.
+component SkipChip inherits TouchArea {
+    in property <string> text;
+    in-out property <bool> checked;
+    height: 32px;
+    width: label.preferred-width + 28px;
+    clicked => {
+        root.checked = !root.checked;
+    }
+    Rectangle {
+        border-radius: 8px;
+        background: root.checked ? MaterialPalette.secondary-container : transparent;
+        border-width: root.checked ? 0px : 1px;
+        border-color: MaterialPalette.outline;
+        label := Text {
+            text: (root.checked ? "✓ " : "") + root.text;
+            font-size: 13px;
+            font-weight: 500;
+            color: root.checked ? MaterialPalette.on-secondary-container : MaterialPalette.on-surface;
+        }
+    }
+}
+
 // The one sheet between "Install" and the hands-off run. Its warning step
 // always comes before the summary: the order ARB, then final confirmation, is
 // fixed.
@@ -23,6 +46,13 @@ export component ConfirmSheet inherits Rectangle {
     in property <string> firmware;
     // xbl/abl for kinds 0 and 1, preloader for kind 2
     in-out property <bool> skip-checked;
+    // Partitions to leave as they are on the phone; joined into the
+    // comma-separated skip list the flash session takes.
+    in-out property <bool> skip-boot;
+    in-out property <bool> skip-init-boot;
+    in-out property <bool> skip-recovery;
+    in-out property <bool> skip-vendor-boot;
+    in-out property <string> skip-other;
     callback cancel();
     callback next();
     callback back();
@@ -90,12 +120,12 @@ export component ConfirmSheet inherits Rectangle {
                 if root.kind < 3: Text {
                     text: root.kind == 0 ? Tr.t(
                                 "After installing, the phone can never go back to firmware with a lower ARB: it would no longer boot — a brick. Updating to newer firmware stays possible.",
-                                "После установки вернуться на прошивку с меньшим ARB будет нельзя: телефон перестанет загружаться и превратится в «кирпич». Обновляться на более новые прошивки можно.",
+                                "После установки вернуться на прошивку с меньшим ARB будет нельзя: смартфон перестанет загружаться и превратится в «кирпич». Обновляться на более новые прошивки можно.",
                                 "安装后，手机将无法再回退到 ARB 更低的固件：否则将无法启动——变砖。升级到更新的固件不受影响。",
                                 "安裝後，手機將無法再退回 ARB 更低的韌體：否則將無法開機——變磚。升級到更新的韌體不受影響。")
                         : root.kind == 1 ? Tr.t(
                                 "But the phone may already run firmware with ARB. If the phone's ARB is higher than this firmware's, it will not boot after installing — a brick. Make sure you know your phone's current ARB.",
-                                "Но на телефоне уже может стоять прошивка с ARB. Если ARB телефона выше, чем у этой прошивки, после установки он не загрузится и превратится в «кирпич». Убедитесь, что знаете текущий ARB телефона.",
+                                "Но на смартфоне уже может стоять прошивка с ARB. Если ARB смартфона выше, чем у этой прошивки, после установки он не загрузится и превратится в «кирпич». Убедитесь, что знаете текущий ARB смартфона.",
                                 "但手机上可能已经是带 ARB 的固件。如果手机的 ARB 高于此固件，安装后将无法启动——变砖。请确认您知道手机当前的 ARB。",
                                 "但手機上可能已經是帶 ARB 的韌體。如果手機的 ARB 高於此韌體，安裝後將無法開機——變磚。請確認您知道手機目前的 ARB。")
                         : Tr.t(
@@ -138,8 +168,8 @@ export component ConfirmSheet inherits Rectangle {
                             Text {
                                 width: 446px;
                                 text: root.kind == 2
-                                    ? Tr.t("This can also brick the phone. At your own risk.", "Это тоже может превратить телефон в «кирпич». Только на свой страх и риск.", "这同样可能导致手机变砖。风险自负。", "這同樣可能導致手機變磚。風險自負。")
-                                    : Tr.t("Sometimes keeps the phone's current ARB, but can also brick it. At your own risk.", "Иногда помогает сохранить текущий ARB телефона, но тоже может превратить его в «кирпич». Только на свой страх и риск.", "有时可以保留手机当前的 ARB，但同样可能导致变砖。风险自负。", "有時可以保留手機目前的 ARB，但同樣可能導致變磚。風險自負。");
+                                    ? Tr.t("This can also brick the phone. At your own risk.", "Это тоже может превратить смартфон в «кирпич». Только на свой страх и риск.", "这同样可能导致手机变砖。风险自负。", "這同樣可能導致手機變磚。風險自負。")
+                                    : Tr.t("Sometimes keeps the phone's current ARB, but can also brick it. At your own risk.", "Иногда помогает сохранить текущий ARB смартфона, но тоже может превратить его в «кирпич». Только на свой страх и риск.", "有时可以保留手机当前的 ARB，但同样可能导致变砖。风险自负。", "有時可以保留手機目前的 ARB，但同樣可能導致變磚。風險自負。");
                                 font-size: 12px;
                                 color: root.danger ? MaterialPalette.error : StatusColors.warning;
                                 wrap: word-wrap;
@@ -159,7 +189,7 @@ export component ConfirmSheet inherits Rectangle {
                 if root.kind == 3: VerticalLayout {
                     FieldRow {
                         label-width: 150px;
-                        label: Tr.t("Phone", "Телефон", "手机", "手機");
+                        label: Tr.t("Phone", "Смартфон", "手机", "手機");
                         Text {
                             text: root.phone;
                             font-size: 14px;
@@ -219,6 +249,63 @@ export component ConfirmSheet inherits Rectangle {
                     }
                 }
 
+                if root.kind == 3: Text {
+                    text: Tr.t("Don't install (the phone keeps its own), e.g. to keep root or a custom recovery:", "Не прошивать (останется то, что на смартфоне) — например, чтобы сохранить root или свой recovery:", "不刷写（保留手机上现有的），例如为了保留 root 或第三方 recovery：", "不刷寫（保留手機上現有的），例如為了保留 root 或第三方 recovery：");
+                    font-size: 13px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
+                }
+
+                if root.kind == 3: HorizontalLayout {
+                    spacing: 8px;
+                    SkipChip {
+                        text: "boot";
+                        checked <=> root.skip-boot;
+                    }
+
+                    SkipChip {
+                        text: "init_boot";
+                        checked <=> root.skip-init-boot;
+                    }
+
+                    SkipChip {
+                        text: "recovery";
+                        checked <=> root.skip-recovery;
+                    }
+
+                    SkipChip {
+                        text: "vendor_boot";
+                        checked <=> root.skip-vendor-boot;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 32px;
+                        min-width: 90px;
+                        clip: true;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: other.has-focus ? MaterialPalette.primary : MaterialPalette.outline;
+                        Text {
+                            x: 10px;
+                            visible: root.skip-other == "" && !other.has-focus;
+                            text: Tr.t("other, comma-separated", "другие, через запятую", "其他，用逗号分隔", "其他，用逗號分隔");
+                            font-size: 12px;
+                            color: MaterialPalette.on-surface-variant;
+                        }
+
+                        other := TextInput {
+                            x: 10px;
+                            width: parent.width - 20px;
+                            text <=> root.skip-other;
+                            font-size: 13px;
+                            color: MaterialPalette.on-surface;
+                            vertical-alignment: center;
+                            single-line: true;
+                        }
+                    }
+                }
+
                 if root.kind == 3: Rectangle {
                     border-radius: 12px;
                     background: MaterialPalette.error-container;
@@ -236,7 +323,7 @@ export component ConfirmSheet inherits Rectangle {
                             width: 478px;
                             text: Tr.t(
                                         "The phone's system is overwritten completely; this cannot be undone. Keep the cable plugged in for 10–20 minutes and the battery above 30%. Everything is at your own risk.",
-                                        "Система телефона будет полностью перезаписана — это необратимо. Не отключайте кабель 10–20 минут, заряд — не меньше 30 %. Всё — на ваш страх и риск.",
+                                        "Система смартфона будет полностью перезаписана — это необратимо. Не отключайте кабель 10–20 минут, заряд — не меньше 30 %. Всё — на ваш страх и риск.",
                                         "手机系统将被完全覆盖，此操作不可撤销。请在 10–20 分钟内保持数据线连接，电量不低于 30%。一切风险自负。",
                                         "手機系統將被完全覆寫，此操作無法復原。請在 10–20 分鐘內保持傳輸線連接，電量不低於 30%。一切風險自負。");
                             font-size: 13px;
