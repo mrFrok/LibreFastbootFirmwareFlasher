@@ -66,6 +66,13 @@ brew tap mrFrok/lfff
 brew install lfff
 ```
 
+On macOS, `brew tap` needs git, which comes with Apple's Command Line Tools.
+If it fails with *"No developer tools installed"* or *"Git is unavailable"*,
+install them first, then run the two commands again:
+```bash
+xcode-select --install
+```
+
 **Flatpak (Linux x86_64)**
 ```bash
 flatpak install lfff-gui-linux-x86_64.flatpak   # from the release page
