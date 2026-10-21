@@ -680,63 +680,107 @@ fn flash_partition_inner(
 }
 
 // ---------------------------------------------------------------------------
-// Super partition wipe
+// Super partition preparation
 // ---------------------------------------------------------------------------
 
-pub fn wipe_super_with_log(serial: Option<&str>, super_names: &[String], on_log: &dyn Fn(String)) {
+/// What `prepare_super_with_log` does to make room in super before the
+/// active slot's dynamic partitions are flashed.
+#[derive(Debug, PartialEq, Eq)]
+pub struct SuperPrep {
+    /// The inactive slot's copies and the COW images an update leaves behind.
+    pub delete: Vec<String>,
+    /// The active slot's copies, shrunk to 0 so that growing one image never
+    /// hits its group's limit while another has not been shrunk yet.
+    pub shrink: Vec<String>,
+}
+
+/// Nothing is ever deleted and recreated. fastbootd's `create-logical-partition`
+/// cannot set a group or attributes: a recreated partition lands in `default`
+/// without `readonly`, and the next OTA fails with "Attempting to create
+/// duplication partition" when update_engine adds the same name to its own
+/// group. Resizing and flashing in place keep both.
+pub fn super_prep_plan(super_names: &[String], active_slot: &str) -> SuperPrep {
+    let inactive = if active_slot == "a" { "b" } else { "a" };
+    let mut delete = Vec::new();
+    let mut shrink = Vec::new();
+    for base in super_names {
+        delete.push(format!("{base}_{inactive}"));
+        for slot in [active_slot, inactive] {
+            for suffix in ["-cow", "_cow", "-cow-img"] {
+                delete.push(format!("{base}_{slot}{suffix}"));
+            }
+        }
+        shrink.push(format!("{base}_{active_slot}"));
+    }
+    SuperPrep { delete, shrink }
+}
+
+/// `fastboot getvar is-logical:<name>` answers on stderr, as every getvar.
+fn is_logical(base_args: &[String], name: &str) -> bool {
+    let mut cmd = base_args.to_vec();
+    cmd.push("getvar".into());
+    cmd.push(format!("is-logical:{name}"));
+    let refs: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
+    let r = run_cmd(&refs, 15);
+    let out = format!("{}{}", r.stdout, r.stderr).to_lowercase();
+    r.code == 0 && out.contains(&format!("is-logical:{}: yes", name.to_lowercase()))
+}
+
+pub fn prepare_super_with_log(
+    serial: Option<&str>,
+    super_names: &[String],
+    active_slot: &str,
+    on_log: &dyn Fn(String),
+) {
     let mut base_args: Vec<String> = vec!["fastboot".into()];
     if let Some(s) = serial {
         base_args.push("-s".into());
         base_args.push(s.into());
     }
+    let run = |verb: &str, args: &[&str]| {
+        let mut cmd = base_args.clone();
+        cmd.push(verb.into());
+        cmd.extend(args.iter().map(|a| a.to_string()));
+        let refs: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
+        run_cmd(&refs, 15)
+    };
 
     on_log(format!(
         "Preparing {} super partition(s) ...",
         super_names.len()
     ));
-    let base_len = base_args.len();
+    let plan = super_prep_plan(super_names, active_slot);
 
-    for base in super_names {
-        let mut cmd = base_args.clone();
-
-        // Delete existing entries + COW snapshots
-        for slot in &["a", "b"] {
-            let part = format!("{}_{}", base, slot);
-            let mut candidates = vec![part.clone()];
-            for suffix in &["-cow", "_cow", "-cow-img"] {
-                candidates.push(format!("{}{}", part, suffix));
-            }
-            for cand in &candidates {
-                cmd.truncate(base_len);
-                cmd.push("delete-logical-partition".into());
-                cmd.push(cand.clone());
-                let refs: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
-                let r = run_cmd(&refs, 15);
-                if r.code != 0 {
-                    let err_lower = r.stderr.to_lowercase();
-                    if !err_lower.contains("does not exist") && !err_lower.contains("no such") {
-                        warn!("delete-logical-partition {}: {}", cand, r.stderr);
-                    }
-                }
-            }
-        }
-
-        // Recreate with size=0
-        for slot in &["a", "b"] {
-            let part = format!("{}_{}", base, slot);
-            cmd.truncate(base_len);
-            cmd.push("create-logical-partition".into());
-            cmd.push(part.clone());
-            cmd.push("0".into());
-            let refs: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
-            let r = run_cmd(&refs, 15);
-            if r.code != 0 {
-                warn!("create-logical-partition {}: {}", part, r.stderr);
+    for name in &plan.delete {
+        let r = run("delete-logical-partition", &[name]);
+        if r.code != 0 {
+            let err_lower = r.stderr.to_lowercase();
+            if !err_lower.contains("does not exist") && !err_lower.contains("no such") {
+                warn!("delete-logical-partition {}: {}", name, r.stderr);
             }
         }
     }
 
-    on_log("Super partitions cleared and recreated with size=0".into());
+    for name in &plan.shrink {
+        if is_logical(&base_args, name) {
+            let r = run("resize-logical-partition", &[name, "0"]);
+            if r.code != 0 {
+                warn!("resize-logical-partition {}: {}", name, r.stderr);
+            }
+        } else {
+            // A partition this firmware adds. fastbootd can only put it in
+            // `default`; say so, since a later OTA may then refuse it.
+            on_log(format!(
+                "WARNING: {name} does not exist on the device; creating it outside its partition group"
+            ));
+            let r = run("create-logical-partition", &[name, "0"]);
+            if r.code != 0 {
+                warn!("create-logical-partition {}: {}", name, r.stderr);
+            }
+        }
+    }
+
+    on_log("Super partitions prepared; groups and attributes kept".into());
 }
 
 // ---------------------------------------------------------------------------
@@ -1395,9 +1439,9 @@ pub fn run_flash_session_with_log(
 
         // Super → active slot only
         if !super_imgs.is_empty() {
-            on_log("Clearing super partition...".into());
+            on_log("Preparing super partition...".into());
             let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
-            wipe_super_with_log(serial, &super_names, &|msg| on_log(msg));
+            prepare_super_with_log(serial, &super_names, &active_slot, &|msg| on_log(msg));
 
             let mut sorted_super: Vec<(&str, &PathBuf)> = super_imgs.into_iter().collect();
             sorted_super.sort_by_key(|(k, _)| *k);
@@ -1508,6 +1552,31 @@ pub fn run_flash_session_with_log(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn owned(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    // Recreating a partition through fastbootd puts it in group `default`,
+    // which later breaks OTAs; the plan must never contain the active copy in
+    // its delete list.
+    #[test]
+    fn super_prep_keeps_the_active_slot_partitions() {
+        let plan = super_prep_plan(&owned(&["odm", "system"]), "a");
+        assert!(!plan.delete.contains(&"odm_a".to_string()));
+        assert!(!plan.delete.contains(&"system_a".to_string()));
+        assert_eq!(plan.shrink, owned(&["odm_a", "system_a"]));
+    }
+
+    #[test]
+    fn super_prep_frees_the_inactive_slot_and_cow_images() {
+        let plan = super_prep_plan(&owned(&["odm"]), "b");
+        assert!(plan.delete.contains(&"odm_a".to_string()));
+        assert!(plan.delete.contains(&"odm_b-cow".to_string()));
+        assert!(plan.delete.contains(&"odm_a_cow".to_string()));
+        assert!(plan.delete.contains(&"odm_b-cow-img".to_string()));
+        assert_eq!(plan.shrink, owned(&["odm_b"]));
+    }
 
     fn images(names: &[&str]) -> HashMap<String, PathBuf> {
         names
