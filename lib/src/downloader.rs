@@ -85,7 +85,8 @@ impl Default for DownloadProgress {
 
 // ─── URL helpers ─────────────────────────────────────────────────────────────
 
-/// Unwrap 4PDA redirect to get real OTA endpoint.
+/// Unwrap 4PDA redirect to get real OTA endpoint. Two forms are in use:
+/// `4pda.to/goto/?u=<url>` and `4pda.to/stat/go?url=<url>`.
 fn extract_real_url(url: &str) -> String {
     if let Ok(parsed) = url::Url::parse(url)
         && parsed
@@ -94,7 +95,7 @@ fn extract_real_url(url: &str) -> String {
             .unwrap_or(false)
     {
         for (k, v) in parsed.query_pairs() {
-            if k == "u" {
+            if k == "u" || k == "url" {
                 info!("Unwrapped 4PDA redirect -> {}", v);
                 return v.to_string();
             }
@@ -615,6 +616,16 @@ mod tests {
         ] {
             assert!(web_url(bad).is_err(), "{bad:?} must be rejected");
         }
+    }
+
+    #[test]
+    fn test_extract_4pda_stat_link() {
+        assert_eq!(
+            extract_real_url(
+                "https://4pda.to/stat/go?url=https%3A%2F%2Fgauss-opexcostmanual-sg.allawnofs.com%2Fremove-78df%2Fcomponent-ota%2Ffw.zip"
+            ),
+            "https://gauss-opexcostmanual-sg.allawnofs.com/remove-78df/component-ota/fw.zip"
+        );
     }
 
     #[test]
