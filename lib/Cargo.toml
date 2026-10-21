@@ -1,6 +1,6 @@
 [package]
 name = "lfff-lib"
-version = "2.9.3"
+version = "2.9.4"
 edition = "2024"
 description = "Core library for LibreFastbootFirmwareFlasher"
 license = "GPL-3.0"
