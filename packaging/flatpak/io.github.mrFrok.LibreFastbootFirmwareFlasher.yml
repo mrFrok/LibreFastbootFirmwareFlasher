@@ -77,7 +77,7 @@ modules:
       - install -Dm755 lfff -t /app/bin
       - install -Dm644 lfff-gui.svg /app/share/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg
       # The desktop file and icon have to be named after the app id.
-      - desktop-file-edit --set-icon=${FLATPAK_ID} lfff-gui.desktop
+      - desktop-file-edit --set-icon=${FLATPAK_ID} --set-key=StartupWMClass --set-value=${FLATPAK_ID} lfff-gui.desktop
       - install -Dm644 lfff-gui.desktop /app/share/applications/${FLATPAK_ID}.desktop
       - install -Dm644 ${FLATPAK_ID}.metainfo.xml -t /app/share/metainfo
     sources:

@@ -12,3 +12,4 @@ Type=Application
 Categories=Utility;
 Keywords=android;fastboot;firmware;flash;oneplus;realme;oppo;
 StartupNotify=true
+StartupWMClass=lfff-gui

@@ -310,6 +310,12 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     let ui = MainWindow::new()?;
+    // The name of the desktop file: without an app id the window is
+    // anonymous on Wayland, and docks and window pickers cannot tie it to its
+    // icon. Flatpak names that file after its app id and passes it in.
+    #[cfg(target_os = "linux")]
+    // After the component: before it, no Slint platform exists to take it.
+    slint::set_xdg_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "lfff-gui".into()))?;
     ui.set_ui_scale(config.scale);
     ui.set_app_version(env!("CARGO_PKG_VERSION").into());
     ui.set_lang(config.lang.as_str().into());
