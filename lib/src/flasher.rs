@@ -683,6 +683,15 @@ fn flash_partition_inner(
 // Super partition preparation
 // ---------------------------------------------------------------------------
 
+// TODO: build super's layout instead of patching it. The payload carries the
+// exact layout (`payload_dumper --metadata`: groups, their sizes and partition
+// names). Write LP metadata from it in Rust — an empty super with the right
+// groups and `readonly` partitions — install it with `fastboot wipe-super`, then
+// flash the images. That is the full fix: the in-place resize below keeps a
+// correct layout correct, but cannot repair a device whose partitions an older
+// LFFF already moved into `default`. Firmware folders without a payload keep
+// the in-place path.
+
 /// What `prepare_super_with_log` does to make room in super before the
 /// active slot's dynamic partitions are flashed.
 #[derive(Debug, PartialEq, Eq)]
