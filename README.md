@@ -236,11 +236,15 @@ LibreFastbootFirmwareFlasher/
 
 The GUI is built with the official [Material 3 component set for
 Slint](https://material.slint.dev). It ships no crate, so a copy lives in
-`gui/material-1.18.1/`, taken verbatim from `ui-libraries/material/src` of
+`gui/material-1.18.1/`, taken from `ui-libraries/material/src` of
 [slint-ui/slint](https://github.com/slint-ui/slint) at tag `v1.18.1` and
 licensed MIT (see `gui/material-1.18.1/LICENSE.md`). It is versioned in lockstep
 with Slint, so it is refreshed from the tag matching the `slint` dependency.
 `gui/build.rs` registers it as the `@material` library.
+
+One local change, to repeat on every refresh: `MaterialTypography.medium` in
+`ui/styling/material_typography.slint` is 500 (the Material 3 value) instead of
+upstream's 600, which made buttons and labels too heavy.
 
 ---
 

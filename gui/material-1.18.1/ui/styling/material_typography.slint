@@ -8,7 +8,9 @@ export struct TextStyle {
 
 export global MaterialTypography {
     out property <int> regular: 300;
-    out property <int> medium: 600;
+    // LFFF patch: 500 per the Material 3 type scale; upstream ships 600,
+    // which renders buttons and labels too heavy. See README.
+    out property <int> medium: 500;
     out property <int> semibold: 900;
 
     out property <TextStyle> display_large: {
