@@ -54,13 +54,20 @@ class Lfff < Formula
 
   def install
     resource("cli").stage { bin.install "lfff" }
-    # stage runs the block inside the unpacked resource, so a relative path is
-    # enough. Its block argument is a ResourceStageContext, not a Pathname, and
-    # cannot be joined onto.
     resource("gui").stage do
-      if OS.mac? && Pathname("LibreFastbootFirmwareFlasher.app").exist?
-        bin.install "LibreFastbootFirmwareFlasher.app/Contents/MacOS/lfff-gui"
-        prefix.install "LibreFastbootFirmwareFlasher.app"
+      if OS.mac?
+        # The macOS archive holds a single directory, the .app, and stage
+        # enters a lone top-level directory: the block runs inside the bundle
+        # itself. Rebuild it under prefix either way.
+        app = prefix/"LibreFastbootFirmwareFlasher.app"
+        if File.directory?("LibreFastbootFirmwareFlasher.app")
+          prefix.install "LibreFastbootFirmwareFlasher.app"
+        else
+          app.install Dir["*"]
+        end
+        # A link, not a copy pulled out of the bundle: the .app must stay whole
+        # to start from Finder.
+        bin.install_symlink app/"Contents/MacOS/lfff-gui"
       else
         bin.install "lfff-gui"
       end
