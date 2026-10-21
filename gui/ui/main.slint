@@ -102,6 +102,9 @@ export component MainWindow inherits MaterialWindow {
     in-out property <string> cable-detail;
     in-out property <string> result-detail;
     in-out property <bool> untouched: true;
+    in-out property <int> install-minutes: 0;
+    in-out property <int> install-seconds: 0;
+    in-out property <bool> install-wiped: false;
     // Confirm sheet: 0 hidden, otherwise ConfirmSheet.kind + 1
     in-out property <int> sheet: 0;
     in-out property <bool> skip-boot;
@@ -673,6 +676,9 @@ export component MainWindow inherits MaterialWindow {
                             export-status: root.flash-export-status;
                             result-detail: root.result-detail;
                             untouched: root.untouched;
+                            minutes: root.install-minutes;
+                            seconds: root.install-seconds;
+                            wiped: root.install-wiped;
                             install-deps => { root.install-deps(); }
                             pick-zip => { root.pick-zip(); }
                             pick-folder => { root.pick-folder(); }
@@ -685,7 +691,11 @@ export component MainWindow inherits MaterialWindow {
                             cable-retry => { root.cable-retry(); }
                             cable-stop => { root.cable-stop(); }
                             stop-install => { root.cancel-flash(); }
-                            reboot-phone => { root.post-flash-reboot(); root.install-finish(); }
+                            reboot-phone => {
+                                root.post-flash-reboot();
+                                root.install-wiped = false;
+                                root.install-view = 4;
+                            }
                             wipe-phone => {
                                 root.confirm-action = ConfirmAction.wipe;
                                 root.show-confirm = true;
@@ -967,7 +977,8 @@ export component MainWindow inherits MaterialWindow {
         confirmed => {
             root.show-confirm = false;
             root.post-flash-wipe();
-            root.install-finish();
+            root.install-wiped = true;
+            root.install-view = 4;
         }
     }
 

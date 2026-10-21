@@ -9,6 +9,12 @@ use crate::{
 };
 use lfff_lib::arb::ArbVerdict;
 
+thread_local! {
+    /// When the current install started, for the time on the result pages.
+    static INSTALL_START: std::cell::Cell<Option<std::time::Instant>> =
+        const { std::cell::Cell::new(None) };
+}
+
 /// Pinned tool names in config.json, by Tools-page id - 1.
 const TOOL_NAMES: [&str; 8] = [
     "partition",
@@ -254,6 +260,11 @@ pub fn poll(
 
                 if !ui.get_classic_ui() && ui.get_install_view() == 1 {
                     // The new interface shows the result as a page, not a dialog.
+                    if let Some(start) = INSTALL_START.with(|s| s.get()) {
+                        let secs = start.elapsed().as_secs();
+                        ui.set_install_minutes((secs / 60) as i32);
+                        ui.set_install_seconds((secs % 60) as i32);
+                    }
                     if success {
                         ui.set_stage2(2);
                         ui.set_install_view(2);
@@ -1269,6 +1280,7 @@ fn register_install_callbacks(
             ui.set_flash_progress(0.0);
             ui.set_current_partition("".into());
             ui.set_install_view(1);
+            INSTALL_START.with(|s| s.set(Some(std::time::Instant::now())));
             t.send(Cmd::RunInstall {
                 dir,
                 method,

@@ -18,7 +18,8 @@ import {
 import { LogView } from "../components/log-view.slint";
 
 // The beginner flow: a checklist that completes on its own, then a hands-off
-// run, then the result. `view`: 0 checklist, 1 running, 2 done, 3 stopped.
+// run, then the result. `view`: 0 checklist, 1 running, 2 done, 3 stopped,
+// 4 done and the phone restarting.
 export component InstallPage inherits VerticalLayout {
     in property <int> view;
 
@@ -63,6 +64,14 @@ export component InstallPage inherits VerticalLayout {
     in property <string> result-detail;
     // true when the run stopped before anything was written to the phone
     in property <bool> untouched;
+    // How long the install took, for the result pages.
+    in property <int> minutes;
+    in property <int> seconds;
+    // true when the phone was erased before restarting
+    in property <bool> wiped;
+    property <string> took: Tr.t("in ", "за ", "用时 ", "用時 ")
+        + (root.minutes > 0 ? root.minutes + Tr.t(" min ", " мин ", " 分 ", " 分 ") : "")
+        + root.seconds + Tr.t(" s", " с", " 秒", " 秒");
 
     callback install-deps();
     callback pick-zip();
@@ -606,7 +615,7 @@ export component InstallPage inherits VerticalLayout {
         }
 
         Text {
-            text: root.fw-name + " · " + Tr.t("now restart the phone", "осталось перезагрузить смартфон", "现在重启手机", "現在重新啟動手機");
+            text: root.fw-name + " · " + root.took + " · " + Tr.t("now restart the phone", "осталось перезагрузить смартфон", "现在重启手机", "現在重新啟動手機");
             font-size: 14px;
             color: MaterialPalette.on-surface-variant;
             horizontal-alignment: center;
@@ -781,6 +790,64 @@ export component InstallPage inherits VerticalLayout {
 
             TextButton {
                 text: Tr.t("Close", "Закрыть", "关闭", "關閉");
+                clicked => {
+                    root.finish();
+                }
+            }
+        }
+    }
+
+    // ════ Restarting ════════════════════════════════════════════════════════
+    if root.view == 4: VerticalLayout {
+        alignment: center;
+        spacing: 18px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 112px;
+                height: 112px;
+                border-radius: 56px;
+                background: StatusColors.success-container;
+                Image {
+                    source: @image-url("../icons/check.svg");
+                    width: 64px;
+                    height: 64px;
+                    colorize: StatusColors.on-success-container;
+                }
+            }
+        }
+
+        Text {
+            text: Tr.t("Flashed successfully", "Успешно прошито", "刷写成功", "刷寫成功");
+            font-size: 30px;
+            font-weight: 600;
+            color: StatusColors.success;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: root.fw-name + " · " + root.took;
+            font-size: 15px;
+            color: MaterialPalette.on-surface;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: root.wiped
+                ? Tr.t("The phone was erased and is restarting. The first start takes a while, up to 10 minutes: don't unplug it in the meantime.", "Смартфон очищен и перезагружается. Первый запуск идёт долго, до 10 минут: пока не отключайте его.", "手机已清除数据并正在重启。首次启动需要较长时间，最长约 10 分钟：在此期间请勿断开。", "手機已清除資料並正在重新啟動。首次開機需要較長時間，最長約 10 分鐘：在此期間請勿中斷連接。")
+                : Tr.t("The phone is restarting. The first start after an update can take several minutes.", "Смартфон перезагружается. Первый запуск после обновления может занять несколько минут.", "手机正在重启。更新后首次启动可能需要几分钟。", "手機正在重新啟動。更新後首次開機可能需要幾分鐘。");
+            font-size: 14px;
+            color: MaterialPalette.on-surface-variant;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            padding-top: 8px;
+            FilledButton {
+                min-width: 180px;
+                text: Tr.t("Done", "Готово", "完成", "完成");
                 clicked => {
                     root.finish();
                 }
