@@ -123,6 +123,80 @@ fn parse_payload_properties(data: &str) -> HashMap<String, String> {
 /// it did not create, since the CLI lets the user pick any output path.
 const EXTRACTION_MARKER: &str = ".lfff-extracted";
 
+/// Written only when an extraction finished, holding the archive's
+/// fingerprint. [`EXTRACTION_MARKER`] cannot say that: it is written before
+/// extracting, so that even a failed run is cleaned up next time.
+const COMPLETE_MARKER: &str = ".lfff-complete";
+
+/// Name, size and modification time of an archive: enough to tell a re-picked
+/// archive from a different or re-downloaded one without hashing gigabytes.
+pub fn archive_fingerprint(zip_path: &Path) -> Option<String> {
+    let meta = fs::metadata(zip_path).ok()?;
+    let mtime = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    let name = zip_path.file_name()?.to_string_lossy();
+    Some(format!("{}\n{}\n{}\n", name, meta.len(), mtime))
+}
+
+/// Whether `output_dir` holds a finished extraction of exactly this archive.
+pub fn is_extracted(zip_path: &Path, output_dir: &Path) -> bool {
+    match (
+        archive_fingerprint(zip_path),
+        fs::read_to_string(output_dir.join(COMPLETE_MARKER)),
+    ) {
+        (Some(want), Ok(have)) => want == have,
+        _ => false,
+    }
+}
+
+fn mark_complete(zip_path: &Path, output_dir: &Path) {
+    if let Some(fp) = archive_fingerprint(zip_path) {
+        fs::write(output_dir.join(COMPLETE_MARKER), fp).ok();
+    }
+}
+
+/// Firmware folders LFFF extracted under `root`, and their total size.
+pub fn extraction_cache(root: &Path) -> (usize, u64) {
+    let mut count = 0;
+    let mut bytes = 0;
+    for dir in cache_dirs(root) {
+        count += 1;
+        bytes += walkdir(&dir)
+            .iter()
+            .filter_map(|p| fs::symlink_metadata(p).ok())
+            .filter(|m| m.is_file())
+            .map(|m| m.len())
+            .sum::<u64>();
+    }
+    (count, bytes)
+}
+
+/// Deletes the firmware folders LFFF extracted under `root`. A folder without
+/// [`EXTRACTION_MARKER`] was not made by LFFF and is never touched.
+pub fn clear_extraction_cache(root: &Path) -> io::Result<()> {
+    for dir in cache_dirs(root) {
+        fs::remove_dir_all(dir)?;
+    }
+    Ok(())
+}
+
+fn cache_dirs(root: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(root) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            fs::symlink_metadata(p).is_ok_and(|m| m.is_dir()) && p.join(EXTRACTION_MARKER).is_file()
+        })
+        .collect()
+}
+
 /// Before extracting into `dir` again, drop the `.img` files a previous LFFF
 /// extraction left in its own group folders. Flashing collects every image
 /// under the directory, so a leftover — say a `persist.img` from an earlier,
@@ -455,6 +529,7 @@ pub fn extract_firmware_with_log(
     }
     // Written before extracting, so even a failed run is cleaned up next time.
     fs::write(output_dir.join(EXTRACTION_MARKER), b"").ok();
+    fs::remove_file(output_dir.join(COMPLETE_MARKER)).ok();
     info!(
         "Extracting {} → {}",
         zip_path.file_name().unwrap_or_default().to_string_lossy(),
@@ -602,6 +677,7 @@ pub fn extract_firmware_with_log(
         };
         let _ = fs::remove_dir(&staging);
         let arb = find_xbl_config(output_dir).map(|p| extract_arb_from_xbl(&p));
+        mark_complete(&zip_path, output_dir);
         return ExtractionResult {
             success: true,
             output_dir: output_dir.to_path_buf(),
@@ -666,6 +742,7 @@ pub fn extract_firmware_with_log(
         };
         let _ = fs::remove_dir(&staging);
         let arb = find_xbl_config(output_dir).map(|p| extract_arb_from_xbl(&p));
+        mark_complete(&zip_path, output_dir);
         return ExtractionResult {
             success: true,
             output_dir: output_dir.to_path_buf(),
@@ -856,6 +933,39 @@ mod tests {
     fn touch(path: &Path) {
         fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
         fs::write(path, b"x").expect("write");
+    }
+
+    #[test]
+    fn an_extraction_counts_as_cached_only_for_the_same_archive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let zip = tmp.path().join("fw.zip");
+        fs::write(&zip, b"zip bytes").unwrap();
+        let out = tmp.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        assert!(!is_extracted(&zip, &out));
+        mark_complete(&zip, &out);
+        assert!(is_extracted(&zip, &out));
+        // A re-downloaded archive of another size is not the same firmware.
+        fs::write(&zip, b"other, longer zip bytes").unwrap();
+        assert!(!is_extracted(&zip, &out));
+    }
+
+    #[test]
+    fn clearing_the_cache_spares_folders_lfff_did_not_make() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ours = tmp.path().join("RMX3709_16");
+        let theirs = tmp.path().join("photos");
+        fs::create_dir_all(ours.join("system")).unwrap();
+        fs::create_dir_all(&theirs).unwrap();
+        touch(&ours.join(EXTRACTION_MARKER));
+        fs::write(ours.join("system/system.img"), b"1234").unwrap();
+        fs::write(theirs.join("a.jpg"), b"x").unwrap();
+        let (count, bytes) = extraction_cache(tmp.path());
+        assert_eq!(count, 1);
+        assert!(bytes >= 4, "{bytes}");
+        clear_extraction_cache(tmp.path()).unwrap();
+        assert!(!ours.exists());
+        assert!(theirs.join("a.jpg").exists());
     }
 
     #[test]
