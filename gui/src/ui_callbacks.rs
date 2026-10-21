@@ -35,8 +35,12 @@ fn update_wrong_device(ui: &MainWindow) {
 }
 
 /// A desktop notification with a sound, for an install the user may have
-/// walked away from. Best effort, off the UI thread.
+/// walked away from. Best effort, off the UI thread. Off in Settings means
+/// neither.
 fn notify_done(title: String, body: String, ok: bool) {
+    if !load_config().sound {
+        return;
+    }
     std::thread::spawn(move || {
         #[cfg(target_os = "macos")]
         {
@@ -1472,6 +1476,12 @@ fn register_install_callbacks(
                 ui.invoke_retry_flash();
             }
         }
+    });
+
+    ui.on_set_sound(|on| {
+        let mut config = load_config();
+        config.sound = on;
+        save_config(&config);
     });
 
     ui.on_accept_notice(|| {

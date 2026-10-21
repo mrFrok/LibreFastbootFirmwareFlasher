@@ -34,6 +34,9 @@ pub struct Config {
     /// so in bootloader and fastbootd the phone is named from here.
     #[serde(default)]
     pub known_devices: BTreeMap<String, KnownDevice>,
+    /// Notify with a sound when an install ends.
+    #[serde(default = "default_true")]
+    pub sound: bool,
     /// The user closed the first-launch notice (supported phones, own risk);
     /// it is not shown again.
     #[serde(default)]
@@ -46,6 +49,10 @@ pub struct KnownDevice {
     pub name: String,
     /// ro.product.device; the key the chip choice is remembered under
     pub product: String,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_lang() -> String {
@@ -68,6 +75,7 @@ impl Default for Config {
             pinned_tools: Vec::new(),
             classic_ui: false,
             notice_accepted: false,
+            sound: true,
             known_devices: BTreeMap::new(),
         }
     }
@@ -170,5 +178,6 @@ mod tests {
         assert!(!c.classic_ui);
         // Existing users see the first-launch notice once after updating.
         assert!(!c.notice_accepted);
+        assert!(c.sound);
     }
 }

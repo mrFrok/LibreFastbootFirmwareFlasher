@@ -96,6 +96,8 @@ export component MainWindow inherits MaterialWindow {
     in-out property <bool> device-unauthorized: false;
     callback cancel-unpack();
     callback quit-app();
+    in-out property <bool> sound: true;
+    callback set-sound(bool);
     callback pick-cached(int);
     // ARB of the chosen firmware: -1 unknown, 0 none, >0 the level
     in-out property <int> fw-arb: -1;
@@ -751,6 +753,11 @@ export component MainWindow inherits MaterialWindow {
                             cache-summary: root.cache-summary;
                             chips-summary: root.chips-summary;
                             classic-ui: root.classic-ui;
+                            sound: root.sound;
+                            set-sound(on) => {
+                                root.sound = on;
+                                root.set-sound(on);
+                            }
                             set-dark(d) => {
                                 if d != root.is-dark {
                                     root.pending-dark = d;

@@ -14,6 +14,7 @@ export component SettingsPage inherits VerticalLayout {
     // e.g. "RMX3709 — Snapdragon", empty when nothing is remembered
     in property <string> chips-summary;
     in property <bool> classic-ui;
+    in property <bool> sound;
     callback set-dark(bool);
     callback set-scheme(int);
     callback set-translucent(bool);
@@ -23,6 +24,7 @@ export component SettingsPage inherits VerticalLayout {
     callback clear-cache();
     callback forget-chips();
     callback set-classic(bool);
+    callback set-sound(bool);
 
     // Each scheme's dark-mode primary, as in the classic top bar.
     property <[color]> swatches: [#66B2FF, #ADC6FF, #00C7BF, #7EC16D, #E39C40, #F68792, #BA98F6];
@@ -182,6 +184,25 @@ export component SettingsPage inherits VerticalLayout {
 
             Section {
                 title: Tr.t("Interface", "Интерфейс", "界面", "介面");
+                FieldRow {
+                    label: Tr.t("Sound notifications", "Звуковые уведомления", "声音通知", "聲音通知");
+                    Switch {
+                        height: 32px;
+                        y: (parent.height - self.height) / 2;
+                        checked: root.sound;
+                        checked-state-changed(c) => {
+                            root.set-sound(c);
+                        }
+                    }
+
+                    Text {
+                        text: Tr.t("when an install ends", "когда установка закончилась", "安装结束时", "安裝結束時");
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                        vertical-alignment: center;
+                    }
+                }
+
                 FieldRow {
                     label: Tr.t("Classic interface", "Классический интерфейс", "经典界面", "經典介面");
                     Switch {
