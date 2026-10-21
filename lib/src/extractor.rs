@@ -8,6 +8,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result};
 use tracing::{debug, info};
@@ -282,6 +283,42 @@ fn move_into_groups(images: &[PathBuf], base: &Path) -> Result<HashMap<String, V
 
 /// Run payload_dumper (Rust) or payload-dumper-go to extract images.
 ///
+/// `wait_with_output`, but polling so that a cancel kills the child. The
+/// pipes are drained on threads meanwhile: a child blocked on a full pipe
+/// would never exit.
+fn wait_cancellable(
+    mut child: std::process::Child,
+    cancel: Option<&AtomicBool>,
+) -> io::Result<std::process::Output> {
+    use std::io::Read;
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut p) = pipe {
+                let _ = p.read_to_end(&mut buf);
+            }
+            buf
+        })
+    };
+    let out = drain(child.stdout.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let err = drain(child.stderr.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            let _ = child.kill();
+            break child.wait()?;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    Ok(std::process::Output {
+        status,
+        stdout: out.join().unwrap_or_default(),
+        stderr: err.join().unwrap_or_default(),
+    })
+}
+
 /// payload_dumper accepts ZIP files directly (no need to unpack payload.bin first).
 /// payload-dumper-go requires a raw payload.bin path.
 fn run_payload_dumper(
@@ -289,6 +326,7 @@ fn run_payload_dumper(
     output: &Path,
     partitions: Option<&[String]>,
     on_log: Option<&dyn Fn(String)>,
+    cancel: Option<&AtomicBool>,
 ) -> bool {
     let (tool, images_flag) = if let Some(dumper) = crate::deps::find_payload_dumper() {
         let flag = if dumper.is_rust() { "-i" } else { "-p" };
@@ -349,7 +387,7 @@ fn run_payload_dumper(
     if let Some(cb) = on_log {
         cb(format!("Running {}...", tool_name));
     }
-    let output_result = child.wait_with_output();
+    let output_result = wait_cancellable(child, cancel);
 
     fn strip_ansi(s: &str) -> String {
         let mut out = String::with_capacity(s.len());
@@ -515,6 +553,20 @@ pub fn extract_firmware_with_log(
     partitions: Option<&[String]>,
     on_log: Option<&dyn Fn(String)>,
 ) -> ExtractionResult {
+    extract_firmware_cancellable(zip_path, output_dir, checksum, partitions, on_log, None)
+}
+
+/// [`extract_firmware_with_log`] that stops, killing payload_dumper, once
+/// `cancel` is set. A cancelled run fails with the error "Cancelled" and is
+/// never taken for a finished extraction.
+pub fn extract_firmware_cancellable(
+    zip_path: &Path,
+    output_dir: &Path,
+    checksum: Option<&str>,
+    partitions: Option<&[String]>,
+    on_log: Option<&dyn Fn(String)>,
+    cancel: Option<&AtomicBool>,
+) -> ExtractionResult {
     let zip_path = match zip_path.canonicalize() {
         Ok(p) => p,
         Err(_) => {
@@ -628,7 +680,7 @@ pub fn extract_firmware_with_log(
         let ok = if has_payload_dumper_rust() {
             // payload_dumper (Rust) accepts ZIP directly — no need to extract payload.bin
             info!("Using payload_dumper with ZIP input (no unzipping needed)");
-            run_payload_dumper(&zip_path, &staging, partitions, on_log)
+            run_payload_dumper(&zip_path, &staging, partitions, on_log, cancel)
         } else {
             // payload-dumper-go needs raw payload.bin — extract it first.
             // Unique per-run temp dir (auto-removed on drop): a fixed /tmp path
@@ -685,11 +737,14 @@ pub fn extract_firmware_with_log(
             if !extract_result {
                 false
             } else {
-                run_payload_dumper(&payload_tmp, &staging, partitions, on_log)
+                run_payload_dumper(&payload_tmp, &staging, partitions, on_log, cancel)
             }
             // `tmp` (with payload.bin inside) is removed when it drops here.
         };
 
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return ExtractionResult::fail(output_dir, "Cancelled");
+        }
         if !ok {
             return ExtractionResult::fail(output_dir, "payload dumper failed");
         }
@@ -730,6 +785,9 @@ pub fn extract_firmware_with_log(
         };
         let mut extracted = Vec::new();
         for i in 0..z.len() {
+            if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+                return ExtractionResult::fail(output_dir, "Cancelled");
+            }
             let mut e = match z.by_index(i) {
                 Ok(e) => e,
                 Err(e) => {
@@ -825,6 +883,38 @@ fn safe_dir_name(raw: &str) -> Option<String> {
     } else {
         Some(cleaned.to_string())
     }
+}
+
+/// Device codenames an OTA is built for (`pre-device` in
+/// META-INF/com/android/metadata, comma-separated when several). Empty when
+/// the archive does not say — custom and repacked builds often don't.
+pub fn firmware_devices(zip_path: &Path) -> Vec<String> {
+    let Ok(f) = fs::File::open(zip_path) else {
+        return Vec::new();
+    };
+    let Ok(mut z) = zip::ZipArchive::new(f) else {
+        return Vec::new();
+    };
+    let Some(props) = z
+        .by_name("META-INF/com/android/metadata")
+        .ok()
+        .and_then(|mut e| {
+            let mut buf = String::new();
+            io::Read::read_to_string(&mut e, &mut buf).ok()?;
+            Some(parse_payload_properties(&buf))
+        })
+    else {
+        return Vec::new();
+    };
+    props
+        .get("pre-device")
+        .map(|v| {
+            v.split(',')
+                .map(|d| d.trim().to_string())
+                .filter(|d| !d.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn firmware_name_from_archive(zip_path: &Path) -> String {
@@ -1109,6 +1199,22 @@ mod tests {
                 "{label}: {name:?}"
             );
         }
+    }
+
+    #[test]
+    fn firmware_devices_reads_pre_device() {
+        let tmp = tempfile::tempdir().unwrap();
+        let z = zip_with(
+            tmp.path(),
+            "ota.zip",
+            &[(
+                "META-INF/com/android/metadata",
+                "ota-type=AB\npre-device=RE5C3B, RE5C3BL1\nproduct_name=RMX3709\n",
+            )],
+        );
+        assert_eq!(firmware_devices(&z), vec!["RE5C3B", "RE5C3BL1"]);
+        let bare = zip_with(tmp.path(), "bare.zip", &[("payload.bin", "x")]);
+        assert!(firmware_devices(&bare).is_empty());
     }
 
     #[test]
