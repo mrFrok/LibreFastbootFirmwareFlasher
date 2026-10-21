@@ -27,7 +27,15 @@ jobs:
       - name: Tests
         run: cargo test -p lfff-lib -p lfff-cli
       - name: Packaging script tests
-        run: python3 scripts/test_update_packaging.py
+        run: |
+          python3 scripts/test_update_packaging.py
+          python3 scripts/test_release_notes.py
+      # Caught here rather than at the tag: the release job refuses to publish
+      # a version without notes.
+      - name: CHANGELOG.md has notes for this version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' cli/Cargo.toml | head -1)
+          python3 scripts/release-notes.py "$version" > /dev/null
 
   # Nobody on the project has a Mac, so this is where macOS-only code gets
   # exercised at all. The runners have Homebrew, zsh and the /usr/bin/apt Java

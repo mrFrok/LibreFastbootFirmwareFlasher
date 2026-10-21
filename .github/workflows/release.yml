@@ -360,10 +360,18 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # The changelog section is the release text; GitHub appends the list
+      # of changes after it. No section, no release.
+      - name: Release notes from CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 scripts/release-notes.py "$TAG" > release-notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
+          body_path: release-notes.md
           generate_release_notes: true
 
   # ---------------------------------------------------------------------------
