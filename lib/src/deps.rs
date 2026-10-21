@@ -170,6 +170,16 @@ fn is_atomic_distro() -> bool {
 
 /// Detect the best available package manager.
 fn detect_pkg_manager() -> Option<String> {
+    // macOS has exactly one candidate, and it must be decided before the
+    // Linux list below is consulted: macOS ships its own /usr/bin/apt, a
+    // leftover Java stub that has nothing to do with Debian, so probing for
+    // `apt` there "found" it and ran `sudo apt-get install` on a Mac.
+    // find_brew also checks Homebrew's default prefixes, which a GUI started
+    // from Finder may not have on its PATH.
+    if cfg!(target_os = "macos") {
+        return find_brew().map(|_| "brew".into());
+    }
+
     if is_atomic_distro() {
         // Atomic distros: try native layering, then modern Nix, then legacy Nix, then per-user installers
         for pm in &["rpm-ostree", "nix", "nix-env", "brew"] {
@@ -205,11 +215,6 @@ fn detect_pkg_manager() -> Option<String> {
                 .to_string(),
             );
         }
-    }
-
-    // macOS: GUI launched from .app may not have /opt/homebrew/bin in PATH
-    if cfg!(target_os = "macos") && find_brew().is_some() {
-        return Some("brew".into());
     }
 
     None
