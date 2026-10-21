@@ -1,0 +1,95 @@
+name: Warm the GUI build cache
+
+# The glibc and macOS GUI builds compile Slint and its stack from scratch on
+# every release, ten minutes and more per target. Same remedy as the musl
+# build (musl-gui-cache.yml, which explains the details): Actions caches are
+# scoped to the ref that saved them, so the cache is built here on main and
+# release.yml only restores it.
+#
+# The key holds the rustc version as well as Cargo.lock: a new stable
+# toolchain invalidates every compiled crate, so its cache would only take
+# room. Runs when dependencies change, every five days so that GitHub does
+# not evict an unread cache, and on demand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.lock
+      - .github/workflows/gui-cache.yml
+  schedule:
+    - cron: '47 3 */5 * *'
+  workflow_dispatch:
+
+concurrency:
+  group: gui-cache
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    name: GUI cache — ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      # Same targets and runners as build-gui in release.yml — keep in sync.
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            name: linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+            name: linux-aarch64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: macos-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: macos-aarch64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: rustc version for the cache key
+        id: rustc
+        run: echo "version=$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
+      # Same key and paths as the restore step in release.yml — keep in sync.
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/${{ matrix.target }}/release
+          key: gui-${{ matrix.target }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: gui-${{ matrix.target }}-${{ steps.rustc.outputs.version }}-
+
+      # Same packages as release.yml's build-gui — keep in sync.
+      - name: Install Linux system dependencies
+        if: steps.cache.outputs.cache-hit != 'true' && contains(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libxkbcommon-dev \
+            libfontconfig1-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libwayland-dev \
+            libx11-dev \
+            libxcb1-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libdbus-1-dev \
+            pkg-config
+
+      # An exact hit already matches Cargo.lock and the toolchain; restoring
+      # it was the point.
+      - name: Build GUI
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo build --release --target ${{ matrix.target }} -p lfff-gui

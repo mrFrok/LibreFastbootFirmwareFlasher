@@ -115,6 +115,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: rustc version for the cache key
+        id: rustc
+        run: echo "version=$(rustc -V | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
+      # Restore only: the cache is written on main by gui-cache.yml (same
+      # key and paths — keep in sync). A miss just means a full build.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/${{ matrix.target }}/release
+          key: gui-${{ matrix.target }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: gui-${{ matrix.target }}-${{ steps.rustc.outputs.version }}-
 
       - name: Install Linux system dependencies
         if: contains(matrix.os, 'ubuntu')
