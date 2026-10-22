@@ -4,6 +4,7 @@ mod config;
 mod device_poll;
 mod env_path;
 mod log_models;
+mod ota;
 mod ui_callbacks;
 mod worker;
 
@@ -156,6 +157,21 @@ enum WMsg {
     DeviceUnauthorized,
     /// The OTA repair finished: Ok(partitions removed) or why it stopped.
     RepairDone(Result<usize, String>),
+    /// Official firmware search (`ota`); `generation` drops stale answers.
+    OtaProgress {
+        generation: u64,
+        done: usize,
+        total: usize,
+    },
+    OtaFound {
+        generation: u64,
+        result: Result<Vec<lfff_ota::Found>, String>,
+    },
+    OtaChanges {
+        generation: u64,
+        index: i32,
+        text: String,
+    },
 }
 
 #[derive(Debug)]
@@ -351,6 +367,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let worker_busy = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let current_device = std::sync::Arc::new(std::sync::Mutex::new(None));
     device_poll::spawn(mtx.clone(), worker_busy.clone(), current_device.clone());
+    let ota_tx = mtx.clone();
     thread::spawn(move || worker::worker(crx, mtx, flash_cancel_w, worker_busy, current_device));
 
     let models = log_models::LogModels::new();
@@ -365,6 +382,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     models.refresh_history();
 
+    ota::register(&ui, &ota_tx, &ctx);
     ui_callbacks::register_callbacks(
         &ui,
         &ctx,

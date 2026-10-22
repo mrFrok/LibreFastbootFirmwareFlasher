@@ -49,6 +49,13 @@ impl Region {
             .find(|r| r.code().eq_ignore_ascii_case(s.trim()))
     }
 
+    /// The region a phone belongs to, from its `ro.build.oplus_nv_id`.
+    pub fn from_carrier(nv_id: &str) -> Option<Region> {
+        Region::ALL
+            .into_iter()
+            .find(|r| r.carrier() == nv_id.trim())
+    }
+
     pub fn host(self) -> &'static str {
         match self {
             Region::Cn => HOST_CN,
@@ -124,6 +131,8 @@ mod tests {
         assert_eq!(Region::Eu.model("CPH2747EEA"), "CPH2747EEA");
         assert_eq!(Region::In.model("CPH2745"), "CPH2745IN");
         assert_eq!(Region::Gl.model("CPH2747"), "CPH2747");
+        assert_eq!(Region::from_carrier("10100111"), Some(Region::Gl));
+        assert_eq!(Region::from_carrier("00000000"), None);
         for r in Region::ALL {
             assert_eq!(Region::parse(r.code()), Some(r));
         }

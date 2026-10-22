@@ -38,6 +38,8 @@ import { UpdateDialog } from "dialogs/update-dialog.slint";
 import { WarningDialog } from "dialogs/all.slint";
 import { AppNav } from "components/wizard.slint";
 import { InstallPage } from "pages/install-page.slint";
+import { OtaBuild } from "components/ota-finder.slint";
+export { OtaBuild }
 import { ToolsGrid, Tools, LogsPage, RepairPage } from "pages/tools-page.slint";
 import { SettingsPage } from "pages/settings-page.slint";
 import { HomeDash } from "pages/home-dash.slint";
@@ -352,6 +354,13 @@ export component MainWindow inherits MaterialWindow {
     in-out property <string> download-export-status: "";
     in-out property <string> output-dir;
     in-out property <string> download-url;
+    // Official firmware search on the install page
+    in-out property <string> ota-model;
+    in property <int> ota-state;
+    in property <int> ota-done;
+    in property <int> ota-total;
+    in property <[OtaBuild]> ota-builds;
+    in property <string> ota-error;
     in-out property <string> dl-speed;
     in-out property <string> dl-eta;
     in-out property <string> dl-downloaded;
@@ -438,6 +447,10 @@ export component MainWindow inherits MaterialWindow {
     callback install-deps();
     callback download-firmware(string);
     callback cancel-download();
+    callback find-ota(string);
+    callback cancel-ota();
+    callback download-ota(int);
+    callback load-ota-changes(int);
     callback extract-firmware();
     callback open-url(string);
     callback browse-output-dir();
@@ -689,6 +702,16 @@ export component MainWindow inherits MaterialWindow {
                             dl-speed: root.dl-speed;
                             dl-eta: root.dl-eta;
                             device: root.device;
+                            ota-model <=> root.ota-model;
+                            ota-state: root.ota-state;
+                            ota-done: root.ota-done;
+                            ota-total: root.ota-total;
+                            ota-builds: root.ota-builds;
+                            ota-error: root.ota-error;
+                            find-ota(m) => { root.find-ota(m); }
+                            cancel-ota => { root.cancel-ota(); }
+                            download-ota(i) => { root.download-ota(i); }
+                            load-ota-changes(i) => { root.load-ota-changes(i); }
                             chip: root.chip;
                             stage0: root.stage0;
                             stage1: root.stage1;

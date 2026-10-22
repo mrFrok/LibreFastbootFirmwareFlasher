@@ -16,6 +16,7 @@ import {
     StageRow,
 } from "../components/wizard.slint";
 import { LogView } from "../components/log-view.slint";
+import { OtaFinder, OtaBuild } from "../components/ota-finder.slint";
 
 // The beginner flow: a checklist that completes on its own, then a hands-off
 // run, then the result. `view`: 0 checklist, 1 running, 2 done, 3 stopped,
@@ -49,6 +50,13 @@ export component InstallPage inherits VerticalLayout {
     in property <string> dl-speed;
     in property <string> dl-eta;
     in property <DeviceInfo> device;
+    // Official firmware search (see OtaFinder)
+    in-out property <string> ota-model;
+    in property <int> ota-state;
+    in property <int> ota-done;
+    in property <int> ota-total;
+    in property <[OtaBuild]> ota-builds;
+    in property <string> ota-error;
     // 0 not chosen for this model, 1 Snapdragon, 2 MediaTek
     in property <int> chip;
 
@@ -86,6 +94,10 @@ export component InstallPage inherits VerticalLayout {
     callback paste-url();
     callback download(string);
     callback cancel-download();
+    callback find-ota(string);
+    callback cancel-ota();
+    callback download-ota(int);
+    callback load-ota-changes(int);
     callback change-firmware();
     callback choose-chip(int);
     callback install();
@@ -270,15 +282,15 @@ export component InstallPage inherits VerticalLayout {
                             }
                         }
                     }
+                    if root.fw-state == 0 || root.fw-state == 5: Text {
+                        text: Tr.t("or download from a link", "или скачайте по ссылке", "或通过链接下载", "或透過連結下載");
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                    }
+
                     if root.fw-state == 0 || root.fw-state == 5: HorizontalLayout {
                         spacing: 8px;
                         height: 40px;
-                        Text {
-                            text: Tr.t("or download from a link", "или скачайте по ссылке", "或通过链接下载", "或透過連結下載");
-                            font-size: 14px;
-                            color: MaterialPalette.on-surface-variant;
-                            vertical-alignment: center;
-                        }
 
                         Rectangle {
                             horizontal-stretch: 1;
@@ -324,6 +336,27 @@ export component InstallPage inherits VerticalLayout {
                             }
                         }
                     }
+                    if root.fw-state == 0 || root.fw-state == 5: OtaFinder {
+                        model <=> root.ota-model;
+                        state: root.ota-state;
+                        done: root.ota-done;
+                        total: root.ota-total;
+                        builds: root.ota-builds;
+                        error: root.ota-error;
+                        find(m) => {
+                            root.find-ota(m);
+                        }
+                        cancel => {
+                            root.cancel-ota();
+                        }
+                        download(i) => {
+                            root.download-ota(i);
+                        }
+                        load-changes(i) => {
+                            root.load-ota-changes(i);
+                        }
+                    }
+
                     if root.fw-state == 1: HorizontalLayout {
                         Text {
                             horizontal-stretch: 1;

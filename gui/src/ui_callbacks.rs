@@ -85,7 +85,7 @@ fn notify_done(title: String, body: String, ok: bool) {
     });
 }
 
-fn tr(lang: &str, en: &str, ru: &str, cn: &str, tw: &str) -> String {
+pub fn tr(lang: &str, en: &str, ru: &str, cn: &str, tw: &str) -> String {
     match lang {
         "ru" => ru,
         "zh-CN" => cn,
@@ -278,6 +278,7 @@ pub fn poll(
                 }
             }
             WMsg::DeviceDetected(d) => {
+                crate::ota::on_device(&ui, &d);
                 ui.set_chip(chip_for(&d.product));
                 ui.set_device_unauthorized(false);
                 PHONE_CODENAME
@@ -635,6 +636,17 @@ pub fn poll(
                 ui.set_cable_failed(true);
                 *cable_resp.borrow_mut() = Some(response);
             }
+            WMsg::OtaProgress {
+                generation,
+                done,
+                total,
+            } => crate::ota::on_progress(&ui, generation, done, total),
+            WMsg::OtaFound { generation, result } => crate::ota::on_found(&ui, generation, result),
+            WMsg::OtaChanges {
+                generation,
+                index,
+                text,
+            } => crate::ota::on_changes(&ui, generation, index, text),
             WMsg::RepairDone(r) => {
                 ui.set_repair_running(false);
                 match r {
@@ -718,7 +730,7 @@ fn firmware_error_text(lang: &str, e: &str) -> String {
 }
 
 /// Start unpacking/checking a firmware for the install page.
-fn prepare(ui: &MainWindow, ctx: &mpsc::Sender<Cmd>, path: &str) {
+pub fn prepare(ui: &MainWindow, ctx: &mpsc::Sender<Cmd>, path: &str) {
     let name = std::path::Path::new(path)
         .file_name()
         .map(|n| n.to_string_lossy().to_string())

@@ -3146,6 +3146,7 @@ dependencies = [
  "dirs",
  "env_logger",
  "lfff-lib",
+ "lfff-ota",
  "log",
  "reqwest",
  "rfd",

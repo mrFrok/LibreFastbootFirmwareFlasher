@@ -55,6 +55,11 @@ pub struct DeviceSnapshot {
     /// not fastboot's platform name: only then can it be checked against
     /// the device a firmware is built for.
     pub codename_known: bool,
+    /// `ro.build.version.ota` and `ro.build.oplus_nv_id` (the region's
+    /// carrier), read from Android only; empty otherwise. They tell which
+    /// official build the phone runs.
+    pub ota_version: String,
+    pub nv_id: String,
 }
 
 /// One adb round-trip for every property instead of a shell per value.
@@ -63,6 +68,8 @@ pub fn read_adb(serial: &str) -> DeviceSnapshot {
                   echo device=$(getprop ro.product.device); \
                   echo slot=$(getprop ro.boot.slot_suffix); \
                   echo locked=$(getprop ro.boot.flash.locked); \
+                  echo ota=$(getprop ro.build.version.ota); \
+                  echo nv=$(getprop ro.build.oplus_nv_id); \
                   echo battery=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)";
     let r = run_cmd(&["adb", "-s", serial, "shell", script], 5);
     let get = |key: &str| -> String {
@@ -106,6 +113,8 @@ pub fn read_adb(serial: &str) -> DeviceSnapshot {
         unlocked: (get("locked") == "0").then_some(true),
         battery: get("battery").parse().unwrap_or(-1),
         codename_known,
+        ota_version: get("ota"),
+        nv_id: get("nv"),
     }
 }
 
@@ -144,6 +153,8 @@ pub fn read_fastboot(serial: &str) -> Option<DeviceSnapshot> {
         unlocked,
         battery: info.battery_level,
         codename_known,
+        ota_version: String::new(),
+        nv_id: String::new(),
     })
 }
 

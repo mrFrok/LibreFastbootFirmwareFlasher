@@ -15,6 +15,7 @@ vulkan = ["slint/renderer-skia-vulkan"]
 [dependencies]
 slint = { version = "1.18.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-skia", "renderer-software", "accessibility"] }
 lfff-lib = { path = "../lib" }
+lfff-ota = { path = "../ota" }
 rfd = "0.17"
 arboard = "3"
 dirs = "7"
