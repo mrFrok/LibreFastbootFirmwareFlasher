@@ -27,7 +27,7 @@ LFFF flashes full firmware on **OnePlus / OPPO / Realme** devices with Qualcomm 
 **CLI** (`lfff`) — scriptable, headless.  
 **GUI** (`lfff-gui`) — native desktop app built with [Slint](https://slint.dev).
 
-`full flash` · `A/B slots` · `ARB protection` · `source build flash` · `OTA extraction` · `download` · `single-partition flash` · `error recovery` · `dependency installer`
+`full flash` · `A/B slots` · `ARB protection` · `source build flash` · `official firmware search` · `OTA extraction` · `download` · `single-partition flash` · `error recovery` · `dependency installer`
 
 ✈️ [Author](https://t.me/mrFrok228) · 👥 [Community](https://t.me/gt3neo5hub) · ☕ [Donate](https://boosty.to/mrfrok/donate)
 
@@ -128,6 +128,8 @@ lfff deps
 lfff-gui                                   # Launch GUI
 
 lfff deps                                  # Install fastboot, adb, aria2c, payload_dumper
+lfff find-ota CPH2747                      # Find official firmware, every region
+lfff find-ota CPH2747 --latest | lfff download -   # Download the newest
 lfff download https://.../firmware.zip     # Download OTA
 lfff extract firmware.zip                  # Extract OTA
 lfff flash ./firmwares/RMX3709             # Flash full firmware
@@ -152,7 +154,8 @@ export LFFF_PAYLOAD_DUMPER=/path/to/payload_dumper
 | `flash <dir>` | Full firmware flash, A/B slots | `lfff flash ./fw --dry-run` |
 | `flash-partition` | Flash a single partition | `lfff flash-partition boot --firmware-dir ./fw` |
 | `extract <zip>` | Extract OTA via payload_dumper | `lfff extract fw.zip -o ./out` |
-| `download <url>` | Multi-connection OTA download | `lfff download <url> -c 8` |
+| `find-ota <model>` | Official builds from the OPPO / OnePlus / realme servers | `lfff find-ota CPH2747 -r EU --changes` |
+| `download <url>` | Multi-connection OTA download; `-` reads the link from stdin | `lfff download <url> -c 8` |
 | `devices` | List fastboot/adb devices | `lfff devices --check` |
 | `arb` | Compare ARB: firmware vs device | `lfff arb --firmware-dir ./fw` |
 | `deps [tool..]` | Install missing dependencies | `lfff deps` / `lfff deps --check` |
@@ -259,6 +262,8 @@ upstream's 600, which made buttons and labels too heavy.
 
 - [NeFeroN](https://t.me/NeFeroN) — original Windows program author, help with flash implementation, Windows version
 - [MisterZtr](https://github.com/MisterZtr) — partial MediaTek support
+- [Houvven](https://github.com/Houvven) — OplusUpdater, whose update-server protocol (as kept current in the [RealmeOS/OplusUpdater-android](https://github.com/RealmeOS/OplusUpdater-android) fork, GPL-3.0) the firmware search is ported from
+- NeFeroN's LinkResolverDownloader — how the search combines regions and reads answers, and how expiring OPPO links are handled
 
 ---
 

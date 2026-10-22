@@ -3,6 +3,52 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.3.0
+
+### Find official firmware
+
+**Install firmware → Firmware** can now ask the OPPO / OnePlus / realme
+update servers for the phone's firmware: the model is filled in from the
+connected phone, Find lists the builds of every region (newest first, with
+region, date, size, security patch and what's new), and Download fetches
+and unpacks the chosen one. The build the phone runs is marked installed.
+A package already in the download folder is opened instead of downloaded
+again.
+
+On the command line:
+
+```
+lfff find-ota CPH2747                       # every region
+lfff find-ota CPH2747 -r EU --changes       # one region, with what's new
+lfff find-ota CPH2747 --latest | lfff download -
+```
+
+The update-server protocol is ported from Houvven's OplusUpdater as kept
+current in the RealmeOS/OplusUpdater-android fork (GPL-3.0); how regions
+are combined and answers read follows NeFeroN's LinkResolverDownloader.
+
+### Downloads
+
+- OPPO's signed download links live half an hour. A download that takes
+  longer now gets a fresh link and continues where it stopped.
+- Under the link field, and while downloading: how long the link still
+  works, in amber under five minutes, red once expired.
+- Downloading a package again no longer reports the first copy as the
+  result, and a finished file is never continued into.
+
+---
+
+### Коротко по-русски
+
+- **Поиск официальной прошивки** в шаге «Прошивка»: модель берётся со
+  смартфона, «Найти» показывает сборки всех регионов — новые сверху, с
+  регионом, датой, размером, патчем и списком изменений. Установленная
+  сборка отмечена. «Скачать» скачивает и распаковывает; если пакет уже
+  скачан, он открывается сразу. В командной строке — `lfff find-ota`.
+- **Ссылки OPPO** живут полчаса: если загрузка дольше, ссылка обновляется
+  сама и загрузка продолжается с того же места.
+- Под полем ссылки и во время загрузки — сколько ещё живёт ссылка.
+
 ## 3.2.0
 
 ### Safer super rebuild (experimental)
