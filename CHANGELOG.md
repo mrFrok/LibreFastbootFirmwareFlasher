@@ -3,6 +3,47 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.1.0
+
+### Repair system updates
+
+Phones flashed by versions before 3.0 often cannot install system updates
+("Attempting to create duplication partition"): those versions left the
+inactive slot's partitions in the wrong group. **Tools → Repair updates (OTA)**
+fixes it without root: it restarts the phone into fastbootd, removes the
+inactive slot's (empty) partitions and restarts it. Each update switches
+slot, so run it once before each of the next two updates and both slots are
+healed. It refuses devices without Virtual A/B and updates still in progress.
+
+### New
+
+- **Home** is the start page: the connected phone at a glance (model, mode,
+  bootloader, slot, processor, battery), the way into installing, the app's
+  version and update, and the project links.
+- **Rebuild super** (Settings → Experimental, off by default): before
+  flashing a payload .zip, replaces super's layout with the one the firmware
+  describes — groups and read-only partitions as from the factory, checked
+  against a factory OnePlus 15 layout. Refuses when it would drop partitions
+  the firmware does not carry (my_company, my_preload on OnePlus).
+
+### Fixes
+
+- A bootloader hidden as locked (GBL exploit, root hiders) no longer blocks
+  installing: Android's "locked" is not trusted, fastboot decides.
+- GUI builds on release are cached and faster.
+
+---
+
+### Коротко по-русски
+
+- **Починить обновления (OTA)** в «Инструментах»: если после прошивки
+  старыми версиями не ставятся обновления системы, инструмент чинит это без
+  root. Запустите его перед каждым из двух следующих обновлений.
+- **Главная** — стартовая страница: смартфон, версия, ссылки.
+- **Пересоздавать super** (Настройки → Экспериментальное, по умолчанию
+  выключено): заводская разметка super из прошивки.
+- Загрузчик, скрытый эксплойтом GBL, больше не мешает установке.
+
 ## 3.0.0
 
 1.x was a Python script, 2.x brought the Rust GUI; 3.0 rebuilds the
