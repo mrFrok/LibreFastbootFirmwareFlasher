@@ -40,6 +40,7 @@ import { AppNav } from "components/wizard.slint";
 import { InstallPage } from "pages/install-page.slint";
 import { ToolsGrid, Tools, LogsPage } from "pages/tools-page.slint";
 import { SettingsPage } from "pages/settings-page.slint";
+import { HomeDash } from "pages/home-dash.slint";
 import { ConfirmSheet } from "dialogs/confirm-sheet.slint";
 import { StartupNotice } from "dialogs/startup-notice.slint";
 import { TextButton } from "@material";
@@ -56,14 +57,15 @@ export component MainWindow inherits MaterialWindow {
     min-height: 500px;
 
     // Pages: 0=Home 1=Device 2=Download 3=Flash 4=Partition 5=History 6=About
-    // (the classic pages), 10=Install 11=Tools 12=Settings (the new ones).
+    // (the classic pages), 10=Install 11=Tools 12=Settings 13=Logs 14=Home
+    // (the new ones).
     // The new interface reaches pages 1-4 through Tools, and shares 5 and 6.
-    in-out property <int> page: 10;
+    in-out property <int> page: 14;
 
     // ── New interface ───────────────────────────────────────────────────────
     in-out property <bool> classic-ui: false;
     changed classic-ui => {
-        root.page = root.classic-ui ? 0 : 10;
+        root.page = root.classic-ui ? 0 : 14;
     }
     in-out property <bool> show-notice: false;
     callback accept-notice();
@@ -371,6 +373,8 @@ export component MainWindow inherits MaterialWindow {
     in-out property <string> app-version: "dev";
     in-out property <bool> show-update-dialog: false;
     in-out property <string> update-version: "";
+    // Set once an update is found; the dialog itself can be closed.
+    in-out property <bool> update-known: false;
     in-out property <string> update-url: "";
     in-out property <string> update-body: "";
     in-out property <float> cable-test-progress: 0;
@@ -460,13 +464,13 @@ export component MainWindow inherits MaterialWindow {
 
         // ── Sidebar ──────────────────────────────────────────────────────────
         if !root.classic-ui: AppNav {
-            page: root.page == 10 ? 0 : (root.page == 11 || root.on-tool-page) ? 1
+            page: root.page == 14 ? 5 : root.page == 10 ? 0 : (root.page == 11 || root.on-tool-page) ? 1
                 : root.page == 5 ? 2 : root.page == 12 ? 3 : root.page == 6 ? 4 : -1;
             tool: root.on-tool-page ? root.current-tool : 0;
             pinned: root.pinned-tools;
             version: root.app-version;
             navigate(i) => {
-                root.page = i == 0 ? 10 : i == 1 ? 11 : i == 2 ? 5 : i == 3 ? 12 : 6;
+                root.page = i == 5 ? 14 : i == 0 ? 10 : i == 1 ? 11 : i == 2 ? 5 : i == 3 ? 12 : 6;
             }
             open-tool(id) => {
                 root.open-tool(id);
@@ -735,6 +739,17 @@ export component MainWindow inherits MaterialWindow {
                                     root.export-partition-log();
                                 }
                             }
+                        }
+
+                        if root.page == 14: HomeDash {
+                            device: root.device;
+                            chip: root.chip;
+                            unauthorized: root.device-unauthorized;
+                            app-version: root.app-version;
+                            update-version: root.update-known ? root.update-version : "";
+                            install => { root.page = 10; }
+                            show-update => { root.show-update-dialog = true; }
+                            open-url(u) => { root.open-url(u); }
                         }
 
                         if root.page == 11: ToolsGrid {

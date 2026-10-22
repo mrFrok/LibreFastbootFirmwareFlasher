@@ -657,6 +657,7 @@ pub fn poll(
             }
             WMsg::UpdateAvailable { version, url, body } => {
                 ui.set_update_version(version.into());
+                ui.set_update_known(true);
                 ui.set_update_url(url.into());
                 ui.set_update_body(body.into());
                 ui.set_show_update_dialog(true);

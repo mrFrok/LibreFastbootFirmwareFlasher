@@ -1,0 +1,274 @@
+import {
+    FilledButton,
+    MaterialPalette,
+    OutlineButton,
+    TextButton,
+} from "@material";
+import { StatusColors } from "../globals/status-colors.slint";
+import { Tr } from "../globals/tr.slint";
+import { DeviceInfo } from "../structs.slint";
+
+// A small labelled value on the phone card.
+component Fact inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <color> tint: MaterialPalette.on-surface;
+    spacing: 2px;
+    Text {
+        text: root.label;
+        font-size: 12px;
+        color: MaterialPalette.on-surface-variant;
+    }
+
+    Text {
+        text: root.value;
+        font-size: 15px;
+        font-weight: 500;
+        color: root.tint;
+    }
+}
+
+component LinkRow inherits TouchArea {
+    in property <image> icon;
+    in property <string> text;
+    height: 40px;
+    Rectangle {
+        border-radius: 10px;
+        background: root.has-hover ? MaterialPalette.surface-container-high : transparent;
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 12px;
+            Image {
+                source: root.icon;
+                width: 20px;
+                height: 20px;
+                y: (parent.height - self.height) / 2;
+                colorize: MaterialPalette.primary;
+            }
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.text;
+                font-size: 14px;
+                color: MaterialPalette.on-surface;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "→";
+                font-size: 14px;
+                color: MaterialPalette.on-surface-variant;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// The start page: the connected phone at a glance, the way into installing,
+// and the app's own news (version, update, links).
+export component HomeDash inherits VerticalLayout {
+    in property <DeviceInfo> device;
+    // 0 not chosen, 1 Snapdragon, 2 MediaTek
+    in property <int> chip;
+    in property <bool> unauthorized;
+    in property <string> app-version;
+    // Newer release when one exists, else empty.
+    in property <string> update-version;
+    callback install();
+    callback show-update();
+    callback open-url(string);
+
+    property <string> mode-name: root.device.mode == 1 ? Tr.t("Android is running", "Android запущен", "Android 运行中", "Android 執行中")
+        : root.device.mode == 2 ? Tr.t("Bootloader", "Загрузчик", "Bootloader", "Bootloader")
+        : root.device.mode == 3 ? Tr.t("Flashing mode", "Режим прошивки", "刷机模式", "刷機模式")
+        : "—";
+
+    spacing: 16px;
+    VerticalLayout {
+        spacing: 4px;
+        Text {
+            text: Tr.t("Home", "Главная", "主页", "首頁");
+            font-size: 26px;
+            font-weight: 600;
+            color: MaterialPalette.on-surface;
+        }
+
+        Text {
+            text: Tr.t("Firmware for Realme, OnePlus and OPPO phones on Snapdragon.", "Прошивка смартфонов Realme, OnePlus и OPPO на Snapdragon.", "为搭载骁龙的 Realme、一加和 OPPO 手机刷机。", "為搭載 Snapdragon 的 Realme、OnePlus 和 OPPO 手機刷機。");
+            font-size: 14px;
+            color: MaterialPalette.on-surface-variant;
+        }
+    }
+
+    // ── The phone ───────────────────────────────────────────────────────────
+    Rectangle {
+        border-radius: 20px;
+        background: MaterialPalette.surface-container;
+        border-width: 1px;
+        border-color: root.device.connected ? MaterialPalette.primary.with-alpha(0.5) : MaterialPalette.outline-variant;
+        VerticalLayout {
+            padding: 20px;
+            spacing: 16px;
+            HorizontalLayout {
+                spacing: 16px;
+                Rectangle {
+                    width: 56px;
+                    height: 56px;
+                    border-radius: 16px;
+                    background: root.device.connected ? MaterialPalette.primary-container : MaterialPalette.surface-container-highest;
+                    Image {
+                        source: @image-url("../icons/smartphone.svg");
+                        width: 30px;
+                        height: 30px;
+                        colorize: root.device.connected ? MaterialPalette.on-primary-container : MaterialPalette.on-surface-variant;
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: root.device.connected ? root.device.name
+                            : root.unauthorized ? Tr.t("Allow USB debugging on the phone", "Разрешите отладку по USB на смартфоне", "请在手机上允许 USB 调试", "請在手機上允許 USB 偵錯")
+                            : Tr.t("No phone connected", "Смартфон не подключён", "未连接手机", "未連接手機");
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: MaterialPalette.on-surface;
+                    }
+
+                    Text {
+                        text: root.device.connected ? root.mode-name
+                            : root.unauthorized ? Tr.t("Tap “Allow” on its screen", "Нажмите «Разрешить» на его экране", "请在手机屏幕上点按“允许”", "請在手機螢幕上點按「允許」")
+                            : Tr.t("Connect it with a USB cable — it is found on its own", "Подключите его кабелем USB — он найдётся сам", "用 USB 数据线连接即可自动识别", "用 USB 傳輸線連接即可自動識別");
+                        font-size: 14px;
+                        color: MaterialPalette.on-surface-variant;
+                    }
+                }
+            }
+
+            if root.device.connected: HorizontalLayout {
+                spacing: 28px;
+                Fact {
+                    label: Tr.t("Bootloader", "Загрузчик", "Bootloader", "Bootloader");
+                    value: root.device.unlocked == 1 ? Tr.t("unlocked", "разблокирован", "已解锁", "已解鎖")
+                        : root.device.unlocked == 0 ? Tr.t("locked", "заблокирован", "已锁定", "已鎖定") : Tr.t("unknown", "неизвестно", "未知", "未知");
+                    tint: root.device.unlocked == 1 ? StatusColors.success : root.device.unlocked == 0 ? MaterialPalette.error : MaterialPalette.on-surface;
+                }
+
+                Fact {
+                    label: Tr.t("Active slot", "Активный слот", "活动槽位", "使用中槽位");
+                    value: root.device.slot == "" ? "—" : root.device.slot.to-uppercase();
+                }
+
+                Fact {
+                    label: Tr.t("Processor", "Процессор", "处理器", "處理器");
+                    value: root.chip == 1 ? "Snapdragon" : root.chip == 2 ? "MediaTek" : Tr.t("not chosen", "не выбран", "未选择", "未選擇");
+                }
+
+                if root.device.battery >= 0: Fact {
+                    label: Tr.t("Battery", "Заряд", "电量", "電量");
+                    value: root.device.battery + " %";
+                    tint: root.device.battery < 30 ? MaterialPalette.error : MaterialPalette.on-surface;
+                }
+            }
+
+            HorizontalLayout {
+                alignment: start;
+                FilledButton {
+                    icon: @image-url("../icons/flash.svg");
+                    text: Tr.t("Install firmware", "Установить прошивку", "安装固件", "安裝韌體");
+                    clicked => {
+                        root.install();
+                    }
+                }
+            }
+        }
+    }
+
+    // ── The app ─────────────────────────────────────────────────────────────
+    HorizontalLayout {
+        spacing: 16px;
+        Rectangle {
+            horizontal-stretch: 1;
+            preferred-width: 100px;
+            border-radius: 20px;
+            background: root.update-version != "" ? StatusColors.success-container : MaterialPalette.surface-container;
+            VerticalLayout {
+                padding: 20px;
+                spacing: 8px;
+                alignment: start;
+                Text {
+                    text: root.update-version != ""
+                        ? Tr.t("Update available: ", "Доступно обновление: ", "有可用更新：", "有可用更新：") + root.update-version
+                        : Tr.t("Up to date", "Последняя версия", "已是最新版本", "已是最新版本");
+                    font-size: 17px;
+                    font-weight: 600;
+                    color: root.update-version != "" ? StatusColors.on-success-container : MaterialPalette.on-surface;
+                }
+
+                Text {
+                    text: Tr.t("Version ", "Версия ", "版本 ", "版本 ") + root.app-version;
+                    font-size: 14px;
+                    color: root.update-version != "" ? StatusColors.on-success-container : MaterialPalette.on-surface-variant;
+                }
+
+                if root.update-version != "": HorizontalLayout {
+                    alignment: start;
+                    padding-top: 4px;
+                    FilledButton {
+                        text: Tr.t("What's new", "Что нового", "更新内容", "更新內容");
+                        clicked => {
+                            root.show-update();
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            preferred-width: 100px;
+            border-radius: 20px;
+            background: MaterialPalette.surface-container;
+            VerticalLayout {
+                padding: 12px;
+                LinkRow {
+                    icon: @image-url("../icons/github.svg");
+                    text: "GitHub";
+                    clicked => {
+                        root.open-url("https://github.com/mrFrok/LibreFastbootFirmwareFlasher");
+                    }
+                }
+
+                LinkRow {
+                    icon: @image-url("../icons/telegram.svg");
+                    text: Tr.t("Community on Telegram", "Сообщество в Telegram", "Telegram 社区", "Telegram 社群");
+                    clicked => {
+                        root.open-url("https://t.me/gt3neo5hub");
+                    }
+                }
+
+                LinkRow {
+                    icon: @image-url("../icons/telegram.svg");
+                    text: Tr.t("The author on Telegram", "Автор в Telegram", "作者的 Telegram", "作者的 Telegram");
+                    clicked => {
+                        root.open-url("https://t.me/mrFrok228");
+                    }
+                }
+
+                LinkRow {
+                    icon: @image-url("../icons/boosty.svg");
+                    text: Tr.t("Support the project", "Поддержать проект", "支持本项目", "支持本專案");
+                    clicked => {
+                        root.open-url("https://boosty.to/mrfrok/donate");
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        vertical-stretch: 1;
+    }
+}

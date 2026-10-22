@@ -272,7 +272,7 @@ export component Section inherits Rectangle {
 }
 
 // Sidebar of the new layout: one main task, the rest below the divider.
-// page: 0 install, 1 tools, 2 history, 3 settings, 4 about
+// page: 0 install, 1 tools, 2 history, 3 settings, 4 about, 5 home
 export component AppNav inherits Rectangle {
     in property <int> page;
     // Tools the user pinned from the Tools page, shown under the main item.
@@ -323,6 +323,14 @@ export component AppNav inherits Rectangle {
                     }
                 }
             }
+        }
+
+        NavItem {
+            label: Tr.t("Home", "Главная", "主页", "首頁");
+            icon: @image-url("../icons/home.svg");
+            icon-active: @image-url("../icons/home-filled.svg");
+            selected: root.page == 5;
+            clicked => { root.navigate(5); }
         }
 
         NavItem {
