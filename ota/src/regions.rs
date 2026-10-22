@@ -1,102 +1,145 @@
 //! The update servers, and the carrier and language each region is asked with.
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Region {
-    Cn,
-    Eu,
-    In,
-    Sg,
-    Ru,
-    Tr,
-    Th,
-    /// Global builds ("EX"): OnePlus phones sold outside China answer here.
-    Gl,
-}
+//!
+//! The carriers (NV ids) are those OPPO's own phones carry in
+//! `ro.build.oplus_nv_id`; the server picks the build by them. The list
+//! follows NeFeroN's LinkResolverDownloader, checked against the servers.
 
 const HOST_CN: &str = "component-ota-cn.allawntech.com";
 const HOST_EU: &str = "component-ota-eu.allawnos.com";
 const HOST_IN: &str = "component-ota-in.allawnos.com";
 const HOST_SG: &str = "component-ota-sg.allawnos.com";
 
+struct Info {
+    code: &'static str,
+    name: &'static str,
+    carrier: &'static str,
+    language: &'static str,
+    host: &'static str,
+    /// Added to the model in the `model` header (`CPH2747EEA`): without it
+    /// the server answers nothing for these regions.
+    suffix: &'static str,
+}
+
+const fn info(
+    code: &'static str,
+    name: &'static str,
+    carrier: &'static str,
+    language: &'static str,
+    host: &'static str,
+    suffix: &'static str,
+) -> Info {
+    Info {
+        code,
+        name,
+        carrier,
+        language,
+        host,
+        suffix,
+    }
+}
+
+// Asked in this order; a build found in several regions lists them so.
+const TABLE: &[Info] = &[
+    info("GL", "Global", "10100111", "en-US", HOST_SG, ""),
+    info("EU", "Europe", "01000100", "en-GB", HOST_EU, "EEA"),
+    info("IN", "India", "00011011", "en-IN", HOST_IN, "IN"),
+    info("RU", "Russia", "00110111", "ru-RU", HOST_SG, ""),
+    info(
+        "MEA",
+        "Middle East and Africa",
+        "10100110",
+        "en-US",
+        HOST_SG,
+        "",
+    ),
+    info("TR", "Turkey", "01010001", "tr-TR", HOST_SG, ""),
+    info("SA", "Saudi Arabia", "10000011", "ar-SA", HOST_SG, ""),
+    info("SG", "Singapore", "01011010", "en-SG", HOST_SG, ""),
+    info("TH", "Thailand", "00111001", "th-TH", HOST_SG, ""),
+    info("MY", "Malaysia", "00111000", "ms-MY", HOST_SG, ""),
+    info("ID", "Indonesia", "00110011", "id-ID", HOST_SG, ""),
+    info("PH", "Philippines", "00111110", "en-PH", HOST_SG, ""),
+    info("VN", "Vietnam", "00111100", "vi-VN", HOST_SG, ""),
+    info("TW", "Taiwan", "00011010", "zh-TW", HOST_SG, ""),
+    info("OCA", "Oceania", "10100101", "en-AU", HOST_SG, ""),
+    info("LATAM", "Latin America", "10011010", "es-MX", HOST_SG, ""),
+    info("BR", "Brazil", "10011110", "pt-BR", HOST_SG, ""),
+    info("GB", "United Kingdom", "10001010", "en-GB", HOST_SG, ""),
+    info("CN", "China", "10010111", "zh-CN", HOST_CN, ""),
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Region(u8);
+
+impl std::fmt::Debug for Region {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.code())
+    }
+}
+
 impl Region {
-    pub const ALL: [Region; 8] = [
-        Region::Gl,
-        Region::Eu,
-        Region::In,
-        Region::Sg,
-        Region::Ru,
-        Region::Tr,
-        Region::Th,
-        Region::Cn,
-    ];
+    pub const GL: Region = Region(0);
+    pub const EU: Region = Region(1);
+    pub const IN: Region = Region(2);
+    pub const CN: Region = Region(18);
+
+    pub fn all() -> impl Iterator<Item = Region> {
+        (0..TABLE.len() as u8).map(Region)
+    }
+
+    fn info(self) -> &'static Info {
+        &TABLE[self.0 as usize]
+    }
 
     pub fn code(self) -> &'static str {
-        match self {
-            Region::Cn => "CN",
-            Region::Eu => "EU",
-            Region::In => "IN",
-            Region::Sg => "SG",
-            Region::Ru => "RU",
-            Region::Tr => "TR",
-            Region::Th => "TH",
-            Region::Gl => "GL",
-        }
+        self.info().code
+    }
+
+    /// In English, e.g. "Middle East and Africa".
+    pub fn name(self) -> &'static str {
+        self.info().name
     }
 
     pub fn parse(s: &str) -> Option<Region> {
-        Region::ALL
-            .into_iter()
-            .find(|r| r.code().eq_ignore_ascii_case(s.trim()))
+        let s = s.trim();
+        // "GLO" as LinkResolverDownloader writes it.
+        let s = if s.eq_ignore_ascii_case("GLO") {
+            "GL"
+        } else {
+            s
+        };
+        Region::all().find(|r| r.code().eq_ignore_ascii_case(s))
     }
 
     /// The region a phone belongs to, from its `ro.build.oplus_nv_id`.
     pub fn from_carrier(nv_id: &str) -> Option<Region> {
-        Region::ALL
-            .into_iter()
-            .find(|r| r.carrier() == nv_id.trim())
+        Region::all().find(|r| r.carrier() == nv_id.trim())
     }
 
     pub fn host(self) -> &'static str {
-        match self {
-            Region::Cn => HOST_CN,
-            Region::Eu => HOST_EU,
-            Region::In => HOST_IN,
-            Region::Sg | Region::Ru | Region::Tr | Region::Th | Region::Gl => HOST_SG,
-        }
+        self.info().host
     }
 
     /// Hosts that answer this region: China only on its own, the rest on
     /// any of the international ones.
     pub fn hosts(self) -> &'static [&'static str] {
-        match self {
-            Region::Cn => &[HOST_CN],
-            _ => &[HOST_SG, HOST_EU, HOST_IN],
+        if self.host() == HOST_CN {
+            &[HOST_CN]
+        } else {
+            &[HOST_SG, HOST_EU, HOST_IN]
         }
     }
 
     /// The NV carrier id the server picks the build by.
     pub fn carrier(self) -> &'static str {
-        match self {
-            Region::Cn => "10010111",
-            Region::Eu => "01000100",
-            Region::In => "00011011",
-            Region::Sg => "01011010",
-            Region::Ru => "00110111",
-            Region::Tr => "01010001",
-            Region::Th => "00111001",
-            Region::Gl => "10100111",
-        }
+        self.info().carrier
     }
 
     /// The model as the region's phones name themselves: the server answers
     /// `CPH2747EEA` with the European build and plain `CPH2747` with nothing
     /// outside GL, though `otaVersion` keeps the plain code.
     pub fn model(self, code: &str) -> String {
-        let suffix = match self {
-            Region::Eu => "EEA",
-            Region::In => "IN",
-            _ => "",
-        };
+        let suffix = self.info().suffix;
         if code.ends_with(suffix) {
             code.to_string()
         } else {
@@ -105,16 +148,7 @@ impl Region {
     }
 
     pub fn language(self) -> &'static str {
-        match self {
-            Region::Cn => "zh-CN",
-            Region::Eu => "en-GB",
-            Region::In => "en-IN",
-            Region::Sg => "en-SG",
-            Region::Ru => "ru-RU",
-            Region::Tr => "tr-TR",
-            Region::Th => "th-TH",
-            Region::Gl => "en-US",
-        }
+        self.info().language
     }
 }
 
@@ -124,17 +158,33 @@ mod tests {
 
     #[test]
     fn parses_codes_in_any_case() {
-        assert_eq!(Region::parse("gl"), Some(Region::Gl));
-        assert_eq!(Region::parse(" EU "), Some(Region::Eu));
+        assert_eq!(Region::parse("gl"), Some(Region::GL));
+        assert_eq!(Region::parse("GLO"), Some(Region::GL));
+        assert_eq!(Region::parse(" EU "), Some(Region::EU));
+        assert_eq!(Region::parse("mea").map(Region::code), Some("MEA"));
         assert_eq!(Region::parse("XX"), None);
-        assert_eq!(Region::Eu.model("CPH2747"), "CPH2747EEA");
-        assert_eq!(Region::Eu.model("CPH2747EEA"), "CPH2747EEA");
-        assert_eq!(Region::In.model("CPH2745"), "CPH2745IN");
-        assert_eq!(Region::Gl.model("CPH2747"), "CPH2747");
-        assert_eq!(Region::from_carrier("10100111"), Some(Region::Gl));
+        assert_eq!(Region::EU.model("CPH2747"), "CPH2747EEA");
+        assert_eq!(Region::EU.model("CPH2747EEA"), "CPH2747EEA");
+        assert_eq!(Region::IN.model("CPH2745"), "CPH2745IN");
+        assert_eq!(Region::GL.model("CPH2747"), "CPH2747");
+        assert_eq!(Region::from_carrier("10100111"), Some(Region::GL));
         assert_eq!(Region::from_carrier("00000000"), None);
-        for r in Region::ALL {
+        assert_eq!(Region::CN.code(), "CN");
+        for r in Region::all() {
             assert_eq!(Region::parse(r.code()), Some(r));
+        }
+    }
+
+    #[test]
+    fn carriers_are_unique_binary_bytes() {
+        let mut seen = std::collections::HashSet::new();
+        for r in Region::all() {
+            let c = r.carrier();
+            assert!(
+                c.len() == 8 && c.chars().all(|b| b == '0' || b == '1'),
+                "{c}"
+            );
+            assert!(seen.insert(c), "{c} twice");
         }
     }
 }

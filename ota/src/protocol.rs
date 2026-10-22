@@ -424,7 +424,7 @@ mod tests {
         let q = Query {
             ota_version: "CPH2747_11.A".into(),
             model: None,
-            region: Region::Gl,
+            region: Region::GL,
             mode: Mode::Manual,
         };
         let h = headers(&q, "KEY", 42, 1_000);

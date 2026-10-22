@@ -25,9 +25,9 @@ fn md5(code: &str, region: Region) -> String {
 #[test]
 #[ignore = "network"]
 fn oneplus_15_in_every_region() {
-    let gl = md5("CPH2747", Region::Gl);
-    let eu = md5("CPH2747", Region::Eu);
-    let india = md5("CPH2745", Region::In);
+    let gl = md5("CPH2747", Region::GL);
+    let eu = md5("CPH2747", Region::EU);
+    let india = md5("CPH2745", Region::IN);
     assert_ne!(gl, eu);
     assert_ne!(gl, india);
 }

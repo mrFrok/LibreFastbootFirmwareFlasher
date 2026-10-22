@@ -364,6 +364,7 @@ export component MainWindow inherits MaterialWindow {
     in property <int> ota-total;
     in property <[OtaBuild]> ota-builds;
     in property <string> ota-error;
+    in property <string> ota-phone-region;
     in-out property <string> dl-speed;
     in-out property <string> dl-eta;
     in-out property <string> dl-downloaded;
@@ -713,6 +714,7 @@ export component MainWindow inherits MaterialWindow {
                             ota-total: root.ota-total;
                             ota-builds: root.ota-builds;
                             ota-error: root.ota-error;
+                            ota-phone-region: root.ota-phone-region;
                             find-ota(m) => { root.find-ota(m); }
                             cancel-ota => { root.cancel-ota(); }
                             download-ota(i) => { root.download-ota(i); }

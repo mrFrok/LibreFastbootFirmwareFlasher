@@ -149,11 +149,16 @@ fn downloaded_before(size: u64) -> Option<std::path::PathBuf> {
 /// A phone was found: remember what it runs, and offer its model.
 pub fn on_device(ui: &MainWindow, d: &DeviceSnapshot) {
     if !d.ota_version.is_empty() {
+        let region = Region::from_carrier(&d.nv_id);
         STATE.with(|s| {
             let mut s = s.borrow_mut();
             s.phone_ota = d.ota_version.clone();
-            s.phone_region = Region::from_carrier(&d.nv_id);
+            s.phone_region = region;
         });
+        let text = region
+            .map(|r| format!("{} — {}", r.code(), region_name(&ui.get_lang(), r)))
+            .unwrap_or_default();
+        ui.set_ota_phone_region(text.into());
     }
     if ui.get_ota_model().is_empty() && looks_like_model(&d.name) {
         ui.set_ota_model(d.name.as_str().into());
@@ -197,10 +202,15 @@ pub fn on_found(ui: &MainWindow, generation: u64, result: Result<Vec<Found>, Str
         return;
     }
     let lang = ui.get_lang();
+    let mut found = found;
     let rows: Vec<OtaBuild> = STATE.with(|s| {
         let mut s = s.borrow_mut();
         s.cancel = None;
         let newest = found[0].build.version.clone();
+        // The phone's own region first, newest first within each part.
+        let mine = s.phone_region;
+        let recommended = |f: &Found| mine.is_some_and(|r| f.regions.contains(&r));
+        found.sort_by_key(|f| !recommended(f));
         let rows = found
             .iter()
             .map(|f| {
@@ -220,6 +230,7 @@ pub fn on_found(ui: &MainWindow, generation: u64, result: Result<Vec<Found>, Str
                     facts: facts(&lang, b).into(),
                     newest: b.version == newest,
                     installed,
+                    recommended: recommended(f),
                     changes: "".into(),
                 }
             })
@@ -256,6 +267,32 @@ pub fn on_changes(ui: &MainWindow, generation: u64, index: i32, text: String) {
         row.changes = text.into();
         slint::Model::set_row_data(&builds, index as usize, row);
     }
+}
+
+fn region_name(lang: &str, r: Region) -> String {
+    let (ru, cn, tw) = match r.code() {
+        "GL" => ("Глобальный", "全球", "全球"),
+        "EU" => ("Европа", "欧洲", "歐洲"),
+        "IN" => ("Индия", "印度", "印度"),
+        "RU" => ("Россия", "俄罗斯", "俄羅斯"),
+        "MEA" => ("Ближний Восток и Африка", "中东和非洲", "中東和非洲"),
+        "TR" => ("Турция", "土耳其", "土耳其"),
+        "SA" => ("Саудовская Аравия", "沙特阿拉伯", "沙烏地阿拉伯"),
+        "SG" => ("Сингапур", "新加坡", "新加坡"),
+        "TH" => ("Таиланд", "泰国", "泰國"),
+        "MY" => ("Малайзия", "马来西亚", "馬來西亞"),
+        "ID" => ("Индонезия", "印度尼西亚", "印尼"),
+        "PH" => ("Филиппины", "菲律宾", "菲律賓"),
+        "VN" => ("Вьетнам", "越南", "越南"),
+        "TW" => ("Тайвань", "台湾", "台灣"),
+        "OCA" => ("Океания", "大洋洲", "大洋洲"),
+        "LATAM" => ("Латинская Америка", "拉丁美洲", "拉丁美洲"),
+        "BR" => ("Бразилия", "巴西", "巴西"),
+        "GB" => ("Великобритания", "英国", "英國"),
+        "CN" => ("Китай", "中国", "中國"),
+        _ => (r.name(), r.name(), r.name()),
+    };
+    tr(lang, r.name(), ru, cn, tw)
 }
 
 /// "2026-10-14 · 9.28 GB · patch 2026-09-01 · Android 16"

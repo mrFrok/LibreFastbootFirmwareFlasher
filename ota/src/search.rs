@@ -30,7 +30,7 @@ impl Search {
     pub fn new(model: &str) -> Search {
         Search {
             model: model.trim().to_uppercase(),
-            regions: Region::ALL.to_vec(),
+            regions: Region::all().collect(),
             channels: CHANNELS.to_vec(),
         }
     }
@@ -210,7 +210,7 @@ mod tests {
     fn regional_variants_are_asked_too() {
         let s = Search {
             model: "CPH2747".into(),
-            regions: vec![Region::Eu, Region::Gl],
+            regions: vec![Region::EU, Region::GL],
             channels: vec!['A'],
         };
         let q = s.queries();
@@ -222,22 +222,22 @@ mod tests {
     #[test]
     fn groups_by_package_and_sorts_newest_first() {
         let found = group([
-            (Region::Gl, build("v1", Some("aa"), 100, "https://a/1")),
-            (Region::Eu, build("v2", Some("bb"), 200, "https://b/1")),
-            (Region::Sg, build("v1", Some("aa"), 100, "https://a/2")),
-            (Region::Gl, build("v1", Some("aa"), 100, "https://a/1")),
+            (Region::GL, build("v1", Some("aa"), 100, "https://a/1")),
+            (Region::EU, build("v2", Some("bb"), 200, "https://b/1")),
+            (Region::CN, build("v1", Some("aa"), 100, "https://a/2")),
+            (Region::GL, build("v1", Some("aa"), 100, "https://a/1")),
         ]);
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].build.version, "v2");
-        assert_eq!(found[1].regions, [Region::Gl, Region::Sg]);
+        assert_eq!(found[1].regions, [Region::GL, Region::CN]);
         assert_eq!(found[1].build.links, ["https://a/1", "https://a/2"]);
     }
 
     #[test]
     fn same_version_different_package_stays_apart() {
         let found = group([
-            (Region::Gl, build("v1", Some("aa"), 100, "https://a")),
-            (Region::Eu, build("v1", Some("bb"), 100, "https://b")),
+            (Region::GL, build("v1", Some("aa"), 100, "https://a")),
+            (Region::EU, build("v1", Some("bb"), 100, "https://b")),
         ]);
         assert_eq!(found.len(), 2);
     }

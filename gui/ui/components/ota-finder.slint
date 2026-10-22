@@ -18,6 +18,8 @@ export struct OtaBuild {
     newest: bool,
     // the build the connected phone runs
     installed: bool,
+    // built for the region the phone's firmware is from
+    recommended: bool,
     // filled once "What's new" is asked for; empty before
     changes: string,
 }
@@ -90,6 +92,12 @@ component BuildRow inherits Rectangle {
                         fg: StatusColors.on-success-container;
                         bg: StatusColors.success-container;
                     }
+                    if root.build.recommended && !root.build.installed: Badge {
+                        y: (parent.height - self.height) / 2;
+                        text: Tr.t("your region", "ваш регион", "您的地区", "您的地區");
+                        fg: MaterialPalette.on-tertiary-container;
+                        bg: MaterialPalette.tertiary-container;
+                    }
                     Rectangle {
                         horizontal-stretch: 1;
                     }
@@ -152,6 +160,8 @@ export component OtaFinder inherits Rectangle {
     in property <int> total;
     in property <[OtaBuild]> builds;
     in property <string> error;
+    // e.g. "GL — Global" from the connected phone; empty when unknown
+    in property <string> phone-region;
     callback find(string);
     callback cancel();
     callback download(int);
@@ -220,6 +230,17 @@ export component OtaFinder inherits Rectangle {
             Rectangle {
                 horizontal-stretch: 1;
             }
+        }
+
+        if root.phone-region != "": Notice {
+            kind: 0;
+            icon: @image-url("../icons/smartphone.svg");
+            title: Tr.t("The phone runs firmware for region ", "На смартфоне прошивка региона ", "手机当前固件地区：", "手機目前韌體地區：") + root.phone-region;
+            text: Tr.t(
+                "Install a build of the same region: it is marked “your region” and listed first. A build of another region switches the phone to that region.",
+                "Ставьте сборку того же региона — она отмечена «ваш регион» и стоит первой. Сборка другого региона переключит смартфон на тот регион.",
+                "请安装同一地区的版本：它标有“您的地区”并排在最前。安装其他地区的版本会把手机切换到该地区。",
+                "請安裝同一地區的版本：它標有「您的地區」並排在最前。安裝其他地區的版本會把手機切換到該地區。");
         }
 
         if root.state == 1: HorizontalLayout {

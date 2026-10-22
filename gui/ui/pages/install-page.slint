@@ -63,6 +63,7 @@ export component InstallPage inherits VerticalLayout {
     in property <int> ota-total;
     in property <[OtaBuild]> ota-builds;
     in property <string> ota-error;
+    in property <string> ota-phone-region;
     // 0 not chosen for this model, 1 Snapdragon, 2 MediaTek
     in property <int> chip;
 
@@ -367,6 +368,7 @@ export component InstallPage inherits VerticalLayout {
                         total: root.ota-total;
                         builds: root.ota-builds;
                         error: root.ota-error;
+                        phone-region: root.ota-phone-region;
                         find(m) => {
                             root.find-ota(m);
                         }

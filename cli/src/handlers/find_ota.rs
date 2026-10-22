@@ -18,13 +18,13 @@ pub fn run(
         let mut picked = Vec::new();
         for code in list.split(',').filter(|c| !c.trim().is_empty()) {
             if code.trim().eq_ignore_ascii_case("all") {
-                picked = Region::ALL.to_vec();
+                picked = Region::all().collect();
                 break;
             }
             match Region::parse(code) {
                 Some(r) => picked.push(r),
                 None => {
-                    let known: Vec<_> = Region::ALL.iter().map(|r| r.code()).collect();
+                    let known: Vec<_> = Region::all().map(|r| r.code()).collect();
                     eprintln!(
                         "{} Unknown region {code:?}; known: {}",
                         "✗".red().bold(),
