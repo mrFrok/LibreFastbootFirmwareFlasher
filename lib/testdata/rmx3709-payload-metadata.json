@@ -1,0 +1,37 @@
+{
+  "block_size": 4096,
+  "minor_version": 9,
+  "dynamic_partition_metadata": {
+    "groups": [
+      {
+        "name": "qti_dynamic_partitions",
+        "size": 17058234368,
+        "size_readable": "15.89 GB",
+        "partition_names": [
+          "system",
+          "system_ext",
+          "vendor",
+          "product",
+          "my_product",
+          "odm",
+          "my_engineering",
+          "vendor_dlkm",
+          "system_dlkm",
+          "my_stock",
+          "my_heytap",
+          "my_carrier",
+          "my_region",
+          "my_bigball",
+          "my_manifest"
+        ],
+        "partition_count": 15
+      }
+    ],
+    "groups_count": 1,
+    "snapshot_enabled": true,
+    "vabc_enabled": false,
+    "vabc_compression_param": "",
+    "cow_version": 2,
+    "compression_factor": 4096
+  }
+}

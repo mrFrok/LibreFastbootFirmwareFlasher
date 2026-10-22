@@ -927,6 +927,31 @@ pub fn firmware_devices(zip_path: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The payload's metadata as JSON (`payload_dumper --metadata`), read from
+/// the archive's manifest without extracting anything. Needs
+/// payload-dumper-rust; the Go dumper has no such option.
+pub fn payload_metadata(zip_path: &Path) -> Result<String> {
+    let dumper = crate::deps::find_payload_dumper()
+        .filter(|d| d.is_rust())
+        .context("payload-dumper-rust is needed to read the firmware's partition layout")?;
+    let tmp = tempfile::tempdir().context("temp dir")?;
+    let out = tmp.path().join("metadata.json");
+    let r = Command::new(dumper.into_path())
+        .arg("--metadata")
+        .arg("-o")
+        .arg(&out)
+        .arg(zip_path)
+        .output()
+        .context("running payload_dumper")?;
+    if !r.status.success() {
+        anyhow::bail!(
+            "payload_dumper --metadata failed: {}",
+            String::from_utf8_lossy(&r.stderr).trim()
+        );
+    }
+    fs::read_to_string(&out).context("reading the exported metadata")
+}
+
 fn firmware_name_from_archive(zip_path: &Path) -> String {
     let fallback = || {
         zip_path

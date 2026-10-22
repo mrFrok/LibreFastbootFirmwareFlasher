@@ -235,6 +235,77 @@ impl SuperLayout {
     }
 }
 
+/// The dynamic partition part of a payload, as `payload_dumper --metadata`
+/// exports it. Group and partition names carry no slot suffix there.
+#[derive(serde::Deserialize)]
+struct PayloadMetadata {
+    dynamic_partition_metadata: Option<DynamicPartitions>,
+}
+
+#[derive(serde::Deserialize)]
+struct DynamicPartitions {
+    groups: Vec<PayloadGroup>,
+    #[serde(default)]
+    snapshot_enabled: Option<bool>,
+}
+
+#[derive(serde::Deserialize)]
+struct PayloadGroup {
+    name: String,
+    #[serde(default)]
+    size: Option<u64>,
+    partition_names: Vec<String>,
+}
+
+impl SuperLayout {
+    /// The layout an A/B firmware describes, for a super of `device_size`
+    /// bytes: each payload group as `<group>_a` and `<group>_b` with the
+    /// payload's size, and each partition readonly in both, as AOSP builds
+    /// super_empty.img for an A/B device. Virtual A/B when the payload says
+    /// snapshots are enabled.
+    ///
+    /// TODO: check against a factory lpdump of a Realme/OnePlus/OPPO device
+    /// (slot count, whether `_b` partitions and groups are listed, sizes).
+    pub fn from_payload_metadata(json: &str, device_size: u64) -> Result<Self, String> {
+        let meta: PayloadMetadata =
+            serde_json::from_str(json).map_err(|e| format!("payload metadata: {e}"))?;
+        let dynamic = meta
+            .dynamic_partition_metadata
+            .ok_or("the firmware has no dynamic partition metadata")?;
+        if dynamic.groups.is_empty() {
+            return Err("the firmware lists no partition groups".into());
+        }
+        let mut layout = SuperLayout::new(device_size, 3);
+        layout.virtual_ab = dynamic.snapshot_enabled.unwrap_or(false);
+        for slot in ["a", "b"] {
+            for g in &dynamic.groups {
+                let group = format!("{}_{slot}", g.name);
+                let maximum_size = g.size.unwrap_or(0);
+                if maximum_size > device_size {
+                    return Err(format!(
+                        "group {} ({maximum_size} bytes) does not fit a {device_size}-byte super",
+                        g.name
+                    ));
+                }
+                layout.groups.push(Group {
+                    name: group.clone(),
+                    maximum_size,
+                });
+                for p in &g.partition_names {
+                    layout.partitions.push(Partition {
+                        name: format!("{p}_{slot}"),
+                        group: group.clone(),
+                        attributes: ATTR_READONLY,
+                    });
+                }
+            }
+        }
+        // Fails early on names or sizes the format cannot hold.
+        layout.to_image()?;
+        Ok(layout)
+    }
+}
+
 /// A NUL-padded 36-byte name, as every LP table stores names.
 fn name_field(name: &str) -> Result<Vec<u8>, String> {
     if name.is_empty() || name.len() > NAME_LEN || !name.is_ascii() {
@@ -292,6 +363,29 @@ mod tests {
         let mut h = meta[..header_size].to_vec();
         h[12..44].fill(0);
         assert_eq!(&meta[12..44], Sha256::digest(&h).as_slice());
+    }
+
+    #[test]
+    fn a_real_payload_gives_both_slots() {
+        let json = include_str!("../testdata/rmx3709-payload-metadata.json");
+        let l = SuperLayout::from_payload_metadata(json, 17_179_869_184).unwrap();
+        assert!(l.virtual_ab);
+        let names: Vec<&str> = l.groups.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["qti_dynamic_partitions_a", "qti_dynamic_partitions_b"]
+        );
+        assert!(l.groups.iter().all(|g| g.maximum_size == 17_058_234_368));
+        let odm_b = l.partitions.iter().find(|p| p.name == "odm_b").unwrap();
+        assert_eq!(odm_b.group, "qti_dynamic_partitions_b");
+        assert_eq!(odm_b.attributes, ATTR_READONLY);
+        assert_eq!(l.partitions.len(), 30);
+    }
+
+    #[test]
+    fn a_group_larger_than_super_is_refused() {
+        let json = include_str!("../testdata/rmx3709-payload-metadata.json");
+        assert!(SuperLayout::from_payload_metadata(json, 1 << 30).is_err());
     }
 
     #[test]
