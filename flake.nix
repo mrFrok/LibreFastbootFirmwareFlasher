@@ -124,8 +124,8 @@
             # different layout, so darwin falls back to the source build.
             url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-gui-linux-${arch}.tar.gz";
             hash = {
-              x86_64 = "sha256-RN2RDa7cq3ygmyWbKeSEPl0bi/086mm7+PwdspzBL8U=";
-              aarch64 = "sha256-mzqA68yUzUfRVswHiK2wfhhbXuVI0LZ0lPDmoDU3O8Y=";
+              x86_64 = "sha256-j2qVTZeK0wGjDTkhTq84MEbaJMyQQP3BeQc+LLIT0dM=";
+              aarch64 = "sha256-i5+88whV5c398K6InTrRhbsM3lT7FzYg+dl4ei652nE=";
             }.${arch};
           };
 
@@ -162,8 +162,8 @@
           src = pkgs.fetchurl {
             url = "https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v${version}/lfff-linux-${arch}.tar.gz";
             hash = {
-              x86_64 = "sha256-LnjqoIztcjHGQ/Wfz/zn0WfGwAsmmpkLu2d3t/zEXYI=";
-              aarch64 = "sha256-yCYuiJmQQXwZilGt7L3xJGIuvw5eK4trjndkG2H+4qU=";
+              x86_64 = "sha256-/a7atUavWgijKHwY5VCfgj3Imw9+8qdsKSWG2AA78yk=";
+              aarch64 = "sha256-MpekamiH8SYM54noxWMuFMvDE+fk3FID3hvo6EU1Sug=";
             }.${arch};
           };
 
