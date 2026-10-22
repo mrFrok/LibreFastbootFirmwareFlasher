@@ -59,7 +59,8 @@ pub struct Query {
     /// The build the server compares against, e.g. `CPH2747_11.A` or a full
     /// `CPH2747_11.A.48_0480_202609111034`.
     pub ota_version: String,
-    /// Defaults to the part of `ota_version` before the first `_`.
+    /// Defaults to the part of `ota_version` before the first `_`, with the
+    /// region's suffix (`Region::model`).
     pub model: Option<String>,
     pub region: Region,
     pub mode: Mode,
@@ -304,11 +305,8 @@ fn headers(
 ) -> Vec<(&'static str, String)> {
     let ota_version = full_ota_version(&q.ota_version);
     let model = q.model.clone().unwrap_or_else(|| {
-        ota_version
-            .split('_')
-            .next()
-            .unwrap_or_default()
-            .to_string()
+        q.region
+            .model(ota_version.split('_').next().unwrap_or_default())
     });
     // Scene version: a day ahead, in 100 ns ticks.
     let scene_version = (time_ms + 24 * 3_600_000) * 10_000;

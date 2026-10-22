@@ -72,6 +72,22 @@ impl Region {
         }
     }
 
+    /// The model as the region's phones name themselves: the server answers
+    /// `CPH2747EEA` with the European build and plain `CPH2747` with nothing
+    /// outside GL, though `otaVersion` keeps the plain code.
+    pub fn model(self, code: &str) -> String {
+        let suffix = match self {
+            Region::Eu => "EEA",
+            Region::In => "IN",
+            _ => "",
+        };
+        if code.ends_with(suffix) {
+            code.to_string()
+        } else {
+            format!("{code}{suffix}")
+        }
+    }
+
     pub fn language(self) -> &'static str {
         match self {
             Region::Cn => "zh-CN",
@@ -95,6 +111,10 @@ mod tests {
         assert_eq!(Region::parse("gl"), Some(Region::Gl));
         assert_eq!(Region::parse(" EU "), Some(Region::Eu));
         assert_eq!(Region::parse("XX"), None);
+        assert_eq!(Region::Eu.model("CPH2747"), "CPH2747EEA");
+        assert_eq!(Region::Eu.model("CPH2747EEA"), "CPH2747EEA");
+        assert_eq!(Region::In.model("CPH2745"), "CPH2745IN");
+        assert_eq!(Region::Gl.model("CPH2747"), "CPH2747");
         for r in Region::ALL {
             assert_eq!(Region::parse(r.code()), Some(r));
         }
