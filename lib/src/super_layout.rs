@@ -32,6 +32,8 @@ const SECTOR_SIZE: u64 = 512;
 /// Kept free at the start of super, before the first geometry copy.
 const PARTITION_RESERVED_BYTES: u64 = 4096;
 const NAME_LEN: usize = 36;
+/// Space between a group's maximum size and the size of super.
+pub const GROUP_HEADROOM: u64 = 4 * 1024 * 1024;
 
 pub const ATTR_READONLY: u32 = 1;
 
@@ -267,8 +269,9 @@ impl SuperLayout {
     /// super_empty.img for an A/B device. Virtual A/B when the payload says
     /// snapshots are enabled.
     ///
-    /// To be checked against a factory lpdump of a Realme/OnePlus/OPPO
-    /// device (slot count, whether `_b` entries are listed, group sizes).
+    /// Matches the factory layout of a OnePlus 15 (lpdump): 3 metadata
+    /// slots of 64 KiB, Virtual A/B, empty `_b` entries, groups at most
+    /// super minus 4 MiB.
     pub fn from_payload_metadata(json: &str, device_size: u64) -> Result<Self, String> {
         let meta: PayloadMetadata =
             serde_json::from_str(json).map_err(|e| format!("payload metadata: {e}"))?;
@@ -280,7 +283,9 @@ impl SuperLayout {
         }
         let mut layout = SuperLayout::new(device_size, 3);
         layout.virtual_ab = dynamic.snapshot_enabled.unwrap_or(false);
-        let usable = device_size.saturating_sub(layout.first_logical_sector() * SECTOR_SIZE);
+        // A factory OnePlus 15 (CPH2747) sizes its groups at super minus
+        // 4 MiB; the same rule caps groups a payload makes too large.
+        let usable = device_size.saturating_sub(GROUP_HEADROOM);
         for slot in ["a", "b"] {
             for g in &dynamic.groups {
                 let group = format!("{}_{slot}", g.name);
@@ -305,6 +310,24 @@ impl SuperLayout {
         // Fails early on names or sizes the format cannot hold.
         layout.to_image()?;
         Ok(layout)
+    }
+}
+
+impl SuperLayout {
+    /// Logical partitions the device has (as fastbootd lists them, with
+    /// slot suffix) that this layout would not keep: rebuilding would delete
+    /// them and their contents. On a OnePlus 15 my_company and my_preload
+    /// come from the factory, not from the firmware.
+    pub fn missing_from(&self, device_partitions: &[String]) -> Vec<String> {
+        let mut missing: Vec<String> = device_partitions
+            .iter()
+            .filter(|d| !d.ends_with("-cow") && !d.ends_with("_cow") && !d.ends_with("-cow-img"))
+            .filter(|d| !self.partitions.iter().any(|p| &p.name == *d))
+            .map(|d| d.trim_end_matches("_a").trim_end_matches("_b").to_string())
+            .collect();
+        missing.sort();
+        missing.dedup();
+        missing
     }
 }
 
@@ -384,14 +407,43 @@ mod tests {
         assert_eq!(l.partitions.len(), 30);
     }
 
+    /// The factory layout of a OnePlus 15 (lpdump, 2026-10-22): super of
+    /// 17 062 428 672 bytes, groups of 17 058 234 368 — what its payload says.
+    #[test]
+    fn a_payload_sized_group_is_kept() {
+        let json = include_str!("../testdata/rmx3709-payload-metadata.json");
+        let l = SuperLayout::from_payload_metadata(json, 17_062_428_672).unwrap();
+        assert!(l.groups.iter().all(|g| g.maximum_size == 17_058_234_368));
+    }
+
     #[test]
     fn a_group_larger_than_super_is_capped_to_it() {
         let json = include_str!("../testdata/rmx3709-payload-metadata.json");
         // The real super of an RMX3706, smaller than the payload's group.
         let super_size = 0x3_6000_0000;
         let l = SuperLayout::from_payload_metadata(json, super_size).unwrap();
-        let usable = super_size - l.first_logical_sector() * SECTOR_SIZE;
-        assert!(l.groups.iter().all(|g| g.maximum_size == usable));
+        assert!(
+            l.groups
+                .iter()
+                .all(|g| g.maximum_size == super_size - GROUP_HEADROOM)
+        );
+    }
+
+    #[test]
+    fn partitions_the_firmware_lacks_are_reported() {
+        let json = include_str!("../testdata/rmx3709-payload-metadata.json");
+        let l = SuperLayout::from_payload_metadata(json, 17_062_428_672).unwrap();
+        let device: Vec<String> = [
+            "system_a",
+            "my_company_a",
+            "my_company_b",
+            "my_preload_a",
+            "odm_a-cow",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(l.missing_from(&device), ["my_company", "my_preload"]);
     }
 
     #[test]

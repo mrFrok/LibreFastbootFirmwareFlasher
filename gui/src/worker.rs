@@ -422,6 +422,33 @@ fn super_layout_for(dir: &Path, serial: Option<&str>) -> Result<Option<Vec<u8>>,
         .and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
         .ok_or("Could not read the size of super from the phone")?;
     let layout = lfff_lib::super_layout::SuperLayout::from_payload_metadata(&json, size)?;
+
+    // Refuse rather than delete partitions the firmware cannot put back.
+    let mut args = vec!["fastboot"];
+    if let Some(s) = serial {
+        args.extend(["-s", s]);
+    }
+    args.extend(["getvar", "all"]);
+    let r = lfff_lib::utils::run_cmd(&args, 30);
+    let device: Vec<String> = format!("{}{}", r.stdout, r.stderr)
+        .lines()
+        .filter_map(|l| l.split("is-logical:").nth(1))
+        .filter_map(|v| {
+            v.strip_suffix(":yes")
+                .or_else(|| v.trim().strip_suffix(":yes"))
+        })
+        .map(str::to_string)
+        .collect();
+    if device.is_empty() {
+        return Err("Could not read the phone's partitions to check the rebuild".into());
+    }
+    let missing = layout.missing_from(&device);
+    if !missing.is_empty() {
+        return Err(format!(
+            "Rebuilding super would delete partitions this firmware does not contain: {}. Turn off “Rebuild super” in Settings, or use a firmware that has them.",
+            missing.join(", ")
+        ));
+    }
     layout.to_image().map(Some)
 }
 
