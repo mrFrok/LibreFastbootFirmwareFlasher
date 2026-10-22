@@ -15,6 +15,7 @@ export component SettingsPage inherits VerticalLayout {
     in property <string> chips-summary;
     in property <bool> classic-ui;
     in property <bool> sound;
+    in property <bool> rebuild-super;
     callback set-dark(bool);
     callback set-scheme(int);
     callback set-translucent(bool);
@@ -25,6 +26,7 @@ export component SettingsPage inherits VerticalLayout {
     callback forget-chips();
     callback set-classic(bool);
     callback set-sound(bool);
+    callback set-rebuild-super(bool);
 
     // Each scheme's dark-mode primary, as in the classic top bar.
     property <[color]> swatches: [#66B2FF, #ADC6FF, #00C7BF, #7EC16D, #E39C40, #F68792, #BA98F6];
@@ -179,6 +181,32 @@ export component SettingsPage inherits VerticalLayout {
                             root.forget-chips();
                         }
                     }
+                }
+            }
+
+            Section {
+                title: Tr.t("Experimental", "Экспериментальное", "实验性", "實驗性");
+                FieldRow {
+                    label: Tr.t("Rebuild super", "Пересоздавать super", "重建 super", "重建 super");
+                    Switch {
+                        height: 32px;
+                        y: (parent.height - self.height) / 2;
+                        checked: root.rebuild-super;
+                        checked-state-changed(c) => {
+                            root.set-rebuild-super(c);
+                        }
+                    }
+                }
+
+                Text {
+                    text: Tr.t(
+                        "Before flashing, replaces the layout of super with the one the firmware describes: partition groups and read-only partitions, as from the factory. Fixes OTAs failing after flashing with older versions. Untested on many devices — at your own risk. Works only with a .zip firmware.",
+                        "Перед прошивкой заменяет разметку super на ту, что описана в прошивке: группы разделов и разделы только для чтения, как с завода. Чинит OTA, которые падают после прошивки старыми версиями. Проверено не на многих устройствах — на ваш страх и риск. Работает только с прошивкой .zip.",
+                        "刷写前将 super 的分区布局替换为固件描述的布局：分区组和只读分区，与出厂一致。可修复使用旧版本刷写后 OTA 失败的问题。尚未在多数设备上测试——风险自负。仅适用于 .zip 固件。",
+                        "刷寫前將 super 的分割區配置替換為韌體描述的配置：分割區群組和唯讀分割區，與出廠一致。可修復使用舊版本刷寫後 OTA 失敗的問題。尚未在多數裝置上測試——風險自負。僅適用於 .zip 韌體。");
+                    font-size: 12px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
                 }
             }
 

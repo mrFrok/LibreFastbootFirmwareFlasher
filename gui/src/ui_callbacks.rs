@@ -1479,6 +1479,12 @@ fn register_install_callbacks(
         }
     });
 
+    ui.on_set_rebuild_super(|on| {
+        let mut config = load_config();
+        config.rebuild_super = on;
+        save_config(&config);
+    });
+
     ui.on_set_sound(|on| {
         let mut config = load_config();
         config.sound = on;

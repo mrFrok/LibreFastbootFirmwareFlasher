@@ -394,6 +394,37 @@ fn preflight(tx: &mpsc::Sender<WMsg>, serial: Option<&str>) -> Result<(), String
     Ok(())
 }
 
+/// Beside the unpacked images: the payload's metadata, as payload_dumper
+/// exports it.
+const PAYLOAD_METADATA_FILE: &str = ".lfff-payload-metadata.json";
+
+/// The empty super layout for the firmware in `dir` and the phone's super,
+/// when the user turned the rebuild on. Err stops the install: it was asked
+/// for, so going on without it would be a surprise.
+fn super_layout_for(dir: &Path, serial: Option<&str>) -> Result<Option<Vec<u8>>, String> {
+    if !crate::config::load_config().rebuild_super {
+        return Ok(None);
+    }
+    let json = std::fs::read_to_string(dir.join(PAYLOAD_METADATA_FILE)).map_err(|_| {
+        "This firmware has no partition layout to rebuild super from (not a payload firmware, or unpacked by an older version). Turn off “Rebuild super” in Settings, or choose the .zip again.".to_string()
+    })?;
+    let mut args = vec!["fastboot"];
+    if let Some(s) = serial {
+        args.extend(["-s", s]);
+    }
+    args.extend(["getvar", "partition-size:super"]);
+    let r = lfff_lib::utils::run_cmd(&args, 10);
+    let out = format!("{}{}", r.stdout, r.stderr);
+    let size = out
+        .lines()
+        .find_map(|l| l.split("partition-size:super:").nth(1))
+        .map(str::trim)
+        .and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+        .ok_or("Could not read the size of super from the phone")?;
+    let layout = lfff_lib::super_layout::SuperLayout::from_payload_metadata(&json, size)?;
+    layout.to_image().map(Some)
+}
+
 /// Set to stop the firmware being unpacked; cleared when the next starts.
 static UNPACK_CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -557,6 +588,19 @@ fn prepare_firmware(path: &str, tx: &mpsc::Sender<WMsg>) {
     let devices = if is_zip {
         let d = lfff_lib::extractor::firmware_devices(src);
         std::fs::write(&devices_file, d.join("\n")).ok();
+        // The partition layout the firmware describes, for the experimental
+        // super rebuild; only payload firmware has one.
+        match lfff_lib::extractor::payload_metadata(src) {
+            Ok(json) => {
+                std::fs::write(dir.join(PAYLOAD_METADATA_FILE), json).ok();
+            }
+            Err(e) => log(
+                tx,
+                LogLevel::Info,
+                2,
+                format!("No partition layout in the firmware: {e}"),
+            ),
+        }
         d
     } else {
         std::fs::read_to_string(&devices_file)
@@ -2139,6 +2183,22 @@ pub fn worker(
                     stop(msg);
                     continue;
                 }
+                let super_layout = match super_layout_for(Path::new(&dir), serial.as_deref()) {
+                    Ok(l) => l,
+                    Err(msg) => {
+                        stage(&tx, 2, 3, "");
+                        stop(msg);
+                        continue;
+                    }
+                };
+                if super_layout.is_some() {
+                    log(
+                        &tx,
+                        LogLevel::Warn,
+                        2,
+                        "Experimental: super's layout will be rebuilt from the firmware",
+                    );
+                }
                 stage(&tx, 2, 1, "");
                 let src = lfff_lib::flasher::FirmwareSource::Extracted(PathBuf::from(&dir));
                 current_source = Some(src.clone());
@@ -2148,6 +2208,7 @@ pub fn worker(
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
                     skip_partitions,
+                    super_layout,
                     ..Default::default()
                 };
                 do_flash(

@@ -370,6 +370,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_classic_ui(config.classic_ui);
     ui.set_show_notice(!config.notice_accepted);
     ui.set_sound(config.sound);
+    ui.set_rebuild_super(config.rebuild_super);
     ui_callbacks::apply_pins(&ui, &config.pinned_tools);
     ui.set_chips_summary(ui_callbacks::chips_summary(&config).into());
     ui.set_cache_summary(ui_callbacks::cache_summary().into());

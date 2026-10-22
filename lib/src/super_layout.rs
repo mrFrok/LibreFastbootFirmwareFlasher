@@ -13,6 +13,9 @@
 //! (`include/liblp/metadata_format.h`, `writer.cpp`, `builder.cpp`). Only the
 //! empty layout is written: every partition has size 0 and no extents, and
 //! fastbootd grows each one as its image is flashed.
+//!
+//! Experimental and off by default (`FlashOptions::super_layout`): checked
+//! byte for byte against lpmake, but not yet against a factory lpdump.
 
 use sha2::{Digest, Sha256};
 
@@ -264,8 +267,8 @@ impl SuperLayout {
     /// super_empty.img for an A/B device. Virtual A/B when the payload says
     /// snapshots are enabled.
     ///
-    /// TODO: check against a factory lpdump of a Realme/OnePlus/OPPO device
-    /// (slot count, whether `_b` partitions and groups are listed, sizes).
+    /// To be checked against a factory lpdump of a Realme/OnePlus/OPPO
+    /// device (slot count, whether `_b` entries are listed, group sizes).
     pub fn from_payload_metadata(json: &str, device_size: u64) -> Result<Self, String> {
         let meta: PayloadMetadata =
             serde_json::from_str(json).map_err(|e| format!("payload metadata: {e}"))?;
@@ -277,16 +280,15 @@ impl SuperLayout {
         }
         let mut layout = SuperLayout::new(device_size, 3);
         layout.virtual_ab = dynamic.snapshot_enabled.unwrap_or(false);
+        let usable = device_size.saturating_sub(layout.first_logical_sector() * SECTOR_SIZE);
         for slot in ["a", "b"] {
             for g in &dynamic.groups {
                 let group = format!("{}_{slot}", g.name);
-                let maximum_size = g.size.unwrap_or(0);
-                if maximum_size > device_size {
-                    return Err(format!(
-                        "group {} ({maximum_size} bytes) does not fit a {device_size}-byte super",
-                        g.name
-                    ));
-                }
+                // Payloads can name a group larger than this device's super
+                // (RMX3709 16.0.3.503: 15.9 GiB on a 13.5 GiB super). The
+                // limit is then the space super actually has; partitions
+                // still have to fit, which flashing reports if they don't.
+                let maximum_size = g.size.unwrap_or(0).min(usable);
                 layout.groups.push(Group {
                     name: group.clone(),
                     maximum_size,
@@ -383,9 +385,13 @@ mod tests {
     }
 
     #[test]
-    fn a_group_larger_than_super_is_refused() {
+    fn a_group_larger_than_super_is_capped_to_it() {
         let json = include_str!("../testdata/rmx3709-payload-metadata.json");
-        assert!(SuperLayout::from_payload_metadata(json, 1 << 30).is_err());
+        // The real super of an RMX3706, smaller than the payload's group.
+        let super_size = 0x3_6000_0000;
+        let l = SuperLayout::from_payload_metadata(json, super_size).unwrap();
+        let usable = super_size - l.first_logical_sector() * SECTOR_SIZE;
+        assert!(l.groups.iter().all(|g| g.maximum_size == usable));
     }
 
     #[test]

@@ -34,6 +34,9 @@ pub struct Config {
     /// so in bootloader and fastbootd the phone is named from here.
     #[serde(default)]
     pub known_devices: BTreeMap<String, KnownDevice>,
+    /// Rebuild super's layout from the firmware before flashing (experimental).
+    #[serde(default)]
+    pub rebuild_super: bool,
     /// Notify with a sound when an install ends.
     #[serde(default = "default_true")]
     pub sound: bool,
@@ -76,6 +79,7 @@ impl Default for Config {
             classic_ui: false,
             notice_accepted: false,
             sound: true,
+            rebuild_super: false,
             known_devices: BTreeMap::new(),
         }
     }
@@ -179,5 +183,6 @@ mod tests {
         // Existing users see the first-launch notice once after updating.
         assert!(!c.notice_accepted);
         assert!(c.sound);
+        assert!(!c.rebuild_super);
     }
 }

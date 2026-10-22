@@ -279,6 +279,8 @@ pub fn run(
         skip_preloader,
         as_mediatek: Some(as_mediatek),
         skip_partitions: String::new(),
+        // The experimental super rebuild is GUI-only for now.
+        super_layout: None,
     };
 
     if !dry_run {

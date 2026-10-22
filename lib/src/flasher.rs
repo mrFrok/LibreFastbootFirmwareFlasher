@@ -692,6 +692,32 @@ fn flash_partition_inner(
 // LFFF already moved into `default`. Firmware folders without a payload keep
 // the in-place path.
 
+/// Install a fresh super layout with `fastboot wipe-super` (fastbootd only).
+/// Every dynamic partition is gone afterwards, empty in its group, until
+/// flashed again.
+pub fn wipe_super(
+    serial: Option<&str>,
+    layout: &[u8],
+    on_log: &dyn Fn(String),
+) -> Result<(), String> {
+    let tmp = tempfile::tempdir().map_err(|e| format!("temp dir: {e}"))?;
+    let img = tmp.path().join("super_empty.img");
+    fs::write(&img, layout).map_err(|e| format!("writing the layout: {e}"))?;
+    on_log("Writing a new super partition layout (fastboot wipe-super)...".into());
+    let mut args: Vec<String> = vec!["fastboot".into()];
+    if let Some(s) = serial {
+        args.extend(["-s".into(), s.into()]);
+    }
+    args.extend(["wipe-super".into(), img.display().to_string()]);
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let r = run_cmd(&refs, 120);
+    if r.code != 0 {
+        return Err(format!("fastboot wipe-super failed: {}", r.stderr.trim()));
+    }
+    on_log("Super layout written".into());
+    Ok(())
+}
+
 /// What `prepare_super_with_log` does to make room in super before the
 /// active slot's dynamic partitions are flashed.
 #[derive(Debug, PartialEq, Eq)]
@@ -1098,6 +1124,11 @@ pub struct FlashOptions {
     pub as_mediatek: Option<bool>,
     /// Comma-separated partition names the user explicitly wants to skip.
     pub skip_partitions: String,
+    /// An empty super layout (super_layout::SuperLayout::to_image) to install
+    /// with `fastboot wipe-super` before the dynamic partitions are flashed,
+    /// replacing whatever layout the device has. Experimental; `None` keeps
+    /// the device's layout and resizes in place.
+    pub super_layout: Option<Vec<u8>>,
 }
 
 /// Outcome of flashing a batch of partitions.
@@ -1448,6 +1479,14 @@ pub fn run_flash_session_with_log(
 
         // Super → active slot only
         if !super_imgs.is_empty() {
+            if let Some(layout) = &options.super_layout
+                && let Err(e) = wipe_super(serial, layout, on_log)
+            {
+                on_log(format!("Refusing to flash dynamic partitions: {e}"));
+                session.aborted = true;
+                session.end_reason = Some("WipeSuperFailed".into());
+                return session;
+            }
             on_log("Preparing super partition...".into());
             let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
             prepare_super_with_log(serial, &super_names, &active_slot, &|msg| on_log(msg));
