@@ -133,6 +133,9 @@ enum WMsg {
         cached: bool,
         /// Device codenames the OTA is built for; empty when it does not say.
         devices: Vec<String>,
+        /// The super layout a rebuild would write, in plain words; empty when
+        /// the firmware describes none.
+        super_plan: String,
     },
     FirmwareFailed(String),
     /// Install progress. stage: 0 prepare the phone, 1 cable check,

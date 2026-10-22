@@ -106,6 +106,8 @@ export component MainWindow inherits MaterialWindow {
     in-out property <bool> sound: true;
     callback set-sound(bool);
     in-out property <bool> rebuild-super: false;
+    // The layout a rebuild would write, from the chosen firmware; "" if none.
+    in-out property <string> super-plan;
     callback set-rebuild-super(bool);
     callback pick-cached(int);
     // ARB of the chosen firmware: -1 unknown, 0 none, >0 the level
@@ -986,6 +988,8 @@ export component MainWindow inherits MaterialWindow {
         phone: root.device.name;
         chip-name: root.chip == 1 ? "Snapdragon" : "MediaTek";
         wrong-device: root.fw-wrong-device;
+        rebuild-super: root.rebuild-super;
+        super-plan: root.super-plan;
         firmware: root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區");
         // One checkbox per warning kind: xbl/abl for ARB, preloader for MTK.
         skip-checked: root.sheet == 3 ? root.skip-preloader : root.skip-xbl-abl;

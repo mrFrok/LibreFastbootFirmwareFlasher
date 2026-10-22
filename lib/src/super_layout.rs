@@ -146,7 +146,12 @@ impl SuperLayout {
         }
 
         let mut partitions = Vec::new();
-        for p in &self.partitions {
+        for (i, p) in self.partitions.iter().enumerate() {
+            // Unique across the whole table, not only within a group: two
+            // entries of one name are what made OTAs fail before.
+            if self.partitions[..i].iter().any(|q| q.name == p.name) {
+                return Err(format!("partition listed twice: {}", p.name));
+            }
             let Some(group_index) = groups.iter().position(|g| g.name == p.group) else {
                 return Err(format!(
                     "partition {} is in unknown group {}",
@@ -245,6 +250,15 @@ impl SuperLayout {
 #[derive(serde::Deserialize)]
 struct PayloadMetadata {
     dynamic_partition_metadata: Option<DynamicPartitions>,
+    #[serde(default)]
+    partitions: Vec<PayloadPartition>,
+}
+
+#[derive(serde::Deserialize)]
+struct PayloadPartition {
+    partition_name: String,
+    #[serde(default)]
+    size_in_bytes: u64,
 }
 
 #[derive(serde::Deserialize)]
@@ -307,6 +321,29 @@ impl SuperLayout {
                 }
             }
         }
+        // The images have to fit their group: checked here, before super is
+        // wiped, rather than discovered halfway through flashing.
+        let size_of = |name: &str| {
+            meta.partitions
+                .iter()
+                .find(|p| p.partition_name == name)
+                .map(|p| p.size_in_bytes)
+        };
+        for g in &dynamic.groups {
+            let limit = g.size.unwrap_or(0).min(usable);
+            let mut total = 0u64;
+            for p in &g.partition_names {
+                total += size_of(p).ok_or_else(|| {
+                    format!("the firmware lists {p} but has no image size for it")
+                })?;
+            }
+            if limit > 0 && total > limit {
+                return Err(format!(
+                    "the firmware's partitions need {total} bytes, more than the {limit} bytes group {} can hold on this phone",
+                    g.name
+                ));
+            }
+        }
         // Fails early on names or sizes the format cannot hold.
         layout.to_image()?;
         Ok(layout)
@@ -328,6 +365,185 @@ impl SuperLayout {
         missing.sort();
         missing.dedup();
         missing
+    }
+}
+
+/// What an LP image says, read back: enough to check it against the plan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedLayout {
+    pub metadata_max_size: u32,
+    pub metadata_slots: u32,
+    pub virtual_ab: bool,
+    pub device_size: u64,
+    pub super_name: String,
+    pub groups: Vec<Group>,
+    pub partitions: Vec<Partition>,
+}
+
+fn u16_at(b: &[u8], o: usize) -> Result<u16, String> {
+    b.get(o..o + 2)
+        .map(|x| u16::from_le_bytes([x[0], x[1]]))
+        .ok_or_else(|| "image too short".to_string())
+}
+fn u32_at(b: &[u8], o: usize) -> Result<u32, String> {
+    b.get(o..o + 4)
+        .map(|x| u32::from_le_bytes(x.try_into().unwrap()))
+        .ok_or_else(|| "image too short".to_string())
+}
+fn u64_at(b: &[u8], o: usize) -> Result<u64, String> {
+    b.get(o..o + 8)
+        .map(|x| u64::from_le_bytes(x.try_into().unwrap()))
+        .ok_or_else(|| "image too short".to_string())
+}
+fn name_at(b: &[u8], o: usize) -> Result<String, String> {
+    let raw = b.get(o..o + NAME_LEN).ok_or("image too short")?;
+    let end = raw.iter().position(|&c| c == 0).unwrap_or(NAME_LEN);
+    String::from_utf8(raw[..end].to_vec()).map_err(|_| "a name is not text".to_string())
+}
+
+/// Read an image as `fastboot wipe-super` takes it (geometry, then one
+/// metadata copy), checking magics, sizes and all three checksums, the way
+/// liblp reads it.
+pub fn parse_image(img: &[u8]) -> Result<ParsedLayout, String> {
+    if u32_at(img, 0)? != GEOMETRY_MAGIC {
+        return Err("not an LP image: bad geometry magic".into());
+    }
+    let mut geom = img.get(..52).ok_or("image too short")?.to_vec();
+    let want = geom[8..40].to_vec();
+    geom[8..40].fill(0);
+    if Sha256::digest(&geom).as_slice() != want.as_slice() {
+        return Err("geometry checksum mismatch".into());
+    }
+    let metadata_max_size = u32_at(img, 40)?;
+    let metadata_slots = u32_at(img, 44)?;
+
+    let m = img.get(GEOMETRY_SIZE..).ok_or("image too short")?;
+    if u32_at(m, 0)? != HEADER_MAGIC || u16_at(m, 4)? != MAJOR_VERSION {
+        return Err("bad metadata header".into());
+    }
+    let minor = u16_at(m, 6)?;
+    let header_size = u32_at(m, 8)? as usize;
+    let tables_size = u32_at(m, 44)? as usize;
+    let header = m.get(..header_size).ok_or("image too short")?;
+    let tables = m
+        .get(header_size..header_size + tables_size)
+        .ok_or("image too short")?;
+    let mut h = header.to_vec();
+    h[12..44].fill(0);
+    if Sha256::digest(&h).as_slice() != &header[12..44] {
+        return Err("header checksum mismatch".into());
+    }
+    if Sha256::digest(tables).as_slice() != &header[48..80] {
+        return Err("tables checksum mismatch".into());
+    }
+    let desc = |i: usize| -> Result<(usize, usize, usize), String> {
+        let o = 80 + i * 12;
+        Ok((
+            u32_at(header, o)? as usize,
+            u32_at(header, o + 4)? as usize,
+            u32_at(header, o + 8)? as usize,
+        ))
+    };
+    let (p_off, p_n, p_sz) = desc(0)?;
+    let (g_off, g_n, g_sz) = desc(2)?;
+    let (b_off, b_n, b_sz) = desc(3)?;
+    if b_n != 1 || b_sz != BLOCK_DEVICE_ENTRY_SIZE as usize {
+        return Err(format!(
+            "expected one block device entry, found {b_n} of {b_sz} bytes"
+        ));
+    }
+    let mut groups = Vec::new();
+    for i in 0..g_n {
+        let o = g_off + i * g_sz;
+        groups.push(Group {
+            name: name_at(tables, o)?,
+            maximum_size: u64_at(tables, o + 40)?,
+        });
+    }
+    let mut partitions = Vec::new();
+    for i in 0..p_n {
+        let o = p_off + i * p_sz;
+        let gi = u32_at(tables, o + 48)? as usize;
+        partitions.push(Partition {
+            name: name_at(tables, o)?,
+            group: groups
+                .get(gi)
+                .map(|g| g.name.clone())
+                .ok_or("a partition points at no group")?,
+            attributes: u32_at(tables, o + 36)?,
+        });
+    }
+    let flags = if minor >= MINOR_VERSION_EXPANDED_HEADER {
+        u32_at(header, 128)?
+    } else {
+        0
+    };
+    Ok(ParsedLayout {
+        metadata_max_size,
+        metadata_slots,
+        virtual_ab: flags & HEADER_FLAG_VIRTUAL_AB_DEVICE != 0,
+        device_size: u64_at(tables, b_off + 16)?,
+        super_name: name_at(tables, b_off + 24)?,
+        groups,
+        partitions,
+    })
+}
+
+impl SuperLayout {
+    /// The image, read back and compared with this plan before it is
+    /// returned: what goes to the phone is what was meant, checksums and all.
+    pub fn to_checked_image(&self) -> Result<Vec<u8>, String> {
+        let img = self.to_image()?;
+        let got =
+            parse_image(&img).map_err(|e| format!("the built layout does not read back: {e}"))?;
+        let mut groups = vec![Group {
+            name: DEFAULT_GROUP.into(),
+            maximum_size: 0,
+        }];
+        groups.extend(self.groups.iter().cloned());
+        let want = ParsedLayout {
+            metadata_max_size: self.metadata_max_size,
+            metadata_slots: self.metadata_slots,
+            virtual_ab: self.virtual_ab,
+            device_size: self.device_size,
+            super_name: self.super_name.clone(),
+            groups,
+            partitions: self.partitions.clone(),
+        };
+        if got != want {
+            return Err("the built layout does not match the plan".into());
+        }
+        Ok(img)
+    }
+
+    /// The plan a payload describes, before the phone's super size is known
+    /// (it is read in fastbootd): groups at the payload's sizes.
+    pub fn plan_from_payload_metadata(json: &str) -> Result<String, String> {
+        Self::from_payload_metadata(json, u64::MAX / 2).map(|l| l.summary())
+    }
+
+    /// One line per group — name, size limit, partitions — short enough
+    /// for the confirmation sheet.
+    pub fn summary(&self) -> String {
+        self.groups
+            .iter()
+            .map(|g| {
+                let parts: Vec<&str> = self
+                    .partitions
+                    .iter()
+                    .filter(|p| p.group == g.name)
+                    .map(|p| p.name.trim_end_matches("_a").trim_end_matches("_b"))
+                    .collect();
+                format!(
+                    "{} · {:.2} GiB · {} × readonly: {}",
+                    g.name,
+                    g.maximum_size as f64 / (1u64 << 30) as f64,
+                    parts.len(),
+                    parts.join(" ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -444,6 +660,40 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         assert_eq!(l.missing_from(&device), ["my_company", "my_preload"]);
+    }
+
+    #[test]
+    fn a_built_image_reads_back_as_planned() {
+        for vab in [false, true] {
+            let l = sample(vab);
+            let parsed = parse_image(&l.to_checked_image().unwrap()).unwrap();
+            assert_eq!(parsed.virtual_ab, vab);
+            assert_eq!(parsed.partitions, l.partitions);
+            assert_eq!(parsed.groups.len(), l.groups.len() + 1);
+        }
+    }
+
+    #[test]
+    fn a_damaged_image_is_refused() {
+        let mut img = sample(true).to_image().unwrap();
+        let last = img.len() - 1;
+        img[last] ^= 1;
+        assert!(parse_image(&img).unwrap_err().contains("checksum"));
+    }
+
+    #[test]
+    fn a_partition_named_twice_is_refused() {
+        let mut l = sample(false);
+        l.partitions.push(l.partitions[0].clone());
+        assert!(l.to_image().unwrap_err().contains("twice"));
+    }
+
+    #[test]
+    fn firmware_too_big_for_the_phone_is_refused() {
+        let json = include_str!("../testdata/rmx3709-payload-metadata.json");
+        // 11.5 GB of images against an 8 GiB super.
+        let err = SuperLayout::from_payload_metadata(json, 8 << 30).unwrap_err();
+        assert!(err.contains("more than"), "{err}");
     }
 
     #[test]

@@ -449,7 +449,7 @@ fn super_layout_for(dir: &Path, serial: Option<&str>) -> Result<Option<Vec<u8>>,
             missing.join(", ")
         ));
     }
-    layout.to_image().map(Some)
+    layout.to_checked_image().map(Some)
 }
 
 /// Set to stop the firmware being unpacked; cleared when the next starts.
@@ -661,6 +661,10 @@ fn prepare_firmware(path: &str, tx: &mpsc::Sender<WMsg>) {
         has_preloader: images.keys().any(|k| lfff_lib::flasher::is_preloader(k)),
         cached,
         devices,
+        super_plan: std::fs::read_to_string(dir.join(PAYLOAD_METADATA_FILE))
+            .ok()
+            .and_then(|j| lfff_lib::super_layout::SuperLayout::plan_from_payload_metadata(&j).ok())
+            .unwrap_or_default(),
     })
     .ok();
 }

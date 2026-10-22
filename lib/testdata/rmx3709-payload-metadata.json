@@ -33,5 +33,267 @@
     "vabc_compression_param": "",
     "cow_version": 2,
     "compression_factor": 4096
-  }
+  },
+  "partitions": [
+    {
+      "partition_name": "system",
+      "size_in_bytes": 803508224
+    },
+    {
+      "partition_name": "system_ext",
+      "size_in_bytes": 858923008
+    },
+    {
+      "partition_name": "product",
+      "size_in_bytes": 6356992
+    },
+    {
+      "partition_name": "vbmeta_system",
+      "size_in_bytes": 4096
+    },
+    {
+      "partition_name": "boot",
+      "size_in_bytes": 100663296
+    },
+    {
+      "partition_name": "init_boot",
+      "size_in_bytes": 8388608
+    },
+    {
+      "partition_name": "vendor_boot",
+      "size_in_bytes": 100663296
+    },
+    {
+      "partition_name": "recovery",
+      "size_in_bytes": 104857600
+    },
+    {
+      "partition_name": "vendor",
+      "size_in_bytes": 454299648
+    },
+    {
+      "partition_name": "vendor_dlkm",
+      "size_in_bytes": 146751488
+    },
+    {
+      "partition_name": "system_dlkm",
+      "size_in_bytes": 14786560
+    },
+    {
+      "partition_name": "odm",
+      "size_in_bytes": 2819309568
+    },
+    {
+      "partition_name": "dtbo",
+      "size_in_bytes": 25165824
+    },
+    {
+      "partition_name": "vbmeta",
+      "size_in_bytes": 12288
+    },
+    {
+      "partition_name": "vbmeta_vendor",
+      "size_in_bytes": 4096
+    },
+    {
+      "partition_name": "xbl",
+      "size_in_bytes": 1175552
+    },
+    {
+      "partition_name": "xbl_config",
+      "size_in_bytes": 389120
+    },
+    {
+      "partition_name": "engineering_cdt",
+      "size_in_bytes": 1048576
+    },
+    {
+      "partition_name": "uefi",
+      "size_in_bytes": 2797568
+    },
+    {
+      "partition_name": "aop",
+      "size_in_bytes": 389120
+    },
+    {
+      "partition_name": "aop_config",
+      "size_in_bytes": 28672
+    },
+    {
+      "partition_name": "tz",
+      "size_in_bytes": 4214784
+    },
+    {
+      "partition_name": "hyp",
+      "size_in_bytes": 1658880
+    },
+    {
+      "partition_name": "modem",
+      "size_in_bytes": 367001600
+    },
+    {
+      "partition_name": "bluetooth",
+      "size_in_bytes": 8388608
+    },
+    {
+      "partition_name": "abl",
+      "size_in_bytes": 278528
+    },
+    {
+      "partition_name": "dsp",
+      "size_in_bytes": 77594624
+    },
+    {
+      "partition_name": "keymaster",
+      "size_in_bytes": 3145728
+    },
+    {
+      "partition_name": "spuservice",
+      "size_in_bytes": 94208
+    },
+    {
+      "partition_name": "devcfg",
+      "size_in_bytes": 61440
+    },
+    {
+      "partition_name": "qupfw",
+      "size_in_bytes": 69632
+    },
+    {
+      "partition_name": "uefisecapp",
+      "size_in_bytes": 204800
+    },
+    {
+      "partition_name": "imagefv",
+      "size_in_bytes": 114688
+    },
+    {
+      "partition_name": "shrm",
+      "size_in_bytes": 184320
+    },
+    {
+      "partition_name": "cpucp",
+      "size_in_bytes": 425984
+    },
+    {
+      "partition_name": "featenabler",
+      "size_in_bytes": 106496
+    },
+    {
+      "partition_name": "oplus_sec",
+      "size_in_bytes": 1040384
+    },
+    {
+      "partition_name": "splash",
+      "size_in_bytes": 15507456
+    },
+    {
+      "partition_name": "xbl_ramdump",
+      "size_in_bytes": 1007616
+    },
+    {
+      "partition_name": "cpucp_dtb",
+      "size_in_bytes": 16384
+    },
+    {
+      "partition_name": "soccp_debug",
+      "size_in_bytes": 73728
+    },
+    {
+      "partition_name": "soccp_dcd",
+      "size_in_bytes": 16384
+    },
+    {
+      "partition_name": "pdp",
+      "size_in_bytes": 323584
+    },
+    {
+      "partition_name": "pdp_cdb",
+      "size_in_bytes": 16384
+    },
+    {
+      "partition_name": "my_product",
+      "size_in_bytes": 3723247616
+    },
+    {
+      "partition_name": "my_engineering",
+      "size_in_bytes": 335872
+    },
+    {
+      "partition_name": "my_stock",
+      "size_in_bytes": 2654216192
+    },
+    {
+      "partition_name": "my_heytap",
+      "size_in_bytes": 335872
+    },
+    {
+      "partition_name": "my_carrier",
+      "size_in_bytes": 335872
+    },
+    {
+      "partition_name": "my_region",
+      "size_in_bytes": 52920320
+    },
+    {
+      "partition_name": "my_bigball",
+      "size_in_bytes": 335872
+    },
+    {
+      "partition_name": "my_manifest",
+      "size_in_bytes": 499712
+    },
+    {
+      "partition_name": "tme_seq_patch",
+      "size_in_bytes": 8192
+    },
+    {
+      "partition_name": "hyp_ac_config",
+      "size_in_bytes": 77824
+    },
+    {
+      "partition_name": "multiimgoem",
+      "size_in_bytes": 12288
+    },
+    {
+      "partition_name": "tme_fw",
+      "size_in_bytes": 204800
+    },
+    {
+      "partition_name": "soccp",
+      "size_in_bytes": 8388608
+    },
+    {
+      "partition_name": "multiimgqti",
+      "size_in_bytes": 12288
+    },
+    {
+      "partition_name": "tme_config",
+      "size_in_bytes": 45056
+    },
+    {
+      "partition_name": "xbl_ac_config",
+      "size_in_bytes": 45056
+    },
+    {
+      "partition_name": "secretkeeper",
+      "size_in_bytes": 1056768
+    },
+    {
+      "partition_name": "tz_ac_config",
+      "size_in_bytes": 65536
+    },
+    {
+      "partition_name": "tz_qti_config",
+      "size_in_bytes": 139264
+    },
+    {
+      "partition_name": "dcp",
+      "size_in_bytes": 8388608
+    },
+    {
+      "partition_name": "pvmfw",
+      "size_in_bytes": 1011712
+    }
+  ]
 }

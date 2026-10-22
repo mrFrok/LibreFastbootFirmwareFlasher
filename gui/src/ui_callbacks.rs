@@ -593,7 +593,9 @@ pub fn poll(
                 has_preloader,
                 cached,
                 devices,
+                super_plan,
             } => {
+                ui.set_super_plan(super_plan.into());
                 FW_DEVICES.with(|d| *d.borrow_mut() = devices);
                 update_wrong_device(&ui);
                 ui.set_fw_dir(dir.into());
