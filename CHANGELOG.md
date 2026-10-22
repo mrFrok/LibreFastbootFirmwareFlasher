@@ -3,6 +3,35 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.2.0
+
+### Safer super rebuild (experimental)
+
+Rebuild super (Settings → Experimental) now checks everything before it
+touches the phone:
+
+- the firmware's partitions must fit their group on this phone, from the
+  image sizes in the payload;
+- each partition name may appear only once in the whole layout;
+- the built layout is read back — checksums and contents — and compared
+  with the plan before it is written;
+- the install summary shows the layout that will be written, and Install
+  stays off until "I understand: rebuild super" is ticked.
+
+The rules follow MisterZtr's analysis of super on Realme / OnePlus / OPPO
+devices, which confirms the layout already in use: groups 4 MiB smaller
+than super, 3 metadata slots of 64 KiB, the Virtual A/B flag.
+
+---
+
+### Коротко по-русски
+
+Пересоздание super (Настройки → Экспериментальное) теперь до записи
+проверяет, что прошивка влезает, что имена разделов не повторяются, и сверяет
+собранную разметку с планом. Перед установкой показывается, какая разметка
+будет записана, — нужна отдельная галочка «Понимаю: пересоздать super».
+Правила сверены с разбором MisterZtr.
+
 ## 3.1.0
 
 ### Repair system updates
