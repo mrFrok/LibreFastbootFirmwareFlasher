@@ -99,11 +99,11 @@ pub fn read_adb(serial: &str) -> DeviceSnapshot {
         product,
         slot: get("slot").trim_start_matches('_').to_string(),
         mode: Mode::System,
-        unlocked: match get("locked").as_str() {
-            "0" => Some(true),
-            "1" => Some(false),
-            _ => None,
-        },
+        // Only "unlocked" is believed from Android: tools that hide the
+        // unlock (a GBL exploit, root hiders) make it report locked on a
+        // phone fastboot can flash. fastboot's own answer decides, and the
+        // pre-flash check still refuses a phone fastboot calls locked.
+        unlocked: (get("locked") == "0").then_some(true),
         battery: get("battery").parse().unwrap_or(-1),
         codename_known,
     }
