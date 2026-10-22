@@ -1,0 +1,126 @@
+{
+ "body": {
+  "parent": "ota",
+  "components": [
+   {
+    "componentId": "my_manifest_RMX5010_11.F.68_2680_202608101939.97.e176cce9",
+    "componentName": "my_manifest",
+    "componentVersion": "RMX5010_11.F.68_2680_202608101939.97.e176cce9",
+    "componentPackets": {
+     "size": "9690309232",
+     "shardsSize": 1073741824,
+     "vabInfo": {
+      "data": {
+       "otaStreamingProperty": "payload_metadata.bin:61:345848,payload.bin:61:9690303818,payload_properties.txt:9690303931:430,care_map.pb:9690304402:505,metadata:9690305998:1180,metadata.pb:9690304969:970",
+       "vab_package_hash": "04027c9429ccc424c9168f27f35cd0e9",
+       "extra_params": "metadata_hash:32e2edb81e47940ff81a443c5c6569436a33c2f019aae3da64502ac24fc7fb9a",
+       "header": [
+        "FILE_HASH=FeX3gYJASIH3HRAopfbR1gW7ZiRY9AY5dhzleqzNKvw=",
+        "FILE_SIZE=9690303818",
+        "METADATA_HASH=PA6Gu8x8dw2gz/7l75kz0ymmpUgO1ycGgfzZw4vstm8=",
+        "METADATA_SIZE=345581",
+        "android_version=16",
+        "forbid_ota_local_update=false",
+        "ota_root_or_debug=false",
+        "oplus_update_engine_verify_disable=0",
+        "ota_target_version=RMX5010_11.F.68_2680_202608101939",
+        "oplus_rom_version=V16.1.0",
+        "security_patch=2026-08-01",
+        "security_patch_vendor=2026-08-01",
+        "oplus_separate_soft=24600"
+       ]
+      }
+     },
+     "manualUrl": "https://component-ota-cn.allawntech.com/downloadCheck?c=8af45e312657742743e030ec436887b2&p=a6c78fdd375d888b38cedbfe17cb60649479afb21c3754f2d4ec5bbf917e07c6b9b8638de57b3424ba3bd3282179&d=e181cd82745f88956e8098ec0182623bca30a2a51b7b03ead6e04ce9ca7400d5b4e921c5b4276d&g=10eab6008d5642cf42abd2aa41f847cb&id=6ac8b8ff92ce7c01836a7f66&taste=0&supportDLTaste=1&mode=1&tr=manual&s=32bcca1f7f5c034ef883842e5f16fa97",
+     "id": "domestic_my_manifest_RMX5010_11.F.68_2680_202608101939.97.e176cce9_1_04027c9429ccc424c9168f27f35cd0e9",
+     "type": "1",
+     "url": "https://component-ota-cn.allawntech.com/downloadCheck?c=8af45e312657742743e030ec436887b2&p=a6c78fdd375d888b38cedbfe17cb60649479afb21c3754f2d4ec5bbf917e07c6b9b8638de57b3424ba3bd3282179&d=e181cd82745f88956e8098ec0182623bca30a2a51b3715b3daa301a5c5764fc3b6e3339cb92e7339ee6490&g=10eab6008d5642cf42abd2aa41f847cb&id=6ac8b8ff92ce7c01836a7f66&taste=0&supportDLTaste=1&mode=1&tr=auto&s=5446337c6ac6b3c8f5434b3cd244be6f",
+     "md5": "04027c9429ccc424c9168f27f35cd0e9"
+    }
+   }
+  ],
+  "securityPatch": "2026-08-01",
+  "realVersionName": "RMX5010_16.0.10.500(CN01)",
+  "otaVersion": "RMX5010_11.F.68_2680_202608101939",
+  "isNvDescription": true,
+  "description": {
+   "opex": {},
+   "share": ".",
+   "panelUrl": "https://gauss-compotacostauto-cn.allawnfs.com/remove-8af45e312657742743e030ec436887b2/component-ota/26/10/09/7741b3bb7bb94aa18caf6c5ad6df7a8b.html",
+   "url": "https://h5fs.coloros.com/fb8a3265be554a62a837530af688d506/static/index.html#/about"
+  },
+  "virtualFlag": false,
+  "versionTypeId": "non_display",
+  "versionName": "RMX5010_16.0.10.500(CN01)",
+  "rid": "6be52c29-7a02-419a-bd7e-e1345364ab2d",
+  "reminderValue": {
+   "download": {
+    "notice": [
+     1,
+     1,
+     1,
+     3,
+     5,
+     7
+    ],
+    "pop": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "version": "1787296332000"
+   },
+   "upgrade": {
+    "notice": [
+     1,
+     1,
+     1,
+     3,
+     5,
+     7
+    ],
+    "pop": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "version": "1787296332000"
+   }
+  },
+  "isRecruit": false,
+  "realAndroidVersion": "Android 16",
+  "opexInfo": [],
+  "isSecret": false,
+  "realOsVersion": "ColorOS 16.1.0",
+  "osVersion": "ColorOS 16.1",
+  "publishedTime": 1791540543361,
+  "componentAssembleType": true,
+  "googlePatchInfo": "0",
+  "id": "6ac8b8ff92ce7c01836a7f66",
+  "colorOSVersion": "ColorOS 16.1",
+  "isConfidential": 0,
+  "androidApiLevel": "36",
+  "paramFlag": 1,
+  "reminderType": 1,
+  "noticeType": 0,
+  "isBandwidthControl": true,
+  "versionCode": 2680,
+  "silenceUpdate": 0,
+  "securityPatchVendor": "2026-08-01",
+  "gkaReq": 0,
+  "realOtaVersion": "RMX5010_11.F.68_2680_202608101939",
+  "androidVersion": "Android 16",
+  "nightUpdateLimit": "00-99",
+  "secLevel": "5",
+  "versionTypeH5": "不显示",
+  "aid": "RMX5010NV97_11.F",
+  "nvId16": "NV97",
+  "status": "published"
+ },
+ "errMsg": null,
+ "responseCode": 200
+}

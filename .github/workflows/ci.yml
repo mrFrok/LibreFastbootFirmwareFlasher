@@ -23,9 +23,9 @@ jobs:
       # GUI is excluded: compiling Slint + Skia takes too long for PR CI.
       # It is still built by release.yml on tags.
       - name: Clippy (deny warnings)
-        run: cargo clippy -p lfff-lib -p lfff-cli --all-targets -- -D warnings
+        run: cargo clippy -p lfff-lib -p lfff-ota -p lfff-cli --all-targets -- -D warnings
       - name: Tests
-        run: cargo test -p lfff-lib -p lfff-cli
+        run: cargo test -p lfff-lib -p lfff-ota -p lfff-cli
       - name: Packaging script tests
         run: |
           python3 scripts/test_update_packaging.py
@@ -47,7 +47,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Tests
-        run: cargo test -p lfff-lib -p lfff-cli
+        run: cargo test -p lfff-lib -p lfff-ota -p lfff-cli
       # Only the GUI's PATH handling: the rest of the GUI has no tests, and
       # this module is the macOS-specific part.
       - name: GUI PATH handling

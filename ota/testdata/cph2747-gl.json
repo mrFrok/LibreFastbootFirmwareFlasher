@@ -1,0 +1,127 @@
+{
+ "body": {
+  "parent": "ota",
+  "components": [
+   {
+    "componentId": "my_manifest_CPH2747_11.A.48_0480_202609111034.A7.f27f2a58",
+    "componentName": "my_manifest",
+    "componentVersion": "CPH2747_11.A.48_0480_202609111034.A7.f27f2a58",
+    "componentPackets": {
+     "size": "9277169699",
+     "shardsSize": 1073741824,
+     "vabInfo": {
+      "data": {
+       "otaStreamingProperty": "payload_metadata.bin:61:335236,payload.bin:61:9277163446,payload_properties.txt:9277163559:457,care_map.pb:9277164057:505,metadata:9277165676:1191,metadata.pb:9277164624:993",
+       "vab_package_hash": "f18405ee46ef1867265e17928cc88c2d",
+       "extra_params": "metadata_hash:cb1b50c606c616be2f75cd04f715989553961257116458c492a328a579696aeb",
+       "header": [
+        "FILE_HASH=saBtM5swZdqRcg13RPNT4asoP/FbXmFwAFZfunc33uI=",
+        "FILE_SIZE=9277163446",
+        "METADATA_HASH=1BDkxww23+igfR4V9aGBv/zbhHIXvXOC9gOIMYA0IX8=",
+        "METADATA_SIZE=334713",
+        "android_version=16",
+        "forbid_ota_local_update=false",
+        "ota_root_or_debug=false",
+        "oplus_update_engine_verify_disable=0",
+        "ota_target_version=CPH2747_11.A.48_0480_202609111034",
+        "oplus_rom_version=V16.1.0",
+        "security_patch=2026-09-01",
+        "security_patch_vendor=2026-09-01",
+        "oplus_separate_soft=24863",
+        "mainline_version=371088000"
+       ]
+      }
+     },
+     "manualUrl": "https://component-ota-sg.allawnos.com/downloadCheck?c=09594a8114f0d7dc9a4f0216a0e68bad&p=f088224e00621389a2bc96564264d266122940902e60c0ee7e12c781cd95d63646ea311ea9022bbc420d452b5ef4&d=b7ce601143611397f3f2d646007a853e1a3c4ed07f2b97f43c4dd1d191cbd2714cbd320fe30771e9&g=10eab6008d5642cf42abd2aa41f847cb&id=6ace16437d8131017f156ac7&taste=0&supportDLTaste=1&mode=1&tr=manual&s=0131b7ca07445e79f9806e678417c4b3",
+     "id": "foreign_my_manifest_CPH2747_11.A.48_0480_202609111034.A7.f27f2a58_1_f18405ee46ef1867265e17928cc88c2d",
+     "type": "1",
+     "url": "https://component-ota-sg.allawnos.com/downloadCheck?c=09594a8114f0d7dc9a4f0216a0e68bad&p=f088224e00621389a2bc96564264d266122940902e60c0ee7e12c781cd95d63646ea311ea9022bbc420d452b5ef4&d=b7ce601143611397f3f2d646007a853e1a3c4ed07f2b97f43c4dd1d191cbd2714cbd320fe30771e9&g=10eab6008d5642cf42abd2aa41f847cb&id=6ace16437d8131017f156ac7&taste=0&supportDLTaste=1&mode=1&tr=auto&s=7221a38e75fbaf1b1dd02d761ff1eed0",
+     "md5": "f18405ee46ef1867265e17928cc88c2d"
+    }
+   }
+  ],
+  "securityPatch": "2026-09-01",
+  "realVersionName": "CPH2747_16.0.10.601(EX01)",
+  "otaVersion": "CPH2747_11.A.48_0480_202609111034",
+  "isNvDescription": true,
+  "description": {
+   "opex": {},
+   "share": ".",
+   "panelUrl": "https://gauss-componentotamanual.allawnofs.com/remove-09594a8114f0d7dc9a4f0216a0e68bad/component-ota/26/10/13/62401337726245ef89ddd655b1d5499f.html",
+   "url": "https://h5fsf.coloros.com/d9ac6e19910043a6b6158bef1e9e0117/static/index.html#/about"
+  },
+  "virtualFlag": false,
+  "versionTypeId": "non_display",
+  "versionName": "CPH2747_16.0.10.601(EX01)",
+  "rid": "f41a2816-15c9-4461-8e31-456b74e40927",
+  "reminderValue": {
+   "download": {
+    "notice": [
+     1,
+     1,
+     1,
+     3,
+     5,
+     7
+    ],
+    "pop": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "version": "1790157029000"
+   },
+   "upgrade": {
+    "notice": [
+     1,
+     1,
+     1,
+     3,
+     5,
+     7
+    ],
+    "pop": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "version": "1790157029000"
+   }
+  },
+  "isRecruit": false,
+  "realAndroidVersion": "Android 16",
+  "opexInfo": [],
+  "isSecret": false,
+  "realOsVersion": "ColorOS 16.1.0",
+  "osVersion": "ColorOS 16.1",
+  "publishedTime": 1791942742957,
+  "componentAssembleType": true,
+  "googlePatchInfo": "0",
+  "id": "6ace16437d8131017f156ac7",
+  "colorOSVersion": "ColorOS 16.1",
+  "isConfidential": 0,
+  "androidApiLevel": "36",
+  "paramFlag": 1,
+  "reminderType": 1,
+  "noticeType": 0,
+  "isBandwidthControl": false,
+  "versionCode": 480,
+  "silenceUpdate": 0,
+  "securityPatchVendor": "2026-09-01",
+  "gkaReq": 0,
+  "realOtaVersion": "CPH2747_11.A.48_0480_202609111034",
+  "androidVersion": "Android 16",
+  "nightUpdateLimit": "00-99",
+  "secLevel": "5",
+  "versionTypeH5": "不显示",
+  "aid": "CPH2747NVA7_11.A",
+  "nvId16": "NVA7",
+  "status": "published"
+ },
+ "errMsg": null,
+ "responseCode": 200
+}
