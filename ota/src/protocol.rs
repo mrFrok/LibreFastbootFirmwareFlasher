@@ -94,19 +94,30 @@ pub fn agent() -> ureq::Agent {
         .into()
 }
 
-pub fn query(agent: &ureq::Agent, q: &Query) -> Result<Answer> {
-    let host = q.region.host();
-    let (public_key, cert_version) = fetch_cert(agent, host)?;
+/// The server's encryption key; one per host serves any number of queries.
+#[derive(Clone, Debug)]
+pub struct Cert {
+    key: RsaPublicKey,
+    version: i64,
+}
 
+pub fn query(agent: &ureq::Agent, q: &Query) -> Result<Answer> {
+    let cert = fetch_cert(agent, q.region.host())?;
+    query_with(agent, q, &cert)
+}
+
+/// `query` with a certificate fetched earlier from `q.region.host()`.
+pub fn query_with(agent: &ureq::Agent, q: &Query, cert: &Cert) -> Result<Answer> {
+    let host = q.region.host();
     let mut key = [0u8; 16];
     let mut iv = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut key);
     rand::thread_rng().fill_bytes(&mut iv);
-    let protected_key = wrap_key(&public_key, &key)?;
+    let protected_key = wrap_key(&cert.key, &key)?;
 
     let body = json!({ "params": seal(&request_body(now_ms()).to_string(), &key, &iv) });
     let mut req = agent.post(format!("https://{host}/update/v6"));
-    for (name, value) in headers(q, &protected_key, cert_version, now_ms()) {
+    for (name, value) in headers(q, &protected_key, cert.version, now_ms()) {
         req = req.header(name, value);
     }
     let mut resp = req
@@ -144,7 +155,7 @@ pub fn parse_answer(text: &str, key: &[u8; 16]) -> Result<Answer> {
     }
 }
 
-fn fetch_cert(agent: &ureq::Agent, host: &str) -> Result<(RsaPublicKey, i64)> {
+pub fn fetch_cert(agent: &ureq::Agent, host: &str) -> Result<Cert> {
     let mut resp = agent
         .post(format!("https://{host}/crypto/cert/upgrade"))
         .header("Content-Type", "application/json; charset=utf-8")
@@ -155,7 +166,7 @@ fn fetch_cert(agent: &ureq::Agent, host: &str) -> Result<(RsaPublicKey, i64)> {
 }
 
 /// The encryption key and its version from a `/crypto/cert/upgrade` answer.
-pub fn parse_cert(text: &str) -> Result<(RsaPublicKey, i64)> {
+pub fn parse_cert(text: &str) -> Result<Cert> {
     let root: Value = serde_json::from_str(text)?;
     let data = &root["data"];
     let pem = data["cert4Encrypt"]
@@ -175,7 +186,7 @@ pub fn parse_cert(text: &str) -> Result<(RsaPublicKey, i64)> {
     let der = B64.decode(b64).context("certificate is not base64")?;
     let spki = subject_public_key_info(&der).ok_or_else(|| anyhow!("malformed certificate"))?;
     let key = RsaPublicKey::from_public_key_der(spki).context("not an RSA key")?;
-    Ok((key, version))
+    Ok(Cert { key, version })
 }
 
 /// Walks Certificate → TBSCertificate → SubjectPublicKeyInfo; enough DER for
@@ -386,10 +397,12 @@ mod tests {
 
     #[test]
     fn reads_the_server_certificate() {
-        let (key, version) = parse_cert(include_str!("../testdata/cert-sg.json")).unwrap();
-        assert_eq!(key.size(), 256);
-        assert!(version > 0);
-        let wrapped = B64.decode(wrap_key(&key, &[1u8; 16]).unwrap()).unwrap();
+        let cert = parse_cert(include_str!("../testdata/cert-sg.json")).unwrap();
+        assert_eq!(cert.key.size(), 256);
+        assert!(cert.version > 0);
+        let wrapped = B64
+            .decode(wrap_key(&cert.key, &[1u8; 16]).unwrap())
+            .unwrap();
         assert_eq!(wrapped.len(), 256);
     }
 

@@ -31,3 +31,25 @@ fn oneplus_15_in_every_region() {
     assert_ne!(gl, eu);
     assert_ne!(gl, india);
 }
+
+/// The whole search finds the three regional builds and their changelog.
+#[test]
+#[ignore = "network"]
+fn search_finds_regional_builds() {
+    use std::sync::atomic::AtomicBool;
+    let agent = lfff_ota::agent();
+    let found = lfff_ota::search(
+        &agent,
+        &lfff_ota::Search::new("CPH2747"),
+        &AtomicBool::new(false),
+        &|_, _| {},
+    )
+    .unwrap();
+    for f in &found {
+        eprintln!("{} {:?} {:?}", f.build.version, f.regions, f.build.md5);
+    }
+    assert!(found.len() >= 2);
+    let url = found[0].build.changelog_url.as_deref().unwrap();
+    let text = lfff_ota::changelog::fetch(&agent, url).unwrap();
+    assert!(!text.is_empty());
+}
