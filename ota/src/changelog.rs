@@ -1,13 +1,11 @@
 //! "What's new": the page behind a build's `panelUrl`, as plain text.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
-pub fn fetch(agent: &ureq::Agent, url: &str) -> Result<String> {
-    let mut resp = agent.get(url).call().context("changelog: no answer")?;
-    if !resp.status().is_success() {
-        bail!("changelog: HTTP {}", resp.status());
-    }
-    let html = resp.body_mut().read_to_string()?;
+use crate::http;
+
+pub fn fetch(url: &str) -> Result<String> {
+    let html = http::get(url).context("changelog")?;
     Ok(parse(&html))
 }
 

@@ -11,6 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 lfff-lib = { path = "../lib" }
+lfff-ota = { path = "../ota" }
+serde_json = "1"
  clap = { version = "4", features = ["derive"] }
  tracing = "0.1"
  tracing-subscriber = { version = "0.3", features = ["env-filter"] }

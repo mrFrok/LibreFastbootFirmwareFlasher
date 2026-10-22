@@ -15,7 +15,7 @@
 //! stay "unknown": the target is only `otaVersion` + `model`, and real values
 //! of another phone make the server answer "nothing found".
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use aes::cipher::{KeyIvInit, StreamCipher};
 use anyhow::{Context, Result, anyhow, bail};
@@ -27,6 +27,7 @@ use rsa::{Oaep, RsaPublicKey};
 use serde_json::{Value, json};
 use tracing::debug;
 
+use crate::http;
 use crate::regions::Region;
 
 type AesCtr = ctr::Ctr128BE<aes::Aes128>;
@@ -86,14 +87,6 @@ pub fn full_ota_version(ota_version: &str) -> String {
     }
 }
 
-pub fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(25)))
-        .http_status_as_error(false)
-        .build()
-        .into()
-}
-
 /// The server's encryption key; one per host serves any number of queries.
 #[derive(Clone, Debug)]
 pub struct Cert {
@@ -101,14 +94,21 @@ pub struct Cert {
     version: i64,
 }
 
-pub fn query(agent: &ureq::Agent, q: &Query) -> Result<Answer> {
-    let cert = fetch_cert(agent, q.region.host())?;
-    query_with(agent, q, &cert)
+pub fn query(q: &Query) -> Result<Answer> {
+    let cert = fetch_cert(q.region.host())?;
+    query_with(q, &cert)
 }
 
 /// `query` with a certificate fetched earlier from `q.region.host()`.
-pub fn query_with(agent: &ureq::Agent, q: &Query, cert: &Cert) -> Result<Answer> {
-    let host = q.region.host();
+pub fn query_with(q: &Query, cert: &Cert) -> Result<Answer> {
+    query_on(q.region.host(), q, cert)
+}
+
+/// `query` sent to `host`, with that host's certificate. Any host answers
+/// any region outside China: the carrier picks the build. One host takes
+/// one request at a time — concurrent ones fail with 500 (the server seems
+/// to keep one session key per device id, and ours is shared).
+pub fn query_on(host: &str, q: &Query, cert: &Cert) -> Result<Answer> {
     let mut key = [0u8; 16];
     let mut iv = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut key);
@@ -116,18 +116,13 @@ pub fn query_with(agent: &ureq::Agent, q: &Query, cert: &Cert) -> Result<Answer>
     let protected_key = wrap_key(&cert.key, &key)?;
 
     let body = json!({ "params": seal(&request_body(now_ms()).to_string(), &key, &iv) });
-    let mut req = agent.post(format!("https://{host}/update/v6"));
-    for (name, value) in headers(q, &protected_key, cert.version, now_ms()) {
-        req = req.header(name, value);
-    }
-    let mut resp = req
-        .header("Content-Type", "application/json; charset=utf-8")
-        .send(body.to_string())
-        .with_context(|| format!("{host}: no answer"))?;
-    let text = resp
-        .body_mut()
-        .read_to_string()
-        .with_context(|| format!("{host}: answer could not be read"))?;
+    let mut hdrs = headers(q, &protected_key, cert.version, now_ms());
+    hdrs.push(("Content-Type", "application/json; charset=utf-8".into()));
+    let text = http::post(
+        &format!("https://{host}/update/v6"),
+        &hdrs,
+        &body.to_string(),
+    )?;
     parse_answer(&text, &key)
 }
 
@@ -155,13 +150,12 @@ pub fn parse_answer(text: &str, key: &[u8; 16]) -> Result<Answer> {
     }
 }
 
-pub fn fetch_cert(agent: &ureq::Agent, host: &str) -> Result<Cert> {
-    let mut resp = agent
-        .post(format!("https://{host}/crypto/cert/upgrade"))
-        .header("Content-Type", "application/json; charset=utf-8")
-        .send(r#"{"biz":"ota"}"#)
-        .with_context(|| format!("{host}: no answer"))?;
-    let text = resp.body_mut().read_to_string()?;
+pub fn fetch_cert(host: &str) -> Result<Cert> {
+    let text = http::post(
+        &format!("https://{host}/crypto/cert/upgrade"),
+        &[("Content-Type", "application/json; charset=utf-8".into())],
+        r#"{"biz":"ota"}"#,
+    )?;
     parse_cert(&text).with_context(|| format!("{host}: unexpected certificate answer"))
 }
 

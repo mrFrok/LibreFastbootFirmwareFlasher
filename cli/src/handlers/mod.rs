@@ -4,5 +4,6 @@ pub mod deps;
 pub mod devices;
 pub mod download;
 pub mod extract;
+pub mod find_ota;
 pub mod flash;
 pub mod flash_partition;

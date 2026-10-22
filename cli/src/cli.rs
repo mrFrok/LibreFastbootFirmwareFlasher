@@ -45,9 +45,36 @@ pub enum Commands {
         tools: Vec<String>,
     },
 
+    /// Find official firmware for an OPPO, OnePlus or realme phone
+    #[command(name = "find-ota")]
+    FindOta {
+        /// Model code, e.g. CPH2747 or RMX3709 (Settings → About phone)
+        model: String,
+
+        /// Comma-separated regions: GL, EU, IN, SG, RU, TR, TH, CN, or all
+        #[arg(short, long, value_name = "LIST")]
+        region: Option<String>,
+
+        /// Comma-separated channels (default: A,C,F,H)
+        #[arg(short, long, value_name = "LIST")]
+        channel: Option<String>,
+
+        /// Print only the newest build's link
+        #[arg(long)]
+        latest: bool,
+
+        /// Print the builds as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Show what's new in the newest build
+        #[arg(long)]
+        changes: bool,
+    },
+
     /// Download firmware via OTA link (supports 4PDA redirects)
     Download {
-        /// OTA download link or 4PDA redirect URL
+        /// OTA download link or 4PDA redirect URL; "-" reads it from stdin
         url: String,
 
         /// Directory to save the firmware (default: current directory)

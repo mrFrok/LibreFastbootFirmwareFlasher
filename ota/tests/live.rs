@@ -1,6 +1,6 @@
 //! Asks the real servers: `cargo test -p lfff-ota -- --ignored`.
 
-use lfff_ota::protocol::{agent, query};
+use lfff_ota::protocol::query;
 use lfff_ota::{Answer, Mode, Query, Region};
 
 fn md5(code: &str, region: Region) -> String {
@@ -10,7 +10,7 @@ fn md5(code: &str, region: Region) -> String {
         region,
         mode: Mode::Manual,
     };
-    match query(&agent(), &q).unwrap() {
+    match query(&q).unwrap() {
         Answer::Build(b) => {
             let packet = &b["components"][0]["componentPackets"];
             let url = packet["url"].as_str().unwrap();
@@ -37,9 +37,7 @@ fn oneplus_15_in_every_region() {
 #[ignore = "network"]
 fn search_finds_regional_builds() {
     use std::sync::atomic::AtomicBool;
-    let agent = lfff_ota::agent();
     let found = lfff_ota::search(
-        &agent,
         &lfff_ota::Search::new("CPH2747"),
         &AtomicBool::new(false),
         &|_, _| {},
@@ -50,6 +48,6 @@ fn search_finds_regional_builds() {
     }
     assert!(found.len() >= 2);
     let url = found[0].build.changelog_url.as_deref().unwrap();
-    let text = lfff_ota::changelog::fetch(&agent, url).unwrap();
+    let text = lfff_ota::changelog::fetch(url).unwrap();
     assert!(!text.is_empty());
 }

@@ -1,6 +1,6 @@
 //! LFFF CLI — LibreFastbootFirmwareFlasher entry point.
 //!
-//! Subcommands: deps, download, extract, devices, arb, flash, flash-partition
+//! Subcommands: deps, find-ota, download, extract, devices, arb, flash, flash-partition
 
 mod cli;
 mod handlers;
@@ -35,6 +35,22 @@ fn main() {
         Some(Commands::Completion { shell }) => handlers::complete::run(&mut Cli::command(), shell),
 
         Some(Commands::Deps { check, ref tools }) => handlers::deps::run(check, tools),
+
+        Some(Commands::FindOta {
+            ref model,
+            ref region,
+            ref channel,
+            latest,
+            json,
+            changes,
+        }) => handlers::find_ota::run(
+            model,
+            region.as_deref(),
+            channel.as_deref(),
+            latest,
+            json,
+            changes,
+        ),
 
         Some(Commands::Download {
             ref url,

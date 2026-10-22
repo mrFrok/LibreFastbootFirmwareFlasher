@@ -58,6 +58,15 @@ impl Region {
         }
     }
 
+    /// Hosts that answer this region: China only on its own, the rest on
+    /// any of the international ones.
+    pub fn hosts(self) -> &'static [&'static str] {
+        match self {
+            Region::Cn => &[HOST_CN],
+            _ => &[HOST_SG, HOST_EU, HOST_IN],
+        }
+    }
+
     /// The NV carrier id the server picks the build by.
     pub fn carrier(self) -> &'static str {
         match self {

@@ -5,6 +5,18 @@ use indicatif::{ProgressBar, ProgressStyle};
 use lfff_lib::downloader::{CancelToken, DownloadProgress, download_firmware_with_progress};
 
 pub fn run(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
+    let piped;
+    let url = if url == "-" {
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line).is_err() || line.trim().is_empty() {
+            eprintln!("{} No link on standard input.", "✗".red().bold());
+            return 2;
+        }
+        piped = line;
+        piped.trim()
+    } else {
+        url
+    };
     println!(
         "\n{}",
         "── Firmware download ────────────────────────────────────".dimmed()

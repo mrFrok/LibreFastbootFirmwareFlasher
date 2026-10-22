@@ -7,11 +7,12 @@
 
 pub mod build;
 pub mod changelog;
+mod http;
 pub mod protocol;
 pub mod regions;
 pub mod search;
 
 pub use build::Build;
-pub use protocol::{Answer, Mode, Query, agent};
+pub use protocol::{Answer, Mode, Query};
 pub use regions::Region;
 pub use search::{Found, Search, search};

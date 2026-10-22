@@ -2,7 +2,7 @@
 //!
 //! The combinations follow the quick search of NeFeroN's LinkResolverDownloader:
 //! region × model variant × channel, a fake oldest build as the current one,
-//! at most 8 requests at a time.
+//! one request at a time per server.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -14,8 +14,6 @@ use tracing::debug;
 use crate::build::Build;
 use crate::protocol::{self, Answer, Cert, Mode, Query};
 use crate::regions::Region;
-
-const PARALLEL: usize = 8;
 
 /// The release channels: A stable, C/F/H regional and carrier lines.
 pub const CHANNELS: [char; 4] = ['A', 'C', 'F', 'H'];
@@ -69,34 +67,43 @@ pub struct Found {
 /// Newest first. `progress(done, total)` is called after each request;
 /// setting `cancel` stops before the next one.
 pub fn search(
-    agent: &ureq::Agent,
     s: &Search,
     cancel: &AtomicBool,
     progress: &(dyn Fn(usize, usize) + Sync),
 ) -> Result<Vec<Found>> {
     let queries = s.queries();
     let total = queries.len();
-    let next = AtomicUsize::new(0);
+    // One queue per host (see `protocol::query_on`), spread evenly.
+    let mut queues: HashMap<&'static str, Vec<usize>> = HashMap::new();
+    for (i, q) in queries.iter().enumerate() {
+        let hosts = q.region.hosts();
+        let host = *hosts
+            .iter()
+            .min_by_key(|h| queues.get(*h).map_or(0, Vec::len))
+            .unwrap_or(&hosts[0]);
+        queues.entry(host).or_default().push(i);
+    }
     let done = AtomicUsize::new(0);
     let failures = AtomicUsize::new(0);
     let last_error = Mutex::new(None);
-    let certs: Mutex<HashMap<&'static str, Cert>> = Mutex::new(HashMap::new());
     let builds = Mutex::new(Vec::<(usize, Region, Build)>::new());
 
     std::thread::scope(|scope| {
-        for _ in 0..PARALLEL.min(total) {
-            scope.spawn(|| {
-                loop {
-                    let i = next.fetch_add(1, Ordering::SeqCst);
-                    if i >= total || cancel.load(Ordering::SeqCst) {
+        for (host, queue) in &queues {
+            let (queries, done, failures, last_error, builds) =
+                (&queries, &done, &failures, &last_error, &builds);
+            scope.spawn(move || {
+                let mut cert = None;
+                for &i in queue {
+                    if cancel.load(Ordering::SeqCst) {
                         break;
                     }
                     let q = &queries[i];
-                    match ask(agent, q, &certs) {
+                    match ask(host, q, &mut cert) {
                         Ok(Some(b)) => builds.lock().unwrap().push((i, q.region, b)),
                         Ok(None) => {}
                         Err(e) => {
-                            debug!("{} {:?}: {e:#}", q.ota_version, q.region);
+                            debug!("{} {:?} on {host}: {e:#}", q.ota_version, q.region);
                             failures.fetch_add(1, Ordering::SeqCst);
                             *last_error.lock().unwrap() = Some(e);
                         }
@@ -119,22 +126,17 @@ pub fn search(
     Ok(group(builds.into_iter().map(|(_, r, b)| (r, b))))
 }
 
-fn ask(
-    agent: &ureq::Agent,
-    q: &Query,
-    certs: &Mutex<HashMap<&'static str, Cert>>,
-) -> Result<Option<Build>> {
-    let host = q.region.host();
-    let cached = certs.lock().unwrap().get(host).cloned();
-    let cert = match cached {
-        Some(c) => c,
-        None => {
-            let c = protocol::fetch_cert(agent, host)?;
-            certs.lock().unwrap().insert(host, c.clone());
-            c
-        }
-    };
-    Ok(match protocol::query_with(agent, q, &cert)? {
+fn ask(host: &str, q: &Query, cert: &mut Option<Cert>) -> Result<Option<Build>> {
+    if cert.is_none() {
+        *cert = Some(protocol::fetch_cert(host)?);
+    }
+    let cert = cert.as_ref().unwrap();
+    let mut answer = protocol::query_on(host, q, cert)?;
+    // Should a 500 still come, once more is enough.
+    if matches!(answer, Answer::Refused { code: 500, .. }) {
+        answer = protocol::query_on(host, q, cert)?;
+    }
+    Ok(match answer {
         Answer::Build(body) => Build::from_answer(&body),
         Answer::Nothing => None,
         Answer::Refused { code, message } => {
