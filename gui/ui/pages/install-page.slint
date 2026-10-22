@@ -44,6 +44,12 @@ export component InstallPage inherits VerticalLayout {
     // A phone is on USB but has not allowed debugging from this computer.
     in property <bool> unauthorized;
     in-out property <string> download-url;
+    // 0 nothing to say, 1 valid, 2 under five minutes, 3 expired, 4 renews itself
+    in property <string> link-life;
+    in property <int> link-life-kind;
+    property <color> link-life-color: root.link-life-kind == 3 ? MaterialPalette.error
+        : root.link-life-kind == 2 ? StatusColors.warning
+        : MaterialPalette.on-surface-variant;
     in property <float> dl-percent;
     in property <string> dl-downloaded;
     in property <string> dl-total;
@@ -329,11 +335,29 @@ export component InstallPage inherits VerticalLayout {
                         }
 
                         OutlineButton {
-                            enabled: root.download-url != "";
+                            enabled: root.download-url != "" && root.link-life-kind != 3;
                             text: Tr.t("Download", "Скачать", "下载", "下載");
                             clicked => {
                                 root.download(root.download-url);
                             }
+                        }
+                    }
+                    if (root.fw-state == 0 || root.fw-state == 5) && root.link-life != "": HorizontalLayout {
+                        spacing: 6px;
+                        padding-bottom: 6px;
+                        Image {
+                            source: @image-url("../icons/history.svg");
+                            width: 16px;
+                            height: 16px;
+                            y: (parent.height - self.height) / 2;
+                            colorize: root.link-life-color;
+                        }
+
+                        Text {
+                            text: root.link-life;
+                            font-size: 13px;
+                            color: root.link-life-color;
+                            vertical-alignment: center;
                         }
                     }
                     if root.fw-state == 0 || root.fw-state == 5: OtaFinder {
@@ -380,6 +404,11 @@ export component InstallPage inherits VerticalLayout {
                         text: Math.round(root.dl-percent) + " % · " + root.dl-downloaded + " / " + root.dl-total + " · " + root.dl-speed + " · " + root.dl-eta;
                         font-size: 13px;
                         color: MaterialPalette.on-surface-variant;
+                    }
+                    if root.fw-state == 1 && root.link-life != "": Text {
+                        text: root.link-life;
+                        font-size: 13px;
+                        color: root.link-life-color;
                     }
                     if root.fw-state == 2: HorizontalLayout {
                         Text {

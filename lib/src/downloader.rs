@@ -175,35 +175,58 @@ fn location_header(headers: &str) -> Option<&str> {
     })
 }
 
-/// Parse `?e=<unix_ts>` expiry from a CDN URL.
-/// Returns `(expires_ts, human_string)`.
-fn parse_link_expiry(cdn_url: &str) -> (u64, String) {
-    let now = std::time::SystemTime::now()
+/// When a signed link stops working, in Unix seconds: `x-oss-expires` (OPPO's
+/// CDN), then `Expires`, then `e`, any case. Above 10^11 it is milliseconds.
+pub fn link_expiry(url: &str) -> Option<u64> {
+    let parsed = url::Url::parse(url).ok()?;
+    let params: Vec<(String, String)> = parsed
+        .query_pairs()
+        .map(|(k, v)| (k.to_ascii_lowercase(), v.into_owned()))
+        .collect();
+    ["x-oss-expires", "expires", "e"].iter().find_map(|key| {
+        let v: u64 = params
+            .iter()
+            .find(|(k, _)| k == key)?
+            .1
+            .trim()
+            .parse()
+            .ok()?;
+        Some(if v > 100_000_000_000 { v / 1000 } else { v })
+    })
+}
+
+/// The link hands out a fresh signed link on every request (OPPO's
+/// `downloadCheck`): it does not expire the way the signed one does.
+pub fn link_refreshes(url: &str) -> bool {
+    url::Url::parse(url).is_ok_and(|u| u.path().ends_with("/downloadCheck"))
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs();
+        .as_secs()
+}
 
-    if let Ok(parsed) = url::Url::parse(cdn_url) {
-        let params: std::collections::HashMap<_, _> = parsed.query_pairs().collect();
-        if let Some(ts_str) = params.get("e")
-            && let Ok(ts) = ts_str.parse::<u64>()
-        {
-            if ts > now {
-                let diff = ts - now;
-                let h = diff / 3600;
-                let m = (diff % 3600) / 60;
-                let label = if h > 0 {
-                    format!("{}h {}m", h, m)
-                } else {
-                    format!("{}m", m)
-                };
-                return (ts, label);
-            } else {
-                return (ts, "EXPIRED".into());
-            }
-        }
+/// Parse a link's expiry. Returns `(expires_ts, human_string)`.
+fn parse_link_expiry(cdn_url: &str) -> (u64, String) {
+    let Some(ts) = link_expiry(cdn_url) else {
+        return (0, String::new());
+    };
+    let now = now_secs();
+    if ts > now {
+        let diff = ts - now;
+        let h = diff / 3600;
+        let m = (diff % 3600) / 60;
+        let label = if h > 0 {
+            format!("{}h {}m", h, m)
+        } else {
+            format!("{}m", m)
+        };
+        (ts, label)
+    } else {
+        (ts, "EXPIRED".into())
     }
-    (0, String::new())
 }
 
 // ─── aria2c progress parser ───────────────────────────────────────────────────
@@ -354,9 +377,6 @@ pub fn download_firmware_with_progress<F>(
 where
     F: Fn(DownloadProgress) + Send + 'static,
 {
-    use std::process::Stdio;
-    use std::sync::mpsc;
-
     let missing = missing_tools(&["aria2c", "curl"]);
     if !missing.is_empty() {
         return DownloadResult::fail(url, &format!("Missing tools: {}", missing.join(", ")));
@@ -374,32 +394,142 @@ where
         ..Default::default()
     });
 
-    let cdn_url = match resolve_cdn(&endpoint) {
+    let mut cdn_url = match resolve_cdn(&endpoint) {
         Ok(c) => c.to_string(),
         Err(e) => return DownloadResult::fail(&real_url, &e),
     };
     info!("CDN URL: {}", cdn_url);
 
-    // Try original URL first, then CDN URL for expiry info
-    let (mut expires_ts, mut expires_label) = parse_link_expiry(url);
-    if expires_ts == 0 {
-        (expires_ts, expires_label) = parse_link_expiry(&cdn_url);
+    // A link that redirected stays the one to come back to: OPPO's signed
+    // CDN links live half an hour, a 9 GB download can take longer, and the
+    // original hands out a fresh one each time.
+    let refreshable = cdn_url != endpoint.as_str();
+    // One name for every attempt, so a new link continues the same file.
+    let file_name = free_name(output_dir, &file_name_of(&cdn_url));
+    let mut failures = 0;
+
+    loop {
+        let (mut expires_ts, mut expires_label) = parse_link_expiry(&cdn_url);
+        if expires_ts == 0 {
+            (expires_ts, expires_label) = parse_link_expiry(url);
+        }
+        on_progress(DownloadProgress {
+            link_expires_in: expires_label.clone(),
+            link_expires_ts: expires_ts,
+            raw_line: format!("CDN resolved. Link valid: {}", expires_label),
+            ..Default::default()
+        });
+
+        let run = run_aria2c(
+            &cdn_url,
+            &file_name,
+            output_dir,
+            connections,
+            expires_ts,
+            refreshable,
+            &cancel,
+            &on_progress,
+        );
+        let why = match run {
+            Run::Done => break,
+            Run::Cancelled => {
+                on_progress(DownloadProgress {
+                    raw_line: "Download cancelled".into(),
+                    ..Default::default()
+                });
+                return DownloadResult {
+                    success: false,
+                    url: real_url,
+                    cdn_url,
+                    output_path: None,
+                    error: "Cancelled".into(),
+                };
+            }
+            Run::Failed(e) if !refreshable || failures >= 3 => {
+                return DownloadResult {
+                    success: false,
+                    url: real_url,
+                    cdn_url,
+                    output_path: None,
+                    error: e,
+                };
+            }
+            Run::Failed(e) => {
+                failures += 1;
+                e
+            }
+            Run::Expiring => {
+                failures = 0;
+                "link expires".to_string()
+            }
+        };
+        info!("Getting a fresh link ({why}), then continuing");
+        on_progress(DownloadProgress {
+            raw_line: format!("Getting a fresh link ({why})..."),
+            ..Default::default()
+        });
+        cdn_url = match resolve_cdn(&endpoint) {
+            Ok(c) => c.to_string(),
+            Err(e) => return DownloadResult::fail(&real_url, &e),
+        };
     }
+
+    let (expires_ts, expires_label) = parse_link_expiry(&cdn_url);
     on_progress(DownloadProgress {
-        link_expires_in: expires_label.clone(),
+        percent: 100.0,
+        eta: "done".into(),
+        link_expires_in: expires_label,
         link_expires_ts: expires_ts,
-        raw_line: format!("CDN resolved. Link valid: {}", expires_label),
+        raw_line: "Download complete".into(),
         ..Default::default()
     });
 
-    let mut cmd = build_aria2c_cmd(&cdn_url, output_dir, connections);
+    let out = output_dir
+        .map(|d| d.join(&file_name))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join(&file_name));
+    DownloadResult {
+        success: true,
+        url: real_url,
+        cdn_url,
+        output_path: if out.exists() { Some(out) } else { None },
+        error: String::new(),
+    }
+}
+
+enum Run {
+    Done,
+    Cancelled,
+    /// The signed link has a minute left: stopped to get a fresh one.
+    Expiring,
+    Failed(String),
+}
+
+/// One aria2c run on `cdn_url`, continuing `file_name` if it is there.
+#[allow(clippy::too_many_arguments)]
+fn run_aria2c<F>(
+    cdn_url: &str,
+    file_name: &str,
+    output_dir: Option<&Path>,
+    connections: u32,
+    expires_ts: u64,
+    refreshable: bool,
+    cancel: &CancelToken,
+    on_progress: &F,
+) -> Run
+where
+    F: Fn(DownloadProgress),
+{
+    use std::process::Stdio;
+    use std::sync::mpsc;
+
+    let mut cmd = build_aria2c_cmd(cdn_url, file_name, output_dir, connections);
     // Pipe stdout — aria2c writes --show-console-readout progress lines there.
     // Stderr is inherited so error messages appear in terminal.
     cmd.stdout(Stdio::piped()).stderr(Stdio::inherit());
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
-        Err(e) => return DownloadResult::fail(&real_url, &format!("aria2c: {}", e)),
+        Err(e) => return Run::Failed(format!("aria2c: {}", e)),
     };
 
     let (ptx, prx) = mpsc::channel::<DownloadProgress>();
@@ -458,27 +588,38 @@ where
         }
     });
 
-    // Poll progress + handle cancel
+    // Gently where we can: aria2c writes down what it has on SIGTERM, so the
+    // next run continues from there instead of from its last autosave.
+    let stop = |child: &mut std::process::Child| {
+        #[cfg(unix)]
+        unsafe {
+            libc::kill(child.id() as libc::pid_t, libc::SIGTERM);
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < deadline {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+    // Poll progress + handle cancel and the link running out
     loop {
         while let Ok(p) = prx.try_recv() {
             on_progress(p);
         }
         if cancel.is_cancelled() {
             info!("Download cancelled by user");
-            let _ = child.kill();
-            let _ = child.wait();
+            stop(&mut child);
             let _ = reader_handle.join();
-            on_progress(DownloadProgress {
-                raw_line: "Download cancelled".into(),
-                ..Default::default()
-            });
-            return DownloadResult {
-                success: false,
-                url: real_url,
-                cdn_url,
-                output_path: None,
-                error: "Cancelled".into(),
-            };
+            return Run::Cancelled;
+        }
+        if refreshable && expires_ts > 0 && now_secs() + 60 >= expires_ts {
+            stop(&mut child);
+            let _ = reader_handle.join();
+            return Run::Expiring;
         }
         match child.try_wait() {
             Ok(Some(_)) => break,
@@ -492,45 +633,22 @@ where
 
     let exit_status = child.wait();
     let _ = reader_handle.join();
-
-    let (success, exit_code) = match &exit_status {
-        Ok(s) => (s.success(), s.code().unwrap_or(-1)),
-        Err(_) => (false, -1),
-    };
-
-    if !success {
-        return DownloadResult {
-            success: false,
-            url: real_url,
-            cdn_url,
-            output_path: None,
-            error: format!("aria2c exited {}", exit_code),
-        };
-    }
-
-    on_progress(DownloadProgress {
-        percent: 100.0,
-        eta: "done".into(),
-        link_expires_in: expires_label,
-        link_expires_ts: expires_ts,
-        raw_line: "Download complete".into(),
-        ..Default::default()
-    });
-
-    let out = resolve_output_path(&cdn_url, output_dir);
-    DownloadResult {
-        success: true,
-        url: real_url,
-        cdn_url,
-        output_path: if out.exists() { Some(out) } else { None },
-        error: String::new(),
+    match exit_status {
+        Ok(s) if s.success() => Run::Done,
+        Ok(s) => Run::Failed(format!("aria2c exited {}", s.code().unwrap_or(-1))),
+        Err(e) => Run::Failed(format!("aria2c: {e}")),
     }
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 /// Build an aria2c `Command` with shared flags.
-fn build_aria2c_cmd(cdn_url: &str, output_dir: Option<&Path>, connections: u32) -> Command {
+fn build_aria2c_cmd(
+    cdn_url: &str,
+    file_name: &str,
+    output_dir: Option<&Path>,
+    connections: u32,
+) -> Command {
     let mut cmd = Command::new("aria2c");
     cmd.arg(format!("-x{}", connections))
         .arg(format!("-s{}", connections))
@@ -545,7 +663,16 @@ fn build_aria2c_cmd(cdn_url: &str, output_dir: Option<&Path>, connections: u32) 
         // A server must not be able to turn a firmware download into a
         // BitTorrent or Metalink session by answering with a .torrent file.
         .arg("--follow-torrent=false")
-        .arg("--follow-metalink=false");
+        .arg("--follow-metalink=false")
+        // Continue our own file after a fresh link or a retry (free_name
+        // keeps anyone else's out of the way).
+        .arg("--continue=true")
+        .arg("--auto-file-renaming=false")
+        // Progress saved every second: a stop that is not gentle (Windows)
+        // loses little.
+        .arg("--auto-save-interval=1")
+        .arg("-o")
+        .arg(file_name);
 
     if let Some(dir) = output_dir {
         std::fs::create_dir_all(dir).ok();
@@ -555,19 +682,42 @@ fn build_aria2c_cmd(cdn_url: &str, output_dir: Option<&Path>, connections: u32) 
     cmd
 }
 
-/// Derive expected output path from CDN URL + output directory.
-fn resolve_output_path(cdn_url: &str, output_dir: Option<&Path>) -> PathBuf {
-    let filename = cdn_url
-        .split('/')
-        .next_back()
-        .unwrap_or("firmware.zip")
+/// `name`, or `name.1.ext`, `name.2.ext`… when a finished file has it. A
+/// file with its `.aria2` beside it is one of ours left unfinished: that one
+/// is continued.
+fn free_name(output_dir: Option<&Path>, name: &str) -> String {
+    let dir = output_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let taken = |n: &str| dir.join(n).exists() && !dir.join(format!("{n}.aria2")).exists();
+    if !taken(name) {
+        return name.to_string();
+    }
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((s, e)) => (s, format!(".{e}")),
+        None => (name, String::new()),
+    };
+    (1..)
+        .map(|i| format!("{stem}.{i}{ext}"))
+        .find(|n| !taken(n))
+        .unwrap_or_else(|| name.to_string())
+}
+
+/// The file name a CDN URL saves as.
+fn file_name_of(cdn_url: &str) -> String {
+    let name = cdn_url
         .split('?')
         .next()
-        .unwrap_or("firmware.zip");
-
-    output_dir
-        .map(|d| d.join(filename))
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join(filename))
+        .unwrap_or_default()
+        .rsplit('/')
+        .next()
+        .unwrap_or_default();
+    // Only a plain name: no path tricks from someone else's URL.
+    if name.is_empty() || name.starts_with('.') || name.contains(['\\', ':']) {
+        "firmware.zip".into()
+    } else {
+        name.to_string()
+    }
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -698,6 +848,50 @@ mod tests {
             "expected hours in label, got: {}",
             label
         );
+    }
+
+    #[test]
+    fn expiry_from_oppo_and_other_cdns() {
+        let oss = "https://gauss-compota-c-sg.allawnofs.com/a/b.zip?sign=x&t=6ada984e&x-oss-signature=y&X-OSS-Expires=1792712534";
+        assert_eq!(link_expiry(oss), Some(1_792_712_534));
+        assert_eq!(
+            link_expiry("https://c/f.zip?Expires=1792712534000"),
+            Some(1_792_712_534)
+        );
+        assert_eq!(
+            link_expiry("https://c/f.zip?e=1700000000"),
+            Some(1_700_000_000)
+        );
+        assert_eq!(link_expiry("https://c/f.zip?sign=abc"), None);
+    }
+
+    #[test]
+    fn downloadcheck_links_renew_themselves() {
+        assert!(link_refreshes(
+            "https://component-ota-sg.allawnos.com/downloadCheck?c=1&p=2"
+        ));
+        assert!(!link_refreshes("https://c/f.zip?downloadCheck=1"));
+        assert!(!link_refreshes("not a url"));
+    }
+
+    #[test]
+    fn finished_files_are_not_continued() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = Some(dir.path());
+        assert_eq!(free_name(d, "f.zip"), "f.zip");
+        std::fs::write(dir.path().join("f.zip"), b"done").unwrap();
+        assert_eq!(free_name(d, "f.zip"), "f.1.zip");
+        std::fs::write(dir.path().join("f.1.zip"), b"half").unwrap();
+        std::fs::write(dir.path().join("f.1.zip.aria2"), b"").unwrap();
+        assert_eq!(free_name(d, "f.zip"), "f.1.zip");
+    }
+
+    #[test]
+    fn file_names_stay_plain() {
+        assert_eq!(file_name_of("https://c/d/5c13.zip?sign=1"), "5c13.zip");
+        assert_eq!(file_name_of("https://c/"), "firmware.zip");
+        assert_eq!(file_name_of("https://c/.hidden"), "firmware.zip");
+        assert_eq!(file_name_of("https://c/a%5C..%5Cb"), "a%5C..%5Cb");
     }
 
     #[test]

@@ -354,6 +354,9 @@ export component MainWindow inherits MaterialWindow {
     in-out property <string> download-export-status: "";
     in-out property <string> output-dir;
     in-out property <string> download-url;
+    // How long that link still works (see update_link_life)
+    in property <string> link-life;
+    in property <int> link-life-kind;
     // Official firmware search on the install page
     in-out property <string> ota-model;
     in property <int> ota-state;
@@ -696,6 +699,8 @@ export component MainWindow inherits MaterialWindow {
                             cancel-unpack => { root.cancel-unpack(); }
                             pick-cached(i) => { root.pick-cached(i); }
                             download-url <=> root.download-url;
+                            link-life: root.link-life;
+                            link-life-kind: root.link-life-kind;
                             dl-percent: root.dl-percent;
                             dl-downloaded: root.dl-downloaded;
                             dl-total: root.dl-total;

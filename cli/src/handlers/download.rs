@@ -46,7 +46,12 @@ pub fn run(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
                 pb2.set_position(p.percent as u64);
             }
             let msg = if !p.speed.is_empty() && !p.eta.is_empty() {
-                format!("{}  ETA {}  {}", p.speed, p.eta, p.downloaded)
+                let link = if p.link_expires_in.is_empty() {
+                    String::new()
+                } else {
+                    format!("  link {}", p.link_expires_in)
+                };
+                format!("{}  ETA {}  {}{link}", p.speed, p.eta, p.downloaded)
             } else if !p.raw_line.is_empty() {
                 p.raw_line
             } else {

@@ -226,6 +226,7 @@ pub fn poll(
     let (fail_resp, fastbootd_resp, cable_resp) =
         (&replies.fail, &replies.fastbootd, &replies.cable);
     let Some(ui) = w.upgrade() else { return };
+    update_link_life(&ui);
 
     while let Ok(m) = rx.try_recv() {
         let dl_log: Option<String> = if let WMsg::DlProgress {
@@ -1585,4 +1586,71 @@ fn register_install_callbacks(
             ui.set_chips_summary("".into());
         }
     });
+}
+
+/// How long the link in the download field still works, counted down each
+/// second. `link-life-kind`: 0 nothing to say, 1 valid, 2 under five minutes,
+/// 3 expired, 4 refreshes itself (OPPO's downloadCheck).
+fn update_link_life(ui: &MainWindow) {
+    use lfff_lib::downloader::{link_expiry, link_refreshes};
+    let url = ui.get_download_url();
+    let lang = ui.get_lang();
+    let (kind, text) = if link_refreshes(&url) {
+        (
+            4,
+            tr(
+                &lang,
+                "OPPO link: renewed by itself while downloading",
+                "Ссылка OPPO: при загрузке обновляется сама",
+                "OPPO 链接：下载时会自动更新",
+                "OPPO 連結：下載時會自動更新",
+            ),
+        )
+    } else if let Some(ts) = link_expiry(&url) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        if ts <= now {
+            (
+                3,
+                tr(
+                    &lang,
+                    "The link has expired: get a new one",
+                    "Ссылка истекла — возьмите новую",
+                    "链接已过期：请获取新链接",
+                    "連結已過期：請取得新連結",
+                ),
+            )
+        } else {
+            let left = ts - now;
+            let (h, m, s) = (left / 3600, left % 3600 / 60, left % 60);
+            let span = match lang.as_str() {
+                "ru" if h > 0 => format!("{h} ч {m:02} мин"),
+                "ru" => format!("{m} мин {s:02} с"),
+                "zh-CN" | "zh-TW" if h > 0 => format!("{h} 小时 {m:02} 分"),
+                "zh-CN" | "zh-TW" => format!("{m} 分 {s:02} 秒"),
+                _ if h > 0 => format!("{h} h {m:02} min"),
+                _ => format!("{m} min {s:02} s"),
+            };
+            (
+                if left < 300 { 2 } else { 1 },
+                tr(
+                    &lang,
+                    "The link works for another ",
+                    "Ссылка действует ещё ",
+                    "链接剩余有效时间：",
+                    "連結剩餘有效時間：",
+                ) + &span,
+            )
+        }
+    } else {
+        (0, String::new())
+    };
+    if ui.get_link_life_kind() != kind {
+        ui.set_link_life_kind(kind);
+    }
+    if ui.get_link_life() != text.as_str() {
+        ui.set_link_life(text.into());
+    }
 }
