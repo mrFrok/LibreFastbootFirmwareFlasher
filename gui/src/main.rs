@@ -151,6 +151,8 @@ enum WMsg {
     InstallStopped(String),
     /// A phone is on adb but has not allowed USB debugging from this computer.
     DeviceUnauthorized,
+    /// The OTA repair finished: Ok(partitions removed) or why it stopped.
+    RepairDone(Result<usize, String>),
 }
 
 #[derive(Debug)]
@@ -207,6 +209,9 @@ enum Cmd {
     PrepareFirmware {
         path: String,
     },
+    /// Restart into fastbootd, delete the inactive slot's partitions so the
+    /// next OTA installs (lfff_lib::flasher::repair_ota_slots), restart.
+    RepairOta,
     /// The whole install after the confirmations: restart the phone into
     /// fastbootd, check the cable, run the safety checks, flash.
     RunInstall {

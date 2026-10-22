@@ -1,4 +1,5 @@
-import { MaterialPalette } from "@material";
+import { MaterialPalette, FilledButton } from "@material";
+import { Notice } from "../components/wizard.slint";
 import { Tools } from "../globals/tools.slint";
 export { Tools }
 import { LogEntry } from "../structs.slint";
@@ -199,6 +200,19 @@ export component ToolsGrid inherits VerticalLayout {
                 }
             }
         }
+
+        Row {
+            ToolCard {
+                id: 9;
+                pinned: root.pinned[8];
+                clicked => {
+                    root.open(9);
+                }
+                toggle-pin => {
+                    root.toggle-pin(9);
+                }
+            }
+        }
     }
 
     Rectangle {
@@ -247,5 +261,68 @@ export component LogsPage inherits VerticalLayout {
         export-log => {
             root.export(root.tab);
         }
+    }
+}
+
+// Deletes the inactive slot's partitions so the next system update installs.
+export component RepairPage inherits VerticalLayout {
+    // 0 not run, 1 running, 2 done, 3 failed
+    in property <int> state;
+    in property <int> count;
+    in property <string> error;
+    callback run();
+    spacing: 14px;
+    Text {
+        text: Tools.title(9);
+        font-size: 26px;
+        font-weight: 600;
+        color: MaterialPalette.on-surface;
+    }
+
+    Text {
+        text: Tr.t(
+            "Older versions of LibreFastbootFirmwareFlasher left the inactive slot's partitions in the wrong group, so system updates stop with an error. This removes them — they are empty — and restarts the phone. Nothing on the active slot changes and no root is needed.\n\nEach update moves the phone to the other slot: run this once before each of the next two updates, and both slots are fixed for good.",
+            "Старые версии LibreFastbootFirmwareFlasher оставляли разделы неактивного слота в неправильной группе, и обновления системы падают с ошибкой. Этот инструмент удаляет их (они пустые) и перезагружает смартфон. Активный слот не меняется, root не нужен.\n\nКаждое обновление переключает смартфон на другой слот: запустите починку перед каждым из двух следующих обновлений — и оба слота будут исправлены навсегда.",
+            "旧版 LibreFastbootFirmwareFlasher 会把非活动槽位的分区留在错误的分组中，导致系统更新失败。此工具会删除这些分区（它们是空的）并重启手机。活动槽位不受影响，无需 root。\n\n每次更新都会切换槽位：在接下来的两次更新前各运行一次，两个槽位就会永久修复。",
+            "舊版 LibreFastbootFirmwareFlasher 會把非使用中槽位的分割區留在錯誤的群組中，導致系統更新失敗。此工具會刪除這些分割區（它們是空的）並重新啟動手機。使用中槽位不受影響，無需 root。\n\n每次更新都會切換槽位：在接下來的兩次更新前各執行一次，兩個槽位就會永久修復。");
+        font-size: 14px;
+        color: MaterialPalette.on-surface;
+        wrap: word-wrap;
+    }
+
+    if root.state == 2: Notice {
+        kind: 3;
+        icon: @image-url("../icons/check.svg");
+        title: Tr.t("Done — install the update now", "Готово — теперь установите обновление", "完成——现在安装更新", "完成——現在安裝更新");
+        text: Tr.t("Entries removed: ", "Удалено записей: ", "已删除条目：", "已刪除項目：") + root.count + Tr.t(". The phone is restarting. After the update, run the repair once more before the next one.", ". Смартфон перезагружается. После обновления запустите починку ещё раз перед следующим.", "。手机正在重启。更新后，请在下一次更新前再运行一次修复。", "。手機正在重新啟動。更新後，請在下一次更新前再執行一次修復。");
+    }
+    if root.state == 3: Notice {
+        kind: 2;
+        title: Tr.t("The repair stopped", "Починка остановлена", "修复已停止", "修復已停止");
+        text: root.error;
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 12px;
+        FilledButton {
+            enabled: root.state != 1;
+            icon: @image-url("../icons/restart.svg");
+            text: root.state == 1 ? Tr.t("Repairing…", "Чиню…", "正在修复…", "正在修復…") : Tr.t("Repair", "Починить", "修复", "修復");
+            clicked => {
+                root.run();
+            }
+        }
+
+        if root.state == 1: Text {
+            text: Tr.t("The phone restarts into flashing mode and back", "Смартфон перезагрузится в режим прошивки и обратно", "手机将重启进入刷机模式再返回", "手機將重新啟動進入刷機模式再返回");
+            font-size: 13px;
+            color: MaterialPalette.on-surface-variant;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        vertical-stretch: 1;
     }
 }

@@ -96,7 +96,7 @@ fn tr(lang: &str, en: &str, ru: &str, cn: &str, tw: &str) -> String {
 }
 
 /// Pinned tool names in config.json, by Tools-page id - 1.
-const TOOL_NAMES: [&str; 8] = [
+const TOOL_NAMES: [&str; 9] = [
     "partition",
     "build",
     "reboot",
@@ -105,6 +105,7 @@ const TOOL_NAMES: [&str; 8] = [
     "programs",
     "download",
     "logs",
+    "ota-repair",
 ];
 
 pub fn apply_pins(ui: &MainWindow, pinned: &[String]) {
@@ -631,6 +632,19 @@ pub fn poll(
                 ui.set_cable_detail(detail.into());
                 ui.set_cable_failed(true);
                 *cable_resp.borrow_mut() = Some(response);
+            }
+            WMsg::RepairDone(r) => {
+                ui.set_repair_running(false);
+                match r {
+                    Ok(n) => {
+                        ui.set_repair_state(2);
+                        ui.set_repair_count(n as i32);
+                    }
+                    Err(e) => {
+                        ui.set_repair_state(3);
+                        ui.set_repair_error(e.into());
+                    }
+                }
             }
             WMsg::InstallStopped(reason) => {
                 let lang = ui.get_lang();
@@ -1365,6 +1379,16 @@ fn register_install_callbacks(
     });
 
     ui.on_cancel_unpack(crate::worker::cancel_unpack);
+
+    let t = ctx.clone();
+    let w = ui.as_weak();
+    ui.on_repair_ota(move || {
+        if let Some(ui) = w.upgrade() {
+            ui.set_repair_running(true);
+            ui.set_repair_state(1);
+        }
+        t.send(Cmd::RepairOta).ok();
+    });
 
     // Same order as refresh_cached_firmwares built the list in.
     let t = ctx.clone();

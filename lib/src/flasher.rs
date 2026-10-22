@@ -253,6 +253,15 @@ fn fastboot_cmd(args: &[&str], timeout: u64) -> (i32, String, String) {
     (r.code, r.stdout, r.stderr)
 }
 
+fn fastboot_cmd_serial(serial: Option<&str>, args: &[&str], timeout: u64) -> (i32, String, String) {
+    let mut full: Vec<&str> = Vec::new();
+    if let Some(s) = serial {
+        full.extend(["-s", s]);
+    }
+    full.extend_from_slice(args);
+    fastboot_cmd(&full, timeout)
+}
+
 fn adb_cmd(args: &[&str], timeout: u64) -> (i32, String, String) {
     let mut cmd = vec!["adb"];
     cmd.extend_from_slice(args);
@@ -691,6 +700,74 @@ fn flash_partition_inner(
 // correct layout correct, but cannot repair a device whose partitions an older
 // LFFF already moved into `default`. Firmware folders without a payload keep
 // the in-place path.
+
+/// What [`repair_ota_slots`] would delete, read from `fastboot getvar all`
+/// output: every logical partition of the inactive slot. Refuses anything
+/// but a Virtual A/B device with no update in progress.
+pub fn ota_repair_plan(getvar_all: &str) -> Result<Vec<String>, String> {
+    let status = parse_fastboot_getvar(getvar_all, "snapshot-update-status").ok_or(
+        "The phone does not report snapshot-update-status: not a Virtual A/B device, or not in fastbootd",
+    )?;
+    if status != "none" {
+        return Err(format!(
+            "An update is still in progress on the phone (snapshot-update-status: {status}). Boot Android and let it finish first."
+        ));
+    }
+    let slot = parse_fastboot_getvar(getvar_all, "current-slot")
+        .map(|s| s.trim_start_matches('_').to_lowercase())
+        .ok_or("Could not read the active slot")?;
+    let inactive = match slot.as_str() {
+        "a" => "b",
+        "b" => "a",
+        other => return Err(format!("Unexpected active slot: {other}")),
+    };
+    let suffix = format!("_{inactive}");
+    let mut names: Vec<String> = getvar_all
+        .lines()
+        .filter_map(|l| l.split("is-logical:").nth(1))
+        .filter_map(|v| v.trim().strip_suffix(":yes"))
+        .filter(|n| {
+            n.ends_with(&suffix)
+                || [&suffix, "-cow", "_cow", "-cow-img"]
+                    .iter()
+                    .any(|c| n.contains(&format!("{suffix}{c}")))
+        })
+        .map(str::to_string)
+        .collect();
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+/// Make the next OTA installable on a phone an older LFFF flashed: delete
+/// the inactive slot's logical partitions (empty on Virtual A/B after an
+/// update merged). Older LFFF recreated them in group `default`, and
+/// update_engine, which only clears its own `<group>_<slot>`, then failed
+/// with "Attempting to create duplication partition". The active slot and
+/// the factory partitions are not touched. Fastbootd only. Each OTA moves to
+/// the other slot, so a repair before each of the next two OTAs heals both.
+pub fn repair_ota_slots(
+    serial: Option<&str>,
+    on_log: &dyn Fn(String),
+) -> Result<Vec<String>, String> {
+    let (_, out, err) = fastboot_cmd_serial(serial, &["getvar", "all"], 30);
+    let plan = ota_repair_plan(&format!("{out}{err}"))?;
+    if plan.is_empty() {
+        on_log("Nothing to repair: the inactive slot has no partitions".into());
+        return Ok(plan);
+    }
+    for name in &plan {
+        on_log(format!("Removing {name}"));
+        let (rc, _, e) = fastboot_cmd_serial(serial, &["delete-logical-partition", name], 15);
+        if rc != 0 {
+            return Err(format!(
+                "delete-logical-partition {name} failed: {}",
+                e.trim()
+            ));
+        }
+    }
+    Ok(plan)
+}
 
 /// Install a fresh super layout with `fastboot wipe-super` (fastbootd only).
 /// Every dynamic partition is gone afterwards, empty in its group, until
@@ -1608,6 +1685,24 @@ mod tests {
     // Recreating a partition through fastbootd puts it in group `default`,
     // which later breaks OTAs; the plan must never contain the active copy in
     // its delete list.
+    const GETVAR_A: &str = "(bootloader) current-slot:a\n(bootloader) snapshot-update-status:none\n(bootloader) is-logical:system_a:yes\n(bootloader) is-logical:system_b:yes\n(bootloader) is-logical:odm_b:yes\n(bootloader) is-logical:my_company_a:yes\n(bootloader) is-logical:system_b-cow:yes\n(bootloader) is-logical:boot_b:no\n";
+
+    #[test]
+    fn ota_repair_takes_only_the_inactive_slot() {
+        assert_eq!(
+            ota_repair_plan(GETVAR_A).unwrap(),
+            ["odm_b", "system_b", "system_b-cow"]
+        );
+    }
+
+    #[test]
+    fn ota_repair_refuses_mid_update_and_non_vab() {
+        let merging = GETVAR_A.replace("status:none", "status:merging");
+        assert!(ota_repair_plan(&merging).is_err());
+        let no_vab = GETVAR_A.replace("(bootloader) snapshot-update-status:none\n", "");
+        assert!(ota_repair_plan(&no_vab).is_err());
+    }
+
     #[test]
     fn super_prep_keeps_the_active_slot_partitions() {
         let plan = super_prep_plan(&owned(&["odm", "system"]), "a");

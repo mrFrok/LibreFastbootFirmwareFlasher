@@ -38,7 +38,7 @@ import { UpdateDialog } from "dialogs/update-dialog.slint";
 import { WarningDialog } from "dialogs/all.slint";
 import { AppNav } from "components/wizard.slint";
 import { InstallPage } from "pages/install-page.slint";
-import { ToolsGrid, Tools, LogsPage } from "pages/tools-page.slint";
+import { ToolsGrid, Tools, LogsPage, RepairPage } from "pages/tools-page.slint";
 import { SettingsPage } from "pages/settings-page.slint";
 import { HomeDash } from "pages/home-dash.slint";
 import { ConfirmSheet } from "dialogs/confirm-sheet.slint";
@@ -73,10 +73,10 @@ export component MainWindow inherits MaterialWindow {
     // Tool ids pinned to the sidebar (see Tools in pages/tools-page.slint).
     in-out property <[int]> pinned-tools: [];
     // The same as flags by tool id - 1, for the Tools page.
-    in-out property <[bool]> pinned-flags: [false, false, false, false, false, false, false, false];
+    in-out property <[bool]> pinned-flags: [false, false, false, false, false, false, false, false, false];
     // Tool open from Tools or a pin, 0 for none (see Tools in pages/tools-page.slint).
     in-out property <int> current-tool: 0;
-    property <bool> on-tool-page: (root.page >= 1 && root.page <= 4) || root.page == 13;
+    property <bool> on-tool-page: (root.page >= 1 && root.page <= 4) || root.page == 13 || root.page == 15;
     callback toggle-pin(int);
     in-out property <string> cache-summary;
     in-out property <string> chips-summary;
@@ -98,6 +98,11 @@ export component MainWindow inherits MaterialWindow {
     in-out property <bool> device-unauthorized: false;
     callback cancel-unpack();
     callback quit-app();
+    in-out property <bool> repair-running: false;
+    in-out property <int> repair-state: 0;
+    in-out property <int> repair-count: 0;
+    in-out property <string> repair-error;
+    callback repair-ota();
     in-out property <bool> sound: true;
     callback set-sound(bool);
     in-out property <bool> rebuild-super: false;
@@ -141,7 +146,7 @@ export component MainWindow inherits MaterialWindow {
     // Tools open the classic pages; the phone page shows one section each.
     function open-tool(id: int) {
         root.current-tool = id;
-        root.page = id == 1 ? 4 : id == 2 ? 3 : id == 7 ? 2 : id == 8 ? 13 : 1;
+        root.page = id == 1 ? 4 : id == 2 ? 3 : id == 7 ? 2 : id == 8 ? 13 : id == 9 ? 15 : 1;
     }
     // First sheet for the chosen firmware and chip: the ARB or preloader
     // warning, else straight to the summary.
@@ -722,6 +727,13 @@ export component MainWindow inherits MaterialWindow {
                             finish => { root.install-finish(); }
                             retry => { root.install-retry(); }
                             export-log => { root.export-flash-log(); }
+                        }
+
+                        if root.page == 15: RepairPage {
+                            state: root.repair-state;
+                            count: root.repair-count;
+                            error: root.repair-error;
+                            run => { root.repair-ota(); }
                         }
 
                         if root.page == 13: LogsPage {

@@ -2248,6 +2248,81 @@ pub fn worker(
                 );
             }
 
+            Cmd::RepairOta => {
+                use lfff_lib::flasher::{DeviceMode, FastbootdStatus};
+                let _awake = NoSleep::new();
+                let ser_args: Vec<String> = serial
+                    .iter()
+                    .flat_map(|s| ["-s".to_string(), s.clone()])
+                    .collect();
+                let reboot = |tool: &str, args: &[&str]| {
+                    let _ = std::process::Command::new(tool)
+                        .args(&ser_args)
+                        .args(args)
+                        .status();
+                };
+                let mode = lfff_lib::flasher::detect_mode(serial.as_deref());
+                log(
+                    &tx,
+                    LogLevel::Info,
+                    0,
+                    format!("OTA repair: phone in {mode:?}"),
+                );
+                let status = match mode {
+                    DeviceMode::System => {
+                        reboot("adb", &["reboot", "fastboot"]);
+                        wait_fastbootd_cancellable(serial.as_deref(), 90, &flash_cancel)
+                    }
+                    DeviceMode::Bootloader => {
+                        match lfff_lib::flasher::fastbootd_status(serial.as_deref()) {
+                            FastbootdStatus::UserspaceFastboot => {
+                                Some(FastbootdStatus::UserspaceFastboot)
+                            }
+                            _ => {
+                                reboot("fastboot", &["reboot", "fastboot"]);
+                                wait_fastbootd_cancellable(serial.as_deref(), 90, &flash_cancel)
+                            }
+                        }
+                    }
+                    DeviceMode::Fastbootd => Some(FastbootdStatus::Fastbootd),
+                    DeviceMode::Unknown => None,
+                };
+                if !status.is_some_and(|s| s.is_usable()) {
+                    let msg = "The phone did not reach fastbootd".to_string();
+                    log(&tx, LogLevel::Error, 0, &msg);
+                    tx.send(WMsg::RepairDone(Err(msg))).ok();
+                    continue;
+                }
+                adopt_fastboot_serial(&tx, &mut serial, 0);
+                let tx_log = tx.clone();
+                let r = lfff_lib::flasher::repair_ota_slots(serial.as_deref(), &|m| {
+                    log(&tx_log, LogLevel::Info, 0, m)
+                });
+                match &r {
+                    Ok(removed) => {
+                        log(
+                            &tx,
+                            LogLevel::Success,
+                            0,
+                            format!(
+                                "OTA repair done: {} entries removed; restarting",
+                                removed.len()
+                            ),
+                        );
+                        let ser: Vec<String> = serial
+                            .iter()
+                            .flat_map(|s| ["-s".to_string(), s.clone()])
+                            .collect();
+                        let _ = std::process::Command::new("fastboot")
+                            .args(&ser)
+                            .arg("reboot")
+                            .status();
+                    }
+                    Err(e) => log(&tx, LogLevel::Error, 0, e),
+                }
+                tx.send(WMsg::RepairDone(r.map(|v| v.len()))).ok();
+            }
+
             Cmd::CheckForUpdates => {
                 log(&tx, LogLevel::Info, 0, "Checking for updates...");
                 let current = env!("CARGO_PKG_VERSION");
