@@ -82,12 +82,12 @@ modules:
       - install -Dm644 ${FLATPAK_ID}.metainfo.xml -t /app/share/metainfo
     sources:
       - type: archive
-        url: https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v3.3.0/lfff-gui-linux-x86_64.tar.gz
-        sha256: 046a3c5f1afb19ede17aacbce95818f1732b9bbe5420986d806e97d455c7f4be
+        url: https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v3.3.1/lfff-gui-linux-x86_64.tar.gz
+        sha256: 20b335de7f07d3895fdf8c6d383b10e43cdba2ce2d93f168290739cd6aae9cb4
         strip-components: 0
       - type: archive
-        url: https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v3.3.0/lfff-linux-x86_64.tar.gz
-        sha256: fcead69548abf034d4f5e5afaa1a5c6c1a71613972b865accb7c16f523b5a840
+        url: https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/download/v3.3.1/lfff-linux-x86_64.tar.gz
+        sha256: cfbe930263c1f752c2d7762eb9b9b34172d68a814ca69d263bcf459ad10bc71f
         strip-components: 0
       - type: file
         path: ../../lfff-gui.desktop
