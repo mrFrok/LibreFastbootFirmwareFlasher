@@ -3,6 +3,29 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.3.2
+
+### Fixes
+
+- A phone that does not report its bootloader lock state in fastbootd
+  (OnePlus Nord 5) is no longer stopped as "locked": the state is asked on
+  its own, and only an explicit "locked" stops the install (#16).
+- When the phone stops answering during the cable check, the install page
+  says so instead of calling the connection too slow, and no longer
+  recommends the cable from the box: OPPO / OnePlus / realme fast-charging
+  cables are often poor at data — use a plain USB data cable.
+
+---
+
+### Коротко по-русски
+
+- Смартфон, который в fastbootd не сообщает состояние загрузчика (OnePlus
+  Nord 5), больше не считается заблокированным: установку останавливает
+  только явное «заблокирован».
+- Если смартфон перестал отвечать при проверке кабеля, так и пишется —
+  а не «соединение слишком медленное». Родной зарядный кабель больше не
+  советуется: нужен обычный кабель для передачи данных.
+
 ## 3.3.1
 
 ### Firmware search
