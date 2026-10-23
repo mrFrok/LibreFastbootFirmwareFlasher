@@ -11,9 +11,12 @@ Each release's section below becomes its GitHub release notes
 update servers for the phone's firmware: the model is filled in from the
 connected phone, Find lists the builds of every region (newest first, with
 region, date, size, security patch and what's new), and Download fetches
-and unpacks the chosen one. The build the phone runs is marked installed.
-A package already in the download folder is opened instead of downloaded
-again.
+and unpacks the chosen one. All 19 regions are asked, under each name the
+region's phones use (RMX3709TR, RMX3709EX…), in about 8 seconds. The page
+says which region the phone's firmware is from and lists that region's
+builds first, marked "your region"; the build the phone runs is marked
+installed. A package already in the download folder is opened instead of
+downloaded again.
 
 On the command line:
 
@@ -41,9 +44,10 @@ are combined and answers read follows NeFeroN's LinkResolverDownloader.
 ### Коротко по-русски
 
 - **Поиск официальной прошивки** в шаге «Прошивка»: модель берётся со
-  смартфона, «Найти» показывает сборки всех регионов — новые сверху, с
-  регионом, датой, размером, патчем и списком изменений. Установленная
-  сборка отмечена. «Скачать» скачивает и распаковывает; если пакет уже
+  смартфона, «Найти» за ~8 секунд показывает сборки всех 19 регионов — с
+  регионом, датой, размером, патчем и списком изменений. Видно, какой
+  регион сейчас на смартфоне: сборки этого региона идут первыми с меткой
+  «ваш регион», установленная отмечена. «Скачать» скачивает и распаковывает; если пакет уже
   скачан, он открывается сразу. В командной строке — `lfff find-ota`.
 - **Ссылки OPPO** живут полчаса: если загрузка дольше, ссылка обновляется
   сама и загрузка продолжается с того же места.
