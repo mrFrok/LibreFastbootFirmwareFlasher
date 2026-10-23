@@ -60,7 +60,7 @@ pub fn device_id(n: u32) -> String {
 }
 
 /// How the phone asks: by hand, on its own, or for a beta ("taste") build.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Mode {
     #[default]
     Manual,

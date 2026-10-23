@@ -4,7 +4,7 @@
 //! region × model variant × channel, a fake oldest build as the current one.
 //! Each server takes a few requests at a time, each under its own device id.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -18,8 +18,8 @@ use crate::regions::Region;
 /// The channel letter follows the Android version: A 13, C 14, F 15, H 16.
 pub const CHANNELS: [char; 4] = ['A', 'C', 'F', 'H'];
 
-/// Requests in flight on each server at once.
-const PER_HOST: usize = 8;
+/// Requests in flight at once, spread over the servers that answer.
+const WORKERS: usize = 24;
 
 #[derive(Clone, Debug)]
 pub struct Search {
@@ -72,44 +72,200 @@ impl Search {
 pub struct Found {
     pub build: Build,
     pub regions: Vec<Region>,
+    /// Offered only as early access ("taste"): a beta, often of the next
+    /// Android version.
+    pub beta: bool,
 }
 
-/// Newest first. `progress(done, total)` is called after each request;
-/// setting `cancel` stops before the next one.
+/// Rounds of "and after that?": a new Android version is offered only as an
+/// update from the newest build of the one before.
+const FOLLOW_UP: usize = 3;
+
+/// Newest first. `progress(done, total)` is called after each request — the
+/// total grows when found builds are asked about; setting `cancel` stops
+/// before the next one.
 pub fn search(
     s: &Search,
     cancel: &AtomicBool,
     progress: &(dyn Fn(usize, usize) + Sync),
 ) -> Result<Vec<Found>> {
-    let queries = s.queries();
-    let total = queries.len();
-    // One queue per host, spread evenly; each drained by PER_HOST workers.
-    let mut queues: HashMap<&'static str, Vec<usize>> = HashMap::new();
-    for (i, q) in queries.iter().enumerate() {
-        let hosts = q.region.hosts();
-        let host = *hosts
-            .iter()
-            .min_by_key(|h| queues.get(*h).map_or(0, Vec::len))
-            .unwrap_or(&hosts[0]);
-        queues.entry(host).or_default().push(i);
-    }
+    let mut queries = s.queries();
+    let mut asked: HashSet<(String, Option<String>, Region, Mode)> =
+        queries.iter().map(key).collect();
     let done = AtomicUsize::new(0);
-    let failures = AtomicUsize::new(0);
-    let last_error = Mutex::new(None);
-    let builds = Mutex::new(Vec::<(usize, Region, Build)>::new());
+    let total = AtomicUsize::new(queries.len());
+    // (order, region, build, beta), order = round then position
+    let mut found: Vec<(usize, Region, Build, bool)> = Vec::new();
+    let certs = certificates(&queries);
+
+    for round in 0..=FOLLOW_UP {
+        let t = std::time::Instant::now();
+        let (builds, failures, last_error) = run(&queries, &certs, cancel, &done, &total, progress);
+        debug!(
+            "round {round}: {} queries, {} builds, {:?}",
+            queries.len(),
+            builds.len(),
+            t.elapsed()
+        );
+        if round == 0
+            && builds.is_empty()
+            && failures == queries.len()
+            && let Some(e) = last_error
+        {
+            bail!("{e:#}");
+        }
+        // Only from the newest build each region and model name gave: older
+        // ones lead to builds already found.
+        let mut newest: HashMap<(Region, Option<String>), &Build> = HashMap::new();
+        for (i, b) in &builds {
+            let q = &queries[*i];
+            let slot = newest.entry((q.region, q.model.clone())).or_insert(b);
+            if (b.published, &b.ota_version) > (slot.published, &slot.ota_version) {
+                *slot = b;
+            }
+        }
+        let mut next = Vec::new();
+        for (i, b) in &builds {
+            let q = &queries[*i];
+            if !std::ptr::eq(newest[&(q.region, q.model.clone())], b) {
+                continue;
+            }
+            // Asked from this build as the one installed.
+            for mode in [Mode::Manual, Mode::Taste] {
+                let follow = Query {
+                    ota_version: b.ota_version.clone(),
+                    model: q.model.clone(),
+                    region: q.region,
+                    mode,
+                };
+                if b.ota_version.split('_').count() >= 3 && asked.insert(key(&follow)) {
+                    next.push(follow);
+                }
+            }
+        }
+        found.extend(builds.into_iter().map(|(i, b)| {
+            (
+                round * 100_000 + i,
+                queries[i].region,
+                b,
+                queries[i].mode == Mode::Taste,
+            )
+        }));
+        if next.is_empty() || cancel.load(Ordering::SeqCst) {
+            break;
+        }
+        total.fetch_add(next.len(), Ordering::SeqCst);
+        queries = next;
+    }
+    // Requests finish in any order; group as if they ran one by one.
+    found.sort_by_key(|(i, ..)| *i);
+    Ok(group(found.into_iter().map(|(_, r, b, beta)| (r, b, beta))))
+}
+
+fn key(q: &Query) -> (String, Option<String>, Region, Mode) {
+    (q.ota_version.clone(), q.model.clone(), q.region, q.mode)
+}
+
+/// Each server's certificate once, all at the same time: a server that does
+/// not answer is left out instead of timing out every request.
+fn certificates(queries: &[Query]) -> HashMap<&'static str, Cert> {
+    let mut wanted: Vec<&'static str> = queries
+        .iter()
+        .flat_map(|q| q.region.hosts().iter().copied())
+        .collect();
+    wanted.sort();
+    wanted.dedup();
+    let certs: HashMap<&'static str, Cert> = std::thread::scope(|scope| {
+        let handles: Vec<_> = wanted
+            .iter()
+            .map(|&h| {
+                (
+                    h,
+                    // Three times: a server with an address that hangs fails
+                    // one of them and is left out while another answers.
+                    scope.spawn(move || {
+                        let c = protocol::fetch_cert(h)?;
+                        protocol::fetch_cert(h)?;
+                        protocol::fetch_cert(h)?;
+                        Ok::<_, anyhow::Error>(c)
+                    }),
+                )
+            })
+            .collect();
+        handles
+            .into_iter()
+            .filter_map(|(h, j)| match j.join() {
+                Ok(Ok(c)) => Some((h, c)),
+                Ok(Err(e)) => {
+                    debug!("{h} left out: {e:#}");
+                    None
+                }
+                Err(_) => None,
+            })
+            .collect()
+    });
+    // Should every server of a region have failed, the region still gets
+    // its first one, slow or not.
+    let mut certs = certs;
+    for q in queries {
+        let hosts = q.region.hosts();
+        if !hosts.iter().any(|h| certs.contains_key(h))
+            && let Ok(c) = protocol::fetch_cert(hosts[0])
+        {
+            certs.insert(hosts[0], c);
+        }
+    }
+    certs
+}
+
+/// Asks every query: one queue per host, spread evenly, each drained by
+/// WORKERS (shared) under device ids of their own. Returns the builds by
+/// query index, the number of failed requests and the last failure.
+fn run(
+    queries: &[Query],
+    certs: &HashMap<&'static str, Cert>,
+    cancel: &AtomicBool,
+    done: &AtomicUsize,
+    total: &AtomicUsize,
+    progress: &(dyn Fn(usize, usize) + Sync),
+) -> (Vec<(usize, Build)>, usize, Option<anyhow::Error>) {
+    let mut queues: HashMap<&'static str, Vec<usize>> = HashMap::new();
+    let mut unreachable = 0;
+    for (i, q) in queries.iter().enumerate() {
+        let host = q
+            .region
+            .hosts()
+            .iter()
+            .filter(|h| certs.contains_key(*h))
+            .min_by_key(|h| queues.get(*h).map_or(0, Vec::len));
+        match host {
+            Some(&h) => queues.entry(h).or_default().push(i),
+            None => unreachable += 1,
+        }
+    }
+    if unreachable > 0 {
+        progress(
+            done.fetch_add(unreachable, Ordering::SeqCst) + unreachable,
+            total.load(Ordering::SeqCst),
+        );
+    }
+    let failures = AtomicUsize::new(unreachable);
+    let last_error =
+        Mutex::new((unreachable > 0).then(|| anyhow::anyhow!("the update servers do not answer")));
+    let builds = Mutex::new(Vec::<(usize, Build)>::new());
 
     std::thread::scope(|scope| {
         let mut worker = 0u32;
         for (host, queue) in &queues {
             let next = std::sync::Arc::new(AtomicUsize::new(0));
-            for _ in 0..PER_HOST.min(queue.len()) {
+            let per_host = (WORKERS / queues.len().max(1)).max(4);
+            for _ in 0..per_host.min(queue.len()) {
                 let device = protocol::device_id(worker);
                 worker += 1;
                 let next = next.clone();
-                let (queries, done, failures, last_error, builds) =
-                    (&queries, &done, &failures, &last_error, &builds);
+                let (failures, last_error, builds) = (&failures, &last_error, &builds);
+                let cert = &certs[host];
                 scope.spawn(move || {
-                    let mut cert = None;
                     loop {
                         let k = next.fetch_add(1, Ordering::SeqCst);
                         let Some(&i) = queue.get(k) else { break };
@@ -117,8 +273,8 @@ pub fn search(
                             break;
                         }
                         let q = &queries[i];
-                        match ask(host, &device, q, &mut cert) {
-                            Ok(Some(b)) => builds.lock().unwrap().push((i, q.region, b)),
+                        match ask(host, &device, q, cert) {
+                            Ok(Some(b)) => builds.lock().unwrap().push((i, b)),
                             Ok(None) => {}
                             Err(e) => {
                                 debug!("{} {:?} on {host}: {e:#}", q.ota_version, q.region);
@@ -126,31 +282,30 @@ pub fn search(
                                 *last_error.lock().unwrap() = Some(e);
                             }
                         }
-                        progress(done.fetch_add(1, Ordering::SeqCst) + 1, total);
+                        progress(
+                            done.fetch_add(1, Ordering::SeqCst) + 1,
+                            total.load(Ordering::SeqCst),
+                        );
                     }
                 });
             }
         }
     });
-
-    let mut builds = builds.into_inner().unwrap();
-    if builds.is_empty()
-        && failures.load(Ordering::SeqCst) == done.load(Ordering::SeqCst)
-        && let Some(e) = last_error.into_inner().unwrap()
-    {
-        bail!("{e:#}");
-    }
-    // Requests finish in any order; group as if they ran one by one.
-    builds.sort_by_key(|(i, _, _)| *i);
-    Ok(group(builds.into_iter().map(|(_, r, b)| (r, b))))
+    (
+        builds.into_inner().unwrap(),
+        failures.into_inner(),
+        last_error.into_inner().unwrap(),
+    )
 }
 
-fn ask(host: &str, device: &str, q: &Query, cert: &mut Option<Cert>) -> Result<Option<Build>> {
-    if cert.is_none() {
-        *cert = Some(protocol::fetch_cert(host)?);
-    }
-    let cert = cert.as_ref().unwrap();
-    let mut answer = protocol::query_on(host, q, cert, device)?;
+fn ask(host: &str, device: &str, q: &Query, cert: &Cert) -> Result<Option<Build>> {
+    let mut answer = match protocol::query_on(host, q, cert, device) {
+        Ok(a) => a,
+        Err(e) => {
+            debug!("{} {:?}: {e:#}, once more", q.ota_version, q.region);
+            protocol::query_on(host, q, cert, device)?
+        }
+    };
     // Should a 500 still come, once more is enough.
     if matches!(answer, Answer::Refused { code: 500, .. }) {
         answer = protocol::query_on(host, q, cert, device)?;
@@ -167,12 +322,14 @@ fn ask(host: &str, device: &str, q: &Query, cert: &mut Option<Cert>) -> Result<O
 
 /// The same package (by MD5, else by version) found in several places is
 /// one build; regions keep the order they were asked in.
-pub fn group(found: impl IntoIterator<Item = (Region, Build)>) -> Vec<Found> {
+/// A build seen in a normal answer anywhere is not a beta.
+pub fn group(found: impl IntoIterator<Item = (Region, Build, bool)>) -> Vec<Found> {
     let mut out: Vec<Found> = Vec::new();
-    for (region, build) in found {
+    for (region, build, beta) in found {
         let key = identity(&build);
         match out.iter_mut().find(|f| identity(&f.build) == key) {
             Some(f) => {
+                f.beta &= beta;
                 if !f.regions.contains(&region) {
                     f.regions.push(region);
                 }
@@ -185,6 +342,7 @@ pub fn group(found: impl IntoIterator<Item = (Region, Build)>) -> Vec<Found> {
             None => out.push(Found {
                 build,
                 regions: vec![region],
+                beta,
             }),
         }
     }
@@ -244,10 +402,26 @@ mod tests {
     #[test]
     fn groups_by_package_and_sorts_newest_first() {
         let found = group([
-            (Region::GL, build("v1", Some("aa"), 100, "https://a/1")),
-            (Region::EU, build("v2", Some("bb"), 200, "https://b/1")),
-            (Region::CN, build("v1", Some("aa"), 100, "https://a/2")),
-            (Region::GL, build("v1", Some("aa"), 100, "https://a/1")),
+            (
+                Region::GL,
+                build("v1", Some("aa"), 100, "https://a/1"),
+                false,
+            ),
+            (
+                Region::EU,
+                build("v2", Some("bb"), 200, "https://b/1"),
+                false,
+            ),
+            (
+                Region::CN,
+                build("v1", Some("aa"), 100, "https://a/2"),
+                false,
+            ),
+            (
+                Region::GL,
+                build("v1", Some("aa"), 100, "https://a/1"),
+                false,
+            ),
         ]);
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].build.version, "v2");
@@ -256,10 +430,30 @@ mod tests {
     }
 
     #[test]
+    fn a_beta_seen_normally_is_no_beta() {
+        let found = group([
+            (Region::IN, build("v17", Some("cc"), 300, "https://c"), true),
+            (
+                Region::GL,
+                build("v17b", Some("dd"), 300, "https://d"),
+                true,
+            ),
+            (
+                Region::EU,
+                build("v17b", Some("dd"), 300, "https://d"),
+                false,
+            ),
+        ]);
+        let beta = |v: &str| found.iter().find(|f| f.build.version == v).unwrap().beta;
+        assert!(beta("v17"));
+        assert!(!beta("v17b"));
+    }
+
+    #[test]
     fn same_version_different_package_stays_apart() {
         let found = group([
-            (Region::GL, build("v1", Some("aa"), 100, "https://a")),
-            (Region::EU, build("v1", Some("bb"), 100, "https://b")),
+            (Region::GL, build("v1", Some("aa"), 100, "https://a"), false),
+            (Region::EU, build("v1", Some("bb"), 100, "https://b"), false),
         ]);
         assert_eq!(found.len(), 2);
     }

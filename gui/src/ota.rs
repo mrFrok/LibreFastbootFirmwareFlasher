@@ -231,6 +231,7 @@ pub fn on_found(ui: &MainWindow, generation: u64, result: Result<Vec<Found>, Str
                     newest: b.version == newest,
                     installed,
                     recommended: recommended(f),
+                    beta: f.beta,
                     changes: "".into(),
                 }
             })

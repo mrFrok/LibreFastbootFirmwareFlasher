@@ -6,7 +6,10 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 
-const TIMEOUT_SECS: &str = "25";
+// The servers answer within a second or two; one of a server's addresses
+// sometimes takes the connection and never answers, and a retry soon
+// reaches another.
+const TIMEOUT_SECS: &str = "6";
 
 pub fn post(url: &str, headers: &[(&str, String)], body: &str) -> Result<String> {
     let mut cmd = curl(url);
@@ -31,9 +34,17 @@ pub fn get(url: &str) -> Result<String> {
 
 fn curl(url: &str) -> Command {
     let mut cmd = Command::new("curl");
-    cmd.args(["-sS", "-L", "--max-time", TIMEOUT_SECS, "--compressed"])
-        .arg("--url")
-        .arg(url);
+    cmd.args([
+        "-sS",
+        "-L",
+        "--connect-timeout",
+        "8",
+        "--max-time",
+        TIMEOUT_SECS,
+        "--compressed",
+    ])
+    .arg("--url")
+    .arg(url);
     cmd
 }
 

@@ -20,6 +20,8 @@ export struct OtaBuild {
     installed: bool,
     // built for the region the phone's firmware is from
     recommended: bool,
+    // early access only ("taste")
+    beta: bool,
     // filled once "What's new" is asked for; empty before
     changes: string,
 }
@@ -91,6 +93,12 @@ component BuildRow inherits Rectangle {
                         text: Tr.t("installed", "установлена", "已安装", "已安裝");
                         fg: StatusColors.on-success-container;
                         bg: StatusColors.success-container;
+                    }
+                    if root.build.beta: Badge {
+                        y: (parent.height - self.height) / 2;
+                        text: Tr.t("beta", "бета", "测试版", "測試版");
+                        fg: StatusColors.on-warning-container;
+                        bg: StatusColors.warning-container;
                     }
                     if root.build.recommended && !root.build.installed: Badge {
                         y: (parent.height - self.height) / 2;

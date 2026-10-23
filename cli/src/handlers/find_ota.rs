@@ -128,6 +128,9 @@ fn print_found(f: &Found, newest: bool) {
     if newest {
         title = format!("{title}  {}", "newest".green());
     }
+    if f.beta {
+        title = format!("{title}  {}", "beta".yellow());
+    }
     println!("{title}");
     let mut facts = vec![regions.join(", ")];
     facts.extend(b.date());
@@ -150,6 +153,7 @@ fn to_json(f: &Found) -> serde_json::Value {
         "version": b.version,
         "ota_version": b.ota_version,
         "regions": f.regions.iter().map(|r| r.code()).collect::<Vec<_>>(),
+        "beta": f.beta,
         "android": b.android,
         "os": b.os,
         "security_patch": b.security_patch,
