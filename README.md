@@ -214,34 +214,64 @@ cargo test
 
 ```
 LibreFastbootFirmwareFlasher/
-├── Cargo.toml
+├── Cargo.toml               # workspace: lib, ota, cli, gui
+├── CHANGELOG.md             # each section becomes the release notes
 ├── README.md
 ├── LICENSE
-├── logo.svg
+├── flake.nix
+├── install.sh
 ├── lfff-gui.desktop
 ├── lfff-gui.svg
-├── install.sh
+├── logo.svg
 ├── packaging/
 │   └── flatpak/             # manifest + AppStream metadata
 ├── scripts/
-│   └── update-packaging.py  # repoints flake/AUR/Homebrew/Flatpak at a release
-├── lib/
+│   ├── update-packaging.py  # repoints flake/AUR/Homebrew/Flatpak at a release
+│   ├── release-notes.py     # release notes from CHANGELOG.md
+│   └── build-gui-musl.sh    # GUI for musl distributions
+├── lib/                     # lfff-lib: everything but the interface
 │   └── src/
 │       ├── lib.rs
-│       ├── arb.rs
-│       ├── deps.rs
+│       ├── arb.rs           # Anti-Rollback from xbl_config
+│       ├── deps.rs          # adb, fastboot, aria2c, payload_dumper
 │       ├── device.rs
-│       ├── downloader.rs
-│       ├── extractor.rs
-│       ├── flasher.rs
+│       ├── downloader.rs    # aria2c, 4PDA links, renewing OPPO links
+│       ├── extractor.rs     # payload_dumper, unpack cache
+│       ├── file_ops.rs
+│       ├── flash_history.rs
+│       ├── flasher.rs       # the install, OTA repair
+│       ├── super_layout.rs  # rebuilding super (experimental)
 │       └── utils.rs
-├── cli/
-│   └── src/main.rs
-└── gui/
+├── ota/                     # lfff-ota: the OPPO / OnePlus / realme update servers
+│   └── src/
+│       ├── protocol.rs      # /update/v6 request and answer
+│       ├── regions.rs       # 19 regions: carrier, server, model suffix
+│       ├── search.rs        # every region and channel at once
+│       ├── build.rs         # reading a build from the answer
+│       └── changelog.rs     # "what's new"
+├── cli/                     # lfff
+│   └── src/
+│       ├── main.rs
+│       ├── cli.rs           # commands and options
+│       ├── output.rs
+│       └── handlers/        # one file per command
+└── gui/                     # lfff-gui
     ├── build.rs
-    ├── material-1.18.1/      # vendored Material 3 components (MIT)
-    ├── src/main.rs
-    └── ui/main.slint
+    ├── material-1.18.1/     # vendored Material 3 components (MIT)
+    ├── src/
+    │   ├── main.rs
+    │   ├── worker.rs        # long jobs off the UI thread
+    │   ├── ui_callbacks.rs
+    │   ├── device_poll.rs   # finds the phone in the background
+    │   ├── ota.rs           # firmware search on the install page
+    │   └── config.rs
+    └── ui/
+        ├── main.slint
+        ├── pages/
+        ├── components/
+        ├── dialogs/
+        ├── globals/
+        └── icons/
 ```
 
 The GUI is built with the official [Material 3 component set for
