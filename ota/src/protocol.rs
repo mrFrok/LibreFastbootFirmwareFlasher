@@ -32,7 +32,32 @@ use crate::regions::Region;
 
 type AesCtr = ctr::Ctr128BE<aes::Aes128>;
 
-const DEVICE_ID: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+/// The device id a phone sends: SHA-256 of its IMEI, in capitals. The
+/// server keeps one session per device id — concurrent requests under one id
+/// fail with 500 — so each searching thread asks as device `n` of its own.
+pub fn device_id(n: u32) -> String {
+    use sha2::{Digest, Sha256};
+    // An IMEI-shaped number with a valid Luhn check digit.
+    let body = format!("86{:012}", 1_000_000 + u64::from(n));
+    let sum: u32 = body
+        .bytes()
+        .enumerate()
+        .map(|(i, b)| {
+            let d = u32::from(b - b'0');
+            if i % 2 == 1 {
+                let d = d * 2;
+                if d > 9 { d - 9 } else { d }
+            } else {
+                d
+            }
+        })
+        .sum();
+    let imei = format!("{body}{}", (10 - sum % 10) % 10);
+    Sha256::digest(imei.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect()
+}
 
 /// How the phone asks: by hand, on its own, or for a beta ("taste") build.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -101,22 +126,21 @@ pub fn query(q: &Query) -> Result<Answer> {
 
 /// `query` with a certificate fetched earlier from `q.region.host()`.
 pub fn query_with(q: &Query, cert: &Cert) -> Result<Answer> {
-    query_on(q.region.host(), q, cert)
+    query_on(q.region.host(), q, cert, &device_id(0))
 }
 
 /// `query` sent to `host`, with that host's certificate. Any host answers
-/// any region outside China: the carrier picks the build. One host takes
-/// one request at a time — concurrent ones fail with 500 (the server seems
-/// to keep one session key per device id, and ours is shared).
-pub fn query_on(host: &str, q: &Query, cert: &Cert) -> Result<Answer> {
+/// any region outside China: the carrier picks the build. Concurrent
+/// requests need a `device` id each (see `device_id`).
+pub fn query_on(host: &str, q: &Query, cert: &Cert, device: &str) -> Result<Answer> {
     let mut key = [0u8; 16];
     let mut iv = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut key);
     rand::thread_rng().fill_bytes(&mut iv);
     let protected_key = wrap_key(&cert.key, &key)?;
 
-    let body = json!({ "params": seal(&request_body(now_ms()).to_string(), &key, &iv) });
-    let mut hdrs = headers(q, &protected_key, cert.version, now_ms());
+    let body = json!({ "params": seal(&request_body(now_ms(), device).to_string(), &key, &iv) });
+    let mut hdrs = headers(q, &protected_key, cert.version, now_ms(), device);
     hdrs.push(("Content-Type", "application/json; charset=utf-8".into()));
     let text = http::post(
         &format!("https://{host}/update/v6"),
@@ -259,7 +283,7 @@ fn now_ms() -> i64 {
 }
 
 /// The same for every phone: an empty `components` asks for the full package.
-fn request_body(time_ms: i64) -> Value {
+fn request_body(time_ms: i64, device: &str) -> Value {
     json!({
         "components": [],
         "mode": 0,
@@ -287,7 +311,7 @@ fn request_body(time_ms: i64) -> Value {
             "supportLightH": "1"
         },
         "otaAppVersion": 0,
-        "deviceId": DEVICE_ID,
+        "deviceId": device,
         "duid": "",
         "h5LinkVersion": 7,
         "canUpgVer": "svt",
@@ -307,6 +331,7 @@ fn headers(
     protected_key: &str,
     cert_version: i64,
     time_ms: i64,
+    device: &str,
 ) -> Vec<(&'static str, String)> {
     let ota_version = full_ota_version(&q.ota_version);
     let model = q.model.clone().unwrap_or_else(|| {
@@ -339,8 +364,8 @@ fn headers(
         ("companyId", String::new()),
         ("rsaVersion", "3".into()),
         ("version", "3".into()),
-        ("deviceId", DEVICE_ID.into()),
-        ("x-otci-deviceId", DEVICE_ID.into()),
+        ("deviceId", device.into()),
+        ("x-otci-deviceId", device.into()),
         ("x-otci-cipherInfo", cipher_info.to_string()),
     ]
 }
@@ -355,6 +380,18 @@ mod tests {
             .step_by(2)
             .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
             .collect()
+    }
+
+    #[test]
+    fn device_ids_look_like_a_phones() {
+        let a = device_id(0);
+        assert_eq!(a.len(), 64);
+        assert!(
+            a.chars()
+                .all(|c| c.is_ascii_digit() || c.is_ascii_uppercase())
+        );
+        assert_ne!(a, device_id(1));
+        assert_eq!(a, device_id(0));
     }
 
     #[test]
@@ -381,11 +418,11 @@ mod tests {
     fn envelope_round_trips() {
         let key = [7u8; 16];
         let iv = [9u8; 16];
-        let plain = request_body(1_700_000_000_000).to_string();
+        let plain = request_body(1_700_000_000_000, "D").to_string();
         let sealed = seal(&plain, &key, &iv);
         assert_eq!(
             open(&sealed, &key).unwrap(),
-            request_body(1_700_000_000_000)
+            request_body(1_700_000_000_000, "D")
         );
     }
 
@@ -427,7 +464,7 @@ mod tests {
             region: Region::GL,
             mode: Mode::Manual,
         };
-        let h = headers(&q, "KEY", 42, 1_000);
+        let h = headers(&q, "KEY", 42, 1_000, "DEV");
         let get = |n: &str| h.iter().find(|(k, _)| *k == n).unwrap().1.clone();
         assert_eq!(get("model"), "CPH2747");
         assert_eq!(get("otaVersion"), "CPH2747_11.A.01_0001_197001010000");

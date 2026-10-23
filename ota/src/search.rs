@@ -1,8 +1,8 @@
 //! Asks every region and channel for one model and gathers the builds.
 //!
 //! The combinations follow the quick search of NeFeroN's LinkResolverDownloader:
-//! region × model variant × channel, a fake oldest build as the current one,
-//! one request at a time per server.
+//! region × model variant × channel, a fake oldest build as the current one.
+//! Each server takes a few requests at a time, each under its own device id.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -15,12 +15,16 @@ use crate::build::Build;
 use crate::protocol::{self, Answer, Cert, Mode, Query};
 use crate::regions::Region;
 
-/// The release channels: A stable, C/F/H regional and carrier lines.
+/// The channel letter follows the Android version: A 13, C 14, F 15, H 16.
 pub const CHANNELS: [char; 4] = ['A', 'C', 'F', 'H'];
+
+/// Requests in flight on each server at once.
+const PER_HOST: usize = 8;
 
 #[derive(Clone, Debug)]
 pub struct Search {
-    /// e.g. `CPH2747`; a regional suffix (`EEA`, `IN`) is added per region.
+    /// e.g. `CPH2747`; regional variants (`CPH2747EEA`, `RMX3709TR`,
+    /// `RMX3709EX`) are asked too.
     pub model: String,
     pub regions: Vec<Region>,
     pub channels: Vec<char>,
@@ -38,7 +42,13 @@ impl Search {
     fn queries(&self) -> Vec<Query> {
         let mut out = Vec::new();
         for &region in &self.regions {
+            // As the region's phones name themselves; "EX" (export) is what
+            // MEA, Malaysia or Saudi phones answer to; the plain code finds
+            // older builds the others no longer offer.
             let mut models = vec![region.model(&self.model)];
+            if !self.model.ends_with("EX") {
+                models.push(format!("{}EX", self.model));
+            }
             if !models.contains(&self.model) {
                 models.push(self.model.clone());
             }
@@ -73,7 +83,7 @@ pub fn search(
 ) -> Result<Vec<Found>> {
     let queries = s.queries();
     let total = queries.len();
-    // One queue per host (see `protocol::query_on`), spread evenly.
+    // One queue per host, spread evenly; each drained by PER_HOST workers.
     let mut queues: HashMap<&'static str, Vec<usize>> = HashMap::new();
     for (i, q) in queries.iter().enumerate() {
         let hosts = q.region.hosts();
@@ -89,28 +99,37 @@ pub fn search(
     let builds = Mutex::new(Vec::<(usize, Region, Build)>::new());
 
     std::thread::scope(|scope| {
+        let mut worker = 0u32;
         for (host, queue) in &queues {
-            let (queries, done, failures, last_error, builds) =
-                (&queries, &done, &failures, &last_error, &builds);
-            scope.spawn(move || {
-                let mut cert = None;
-                for &i in queue {
-                    if cancel.load(Ordering::SeqCst) {
-                        break;
-                    }
-                    let q = &queries[i];
-                    match ask(host, q, &mut cert) {
-                        Ok(Some(b)) => builds.lock().unwrap().push((i, q.region, b)),
-                        Ok(None) => {}
-                        Err(e) => {
-                            debug!("{} {:?} on {host}: {e:#}", q.ota_version, q.region);
-                            failures.fetch_add(1, Ordering::SeqCst);
-                            *last_error.lock().unwrap() = Some(e);
+            let next = std::sync::Arc::new(AtomicUsize::new(0));
+            for _ in 0..PER_HOST.min(queue.len()) {
+                let device = protocol::device_id(worker);
+                worker += 1;
+                let next = next.clone();
+                let (queries, done, failures, last_error, builds) =
+                    (&queries, &done, &failures, &last_error, &builds);
+                scope.spawn(move || {
+                    let mut cert = None;
+                    loop {
+                        let k = next.fetch_add(1, Ordering::SeqCst);
+                        let Some(&i) = queue.get(k) else { break };
+                        if cancel.load(Ordering::SeqCst) {
+                            break;
                         }
+                        let q = &queries[i];
+                        match ask(host, &device, q, &mut cert) {
+                            Ok(Some(b)) => builds.lock().unwrap().push((i, q.region, b)),
+                            Ok(None) => {}
+                            Err(e) => {
+                                debug!("{} {:?} on {host}: {e:#}", q.ota_version, q.region);
+                                failures.fetch_add(1, Ordering::SeqCst);
+                                *last_error.lock().unwrap() = Some(e);
+                            }
+                        }
+                        progress(done.fetch_add(1, Ordering::SeqCst) + 1, total);
                     }
-                    progress(done.fetch_add(1, Ordering::SeqCst) + 1, total);
-                }
-            });
+                });
+            }
         }
     });
 
@@ -126,15 +145,15 @@ pub fn search(
     Ok(group(builds.into_iter().map(|(_, r, b)| (r, b))))
 }
 
-fn ask(host: &str, q: &Query, cert: &mut Option<Cert>) -> Result<Option<Build>> {
+fn ask(host: &str, device: &str, q: &Query, cert: &mut Option<Cert>) -> Result<Option<Build>> {
     if cert.is_none() {
         *cert = Some(protocol::fetch_cert(host)?);
     }
     let cert = cert.as_ref().unwrap();
-    let mut answer = protocol::query_on(host, q, cert)?;
+    let mut answer = protocol::query_on(host, q, cert, device)?;
     // Should a 500 still come, once more is enough.
     if matches!(answer, Answer::Refused { code: 500, .. }) {
-        answer = protocol::query_on(host, q, cert)?;
+        answer = protocol::query_on(host, q, cert, device)?;
     }
     Ok(match answer {
         Answer::Build(body) => Build::from_answer(&body),
@@ -209,14 +228,17 @@ mod tests {
     #[test]
     fn regional_variants_are_asked_too() {
         let s = Search {
-            model: "CPH2747".into(),
-            regions: vec![Region::EU, Region::GL],
-            channels: vec!['A'],
+            model: "RMX3709".into(),
+            regions: vec![Region::parse("TR").unwrap(), Region::GL],
+            channels: vec!['H'],
         };
         let q = s.queries();
         let models: Vec<_> = q.iter().map(|q| q.model.clone().unwrap()).collect();
-        assert_eq!(models, ["CPH2747EEA", "CPH2747", "CPH2747"]);
-        assert!(q.iter().all(|q| q.ota_version == "CPH2747_11.A"));
+        assert_eq!(
+            models,
+            ["RMX3709TR", "RMX3709EX", "RMX3709", "RMX3709", "RMX3709EX"]
+        );
+        assert!(q.iter().all(|q| q.ota_version == "RMX3709_11.H"));
     }
 
     #[test]

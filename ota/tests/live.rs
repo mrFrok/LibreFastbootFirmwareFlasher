@@ -51,3 +51,23 @@ fn search_finds_regional_builds() {
     let text = lfff_ota::changelog::fetch(url).unwrap();
     assert!(!text.is_empty());
 }
+
+/// realme answers its newest builds only to `RMX3709TR` / `RMX3709EX`.
+#[test]
+#[ignore = "network"]
+fn realme_android_16_by_regional_model() {
+    use std::sync::atomic::AtomicBool;
+    let found = lfff_ota::search(
+        &lfff_ota::Search::new("RMX3709"),
+        &AtomicBool::new(false),
+        &|_, _| {},
+    )
+    .unwrap();
+    assert!(
+        found
+            .iter()
+            .any(|f| f.build.version.starts_with("RMX3709_16.")),
+        "{:?}",
+        found.iter().map(|f| &f.build.version).collect::<Vec<_>>()
+    );
+}

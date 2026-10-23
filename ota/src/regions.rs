@@ -15,8 +15,8 @@ struct Info {
     carrier: &'static str,
     language: &'static str,
     host: &'static str,
-    /// Added to the model in the `model` header (`CPH2747EEA`): without it
-    /// the server answers nothing for these regions.
+    /// Added to the model in the `model` header (`CPH2747EEA`, `RMX3709TR`):
+    /// the region's newest builds answer only to it.
     suffix: &'static str,
 }
 
@@ -43,28 +43,35 @@ const TABLE: &[Info] = &[
     info("GL", "Global", "10100111", "en-US", HOST_SG, ""),
     info("EU", "Europe", "01000100", "en-GB", HOST_EU, "EEA"),
     info("IN", "India", "00011011", "en-IN", HOST_IN, "IN"),
-    info("RU", "Russia", "00110111", "ru-RU", HOST_SG, ""),
+    info("RU", "Russia", "00110111", "ru-RU", HOST_SG, "RU"),
     info(
         "MEA",
         "Middle East and Africa",
         "10100110",
         "en-US",
         HOST_SG,
-        "",
+        "MEA",
     ),
-    info("TR", "Turkey", "01010001", "tr-TR", HOST_SG, ""),
-    info("SA", "Saudi Arabia", "10000011", "ar-SA", HOST_SG, ""),
-    info("SG", "Singapore", "01011010", "en-SG", HOST_SG, ""),
-    info("TH", "Thailand", "00111001", "th-TH", HOST_SG, ""),
-    info("MY", "Malaysia", "00111000", "ms-MY", HOST_SG, ""),
-    info("ID", "Indonesia", "00110011", "id-ID", HOST_SG, ""),
-    info("PH", "Philippines", "00111110", "en-PH", HOST_SG, ""),
-    info("VN", "Vietnam", "00111100", "vi-VN", HOST_SG, ""),
-    info("TW", "Taiwan", "00011010", "zh-TW", HOST_SG, ""),
-    info("OCA", "Oceania", "10100101", "en-AU", HOST_SG, ""),
-    info("LATAM", "Latin America", "10011010", "es-MX", HOST_SG, ""),
-    info("BR", "Brazil", "10011110", "pt-BR", HOST_SG, ""),
-    info("GB", "United Kingdom", "10001010", "en-GB", HOST_SG, ""),
+    info("TR", "Turkey", "01010001", "tr-TR", HOST_SG, "TR"),
+    info("SA", "Saudi Arabia", "10000011", "ar-SA", HOST_SG, "SA"),
+    info("SG", "Singapore", "01011010", "en-SG", HOST_SG, "SG"),
+    info("TH", "Thailand", "00111001", "th-TH", HOST_SG, "TH"),
+    info("MY", "Malaysia", "00111000", "ms-MY", HOST_SG, "MY"),
+    info("ID", "Indonesia", "00110011", "id-ID", HOST_SG, "ID"),
+    info("PH", "Philippines", "00111110", "en-PH", HOST_SG, "PH"),
+    info("VN", "Vietnam", "00111100", "vi-VN", HOST_SG, "VN"),
+    info("TW", "Taiwan", "00011010", "zh-TW", HOST_SG, "TW"),
+    info("OCA", "Oceania", "10100101", "en-AU", HOST_SG, "OCA"),
+    info(
+        "LATAM",
+        "Latin America",
+        "10011010",
+        "es-MX",
+        HOST_SG,
+        "LATAM",
+    ),
+    info("BR", "Brazil", "10011110", "pt-BR", HOST_SG, "BR"),
+    info("GB", "United Kingdom", "10001010", "en-GB", HOST_SG, "GB"),
     info("CN", "China", "10010111", "zh-CN", HOST_CN, ""),
 ];
 
@@ -135,9 +142,8 @@ impl Region {
         self.info().carrier
     }
 
-    /// The model as the region's phones name themselves: the server answers
-    /// `CPH2747EEA` with the European build and plain `CPH2747` with nothing
-    /// outside GL, though `otaVersion` keeps the plain code.
+    /// The model as the region's phones name themselves (`CPH2747EEA`,
+    /// `RMX3709TR`); `otaVersion` keeps the plain code.
     pub fn model(self, code: &str) -> String {
         let suffix = self.info().suffix;
         if code.ends_with(suffix) {
