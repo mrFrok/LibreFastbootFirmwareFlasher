@@ -3,6 +3,26 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.3.1
+
+### Firmware search
+
+- Finds a new Android version as soon as it is out: it is offered only as
+  an update from the newest build of the one before, so the search now
+  asks again from there (OnePlus 15 India gets Android 17). Builds offered
+  only as early access are marked beta.
+- An update server that hangs no longer slows the search down to minutes:
+  it is left out and the others answer.
+
+---
+
+### Коротко по-русски
+
+- Поиск прошивки находит новую версию Android сразу после выхода
+  (например, Android 17 для OnePlus 15 India). Сборки раннего доступа
+  отмечены «бета».
+- Зависший сервер обновлений больше не растягивает поиск на минуты.
+
 ## 3.3.0
 
 ### Find official firmware
