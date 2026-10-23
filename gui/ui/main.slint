@@ -123,6 +123,8 @@ export component MainWindow inherits MaterialWindow {
     in-out property <string> stage1-detail;
     in-out property <bool> cable-failed: false;
     in-out property <string> cable-detail;
+    // the cable check got an answer, only a slow one
+    in-out property <bool> cable-slow;
     in-out property <string> result-detail;
     in-out property <bool> untouched: true;
     in-out property <int> install-minutes: 0;
@@ -728,6 +730,7 @@ export component MainWindow inherits MaterialWindow {
                             current-partition: root.current-partition;
                             cable-failed: root.cable-failed;
                             cable-detail: root.cable-detail;
+                            cable-slow: root.cable-slow;
                             log: root.flash-log;
                             export-status: root.flash-export-status;
                             result-detail: root.result-detail;

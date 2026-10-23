@@ -265,12 +265,56 @@ pub fn get_device_info(serial: Option<&str>) -> Option<DeviceInfo> {
         bootloader_version: get(&["version-bootloader", "bootloader-version"]),
         baseband_version: get(&["version-baseband", "baseband-version"]),
         secure: get(&["secure"]),
-        unlocked: get(&["unlocked"]),
+        unlocked: match get(&["unlocked"]) {
+            // Some fastbootd builds (OnePlus Nord 5) leave it out of
+            // `getvar all` but answer it asked on its own.
+            v if v.is_empty() => getvar(serial, "unlocked"),
+            v => v,
+        },
         battery_level: battery,
         slot_count: slots,
         current_slot: get(&["current-slot"]),
         raw,
     })
+}
+
+/// One `fastboot getvar <name>`; empty when the device does not say.
+pub fn getvar(serial: Option<&str>, name: &str) -> String {
+    let mut cmd: Vec<&str> = vec!["fastboot"];
+    if let Some(ser) = serial {
+        cmd.extend(["-s", ser]);
+    }
+    cmd.extend(["getvar", name]);
+    let r = run_cmd(&cmd, 10);
+    let out = if r.stderr.is_empty() {
+        &r.stdout
+    } else {
+        &r.stderr
+    };
+    parse_getvar_output(out)
+        .get(name)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// What fastboot says about the bootloader lock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockState {
+    Unlocked,
+    Locked,
+    /// The device does not say. Flashing goes on: a locked bootloader
+    /// refuses every write itself, so nothing is half-written.
+    Unknown,
+}
+
+impl LockState {
+    pub fn from_getvar(value: &str) -> LockState {
+        match value.trim().to_lowercase().as_str() {
+            "yes" | "true" | "1" => LockState::Unlocked,
+            "no" | "false" | "0" => LockState::Locked,
+            _ => LockState::Unknown,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -430,12 +474,17 @@ pub fn run_pre_flash_checks(serial: Option<&str>) -> PreFlashCheck {
 
     // Step 4: safety
     info!("==> [4/4] Safety checks …");
-    let ul = di.unlocked.to_lowercase();
-    if ul == "yes" || ul == "true" || ul == "1" {
-        c.unlocked = true;
-    } else {
-        c.errors
-            .push("Bootloader is locked. Unlock: fastboot flashing unlock".into());
+    match LockState::from_getvar(&di.unlocked) {
+        LockState::Unlocked => c.unlocked = true,
+        LockState::Locked => c
+            .errors
+            .push("Bootloader is locked. Unlock: fastboot flashing unlock".into()),
+        LockState::Unknown => {
+            c.unlocked = true;
+            c.warnings.push(
+                "The device does not report its bootloader lock state; a locked bootloader will refuse to flash".into(),
+            );
+        }
     }
 
     if di.battery_level == -1 {
@@ -457,6 +506,15 @@ pub fn run_pre_flash_checks(serial: Option<&str>) -> PreFlashCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lock_state_needs_an_explicit_answer_either_way() {
+        assert_eq!(LockState::from_getvar("yes"), LockState::Unlocked);
+        assert_eq!(LockState::from_getvar(" True"), LockState::Unlocked);
+        assert_eq!(LockState::from_getvar("no"), LockState::Locked);
+        assert_eq!(LockState::from_getvar("0"), LockState::Locked);
+        assert_eq!(LockState::from_getvar(""), LockState::Unknown);
+    }
 
     #[test]
     fn test_parse_getvar() {

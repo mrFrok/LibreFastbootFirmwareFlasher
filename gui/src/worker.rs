@@ -361,18 +361,21 @@ fn preflight(tx: &mpsc::Sender<WMsg>, serial: Option<&str>) -> Result<(), String
         return Err("Cannot communicate with the device (fastboot getvar failed). Check the cable and that the device is in fastbootd/userspace fastboot.".into());
     };
     let ul = info.unlocked.to_lowercase();
-    // Strict gate, same rule as the CLI pre-flash check: only an explicit
-    // yes/true/1 counts as unlocked — an empty/unknown value must not pass.
-    if !matches!(ul.as_str(), "yes" | "true" | "1") {
-        let state = if ul.is_empty() {
-            "unknown"
-        } else {
-            ul.as_str()
-        };
-        return Err(format!(
-            "Bootloader lock state is '{}' — flashing requires an unlocked bootloader. Unlock it first: fastboot flashing unlock",
-            state
-        ));
+    // Same rule as the CLI pre-flash check: an explicit "no" stops; a device
+    // that does not say goes on, as a locked one refuses every write anyway.
+    match lfff_lib::device::LockState::from_getvar(&ul) {
+        lfff_lib::device::LockState::Locked => {
+            return Err(format!(
+                "Bootloader lock state is '{ul}' — flashing requires an unlocked bootloader. Unlock it first: fastboot flashing unlock"
+            ));
+        }
+        lfff_lib::device::LockState::Unknown => log(
+            tx,
+            LogLevel::Warn,
+            2,
+            "The phone does not report its bootloader lock state; going on — a locked bootloader refuses to flash",
+        ),
+        lfff_lib::device::LockState::Unlocked => {}
     }
     if info.battery_level >= 0 && info.battery_level < 30 {
         return Err(format!(

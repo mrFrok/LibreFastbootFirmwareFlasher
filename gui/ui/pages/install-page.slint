@@ -77,6 +77,7 @@ export component InstallPage inherits VerticalLayout {
     in property <string> current-partition;
     in property <bool> cable-failed;
     in property <string> cable-detail;
+    in property <bool> cable-slow;
     in property <[LogEntry]> log;
     in property <string> export-status;
 
@@ -612,8 +613,12 @@ export component InstallPage inherits VerticalLayout {
 
                 if root.cable-failed: Notice {
                     kind: 2;
-                    title: Tr.t("The connection is too slow", "Соединение слишком медленное", "连接速度太慢", "連線速度太慢");
-                    text: Tr.t("Try another cable — ideally the one from the box — and a USB port directly on the computer, without hubs or adapters.", "Попробуйте другой кабель — лучше из комплекта — и порт USB прямо на компьютере, без хабов и переходников.", "请换一根数据线（最好是原装线），并直接连接电脑上的 USB 接口，不要使用集线器或转接头。", "請換一條傳輸線（最好是原廠線），並直接連接電腦上的 USB 連接埠，不要使用集線器或轉接頭。");
+                    title: root.cable-slow ? Tr.t("The connection is too slow", "Соединение слишком медленное", "连接速度太慢", "連線速度太慢")
+                        : Tr.t("The phone does not answer", "Смартфон не отвечает", "手机没有响应", "手機沒有回應");
+                    // OPPO / OnePlus / realme's own cables are made for fast
+                    // charging and are often poor at data: not recommended.
+                    text: (root.cable-slow ? "" : Tr.t("Check that the phone still shows flashing mode (fastbootd). ", "Проверьте, что на смартфоне всё ещё режим прошивки (fastbootd). ", "请确认手机仍处于刷机模式（fastbootd）。", "請確認手機仍處於刷機模式（fastbootd）。"))
+                        + Tr.t("Try another cable — a plain USB data cable, not the fast-charging one from the box — and a USB port directly on the computer, without hubs or adapters.", "Попробуйте другой кабель — обычный кабель для передачи данных, а не зарядный из комплекта — и порт USB прямо на компьютере, без хабов и переходников.", "请换一根普通的 USB 数据线（不要用原装快充线），并直接连接电脑上的 USB 接口，不要使用集线器或转接头。", "請換一條普通的 USB 傳輸線（不要用原廠快充線），並直接連接電腦上的 USB 連接埠，不要使用集線器或轉接頭。");
                     HorizontalLayout {
                         alignment: end;
                         spacing: 8px;

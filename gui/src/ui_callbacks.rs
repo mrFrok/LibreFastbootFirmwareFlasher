@@ -633,6 +633,7 @@ pub fn poll(
                 _ => ui.set_stage2(state as i32),
             },
             WMsg::CableFailed { detail, response } => {
+                ui.set_cable_slow(detail.contains("Too slow"));
                 ui.set_cable_detail(detail.into());
                 ui.set_cable_failed(true);
                 *cable_resp.borrow_mut() = Some(response);
