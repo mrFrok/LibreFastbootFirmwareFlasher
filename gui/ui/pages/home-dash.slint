@@ -243,7 +243,15 @@ export component HomeDash inherits VerticalLayout {
 
                 LinkRow {
                     icon: @image-url("../icons/telegram.svg");
-                    text: Tr.t("Community on Telegram", "Сообщество в Telegram", "Telegram 社区", "Telegram 社群");
+                    text: Tr.t("Telegram Group", "Группа в Telegram", "Telegram 群组", "Telegram 群組");
+                    clicked => {
+                        root.open-url("https://t.me/+bw0B7qVnFx5jMDhi");
+                    }
+                }
+
+                LinkRow {
+                    icon: @image-url("../icons/telegram.svg");
+                    text: Tr.t("Realme Community in Telegram", "Сообщество Realme в Telegram", "Telegram 上的 Realme 社区", "Telegram 上的 Realme 社群");
                     clicked => {
                         root.open-url("https://t.me/gt3neo5hub");
                     }

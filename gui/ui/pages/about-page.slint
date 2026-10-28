@@ -76,7 +76,14 @@ export component AboutPage {
 
                 AboutLink {
                     icon: @image-url("../icons/telegram.svg");
-                    label: "Telegram group";
+                    label: "Telegram Group";
+                    url: "https://t.me/+bw0B7qVnFx5jMDhi";
+                    open(u) => { root.open-url(u); }
+                }
+
+                AboutLink {
+                    icon: @image-url("../icons/telegram.svg");
+                    label: "Realme Community in Telegram";
                     url: "https://t.me/gt3neo5hub";
                     open(u) => { root.open-url(u); }
                 }

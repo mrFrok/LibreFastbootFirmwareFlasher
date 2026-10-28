@@ -35,7 +35,8 @@ pub fn print() {
     println!("  Links:");
     println!("  ─────────────────────────────────────────────────────");
     println!("  GitHub     https://github.com/mrFrok/LibreFastbootFirmwareFlasher");
-    println!("  Telegram   https://t.me/gt3neo5hub");
+    println!("  Telegram   https://t.me/+bw0B7qVnFx5jMDhi");
+    println!("  Realme     https://t.me/gt3neo5hub");
     println!("  Author     https://t.me/mrFrok228");
     println!();
     println!("  -v / --verbose    debug output");
