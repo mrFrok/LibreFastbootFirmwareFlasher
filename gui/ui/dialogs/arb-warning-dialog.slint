@@ -18,6 +18,10 @@ export component ArbWarningDialog {
     // Meaningful only when arb-warning-state is `known`.
     in property <int> arb-warning-version: 0;
     in-out property <bool> skip-xbl-abl: false;
+    // A firmware with ARB is the red case; no ARB or an unknown one is a
+    // reminder in the warning colour.
+    private property <bool> danger: root.arb-warning-state == ArbState.known && root.arb-warning-version > 0;
+    private property <color> accent: root.danger ? MaterialPalette.error : StatusColors.warning;
 
     callback cancel();
     callback confirm();
@@ -51,8 +55,8 @@ export component ArbWarningDialog {
                         duration: 300ms;
                         easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
                     }
-                    border-width: 1px;
-                    border-color: MaterialPalette.outline-variant;
+                    border-width: root.danger ? 2px : 1px;
+                    border-color: root.danger ? MaterialPalette.error : MaterialPalette.outline-variant;
                     clip: true;
 
                     VerticalLayout {
@@ -63,7 +67,7 @@ export component ArbWarningDialog {
                             Text {
                                 text: "⚠";
                                 font-size: 24px;
-                                color: StatusColors.warning;
+                                color: root.accent;
                                 vertical-alignment: center;
                             }
 
@@ -71,7 +75,7 @@ export component ArbWarningDialog {
                                 text: Tr.arb-warning-title;
                                 font-size: 18px;
                                 font-weight: 700;
-                                color: StatusColors.warning;
+                                color: root.accent;
                                 vertical-alignment: center;
                             }
                         }

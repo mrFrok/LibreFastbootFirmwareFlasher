@@ -124,7 +124,9 @@ export component ConfirmSheet inherits Rectangle {
                     Text {
                         width: 492px;
                         text: root.kind == 0 ? Tr.t("This firmware has ARB ", "В прошивке ARB ", "此固件的 ARB 为 ", "此韌體的 ARB 為 ") + root.arb
-                            : root.kind == 1 ? Tr.t("No ARB found in this firmware", "В прошивке не найден ARB", "此固件中未找到 ARB", "此韌體中未找到 ARB")
+                            // 0 and "could not read" are different answers.
+                            : root.kind == 1 && root.arb >= 0 ? Tr.t("This firmware has no ARB", "В прошивке нет ARB", "此固件没有 ARB", "此韌體沒有 ARB")
+                            : root.kind == 1 ? Tr.t("This firmware's ARB is unknown", "ARB прошивки неизвестен", "此固件的 ARB 未知", "此韌體的 ARB 未知")
                             : root.kind == 4 ? Tr.t("The phone has ARB ", "На смартфоне ARB ", "手机的 ARB 为 ", "手機的 ARB 為 ") + root.phone-arb
                                 + Tr.t(", the firmware only ", ", а в прошивке только ", "，而固件只有 ", "，而韌體只有 ") + root.arb
                             : Tr.t("This firmware contains a preloader", "В прошивке есть preloader", "此固件包含 preloader", "此韌體包含 preloader");
@@ -160,6 +162,15 @@ export component ConfirmSheet inherits Rectangle {
                     wrap: word-wrap;
                 }
 
+                // The phone's ARB is known but the firmware's is not: show it.
+                if root.kind == 1 && root.phone-arb >= 0: Text {
+                    text: Tr.t("The phone has ARB ", "На смартфоне ARB ", "手机的 ARB 为 ", "手機的 ARB 為 ") + root.phone-arb + ".";
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: root.accent;
+                    wrap: word-wrap;
+                }
+
                 if root.kind == 0 && root.phone-arb >= 0: Text {
                     text: Tr.t("The phone has ARB ", "Сейчас на смартфоне ARB ", "手机当前的 ARB 为 ", "手機目前的 ARB 為 ") + root.phone-arb
                         + Tr.t("; after installing it becomes ", "; после установки станет ", "；安装后将变为 ", "；安裝後將變為 ") + root.arb + ".";
@@ -181,6 +192,11 @@ export component ConfirmSheet inherits Rectangle {
                                 "После установки вернуться на прошивку с меньшим ARB будет нельзя: смартфон перестанет загружаться и превратится в «кирпич». Обновляться на более новые прошивки можно.",
                                 "安装后，手机将无法再回退到 ARB 更低的固件：否则将无法启动——变砖。升级到更新的固件不受影响。",
                                 "安裝後，手機將無法再退回 ARB 更低的韌體：否則將無法開機——變磚。升級到更新的韌體不受影響。")
+                        : root.kind == 1 && root.arb < 0 ? Tr.t(
+                                "Its xbl_config is missing or could not be read — that is not the same as ARB 0. If this firmware's ARB is lower than the phone's, the phone will not boot after installing — a brick; if it is higher, there is no going back. Make sure you know both.",
+                                "В ней нет xbl_config или его не удалось прочитать — это не то же самое, что ARB 0. Если ARB прошивки ниже, чем у смартфона, после установки он не загрузится и превратится в «кирпич»; если выше — откатиться будет нельзя. Убедитесь, что знаете оба значения.",
+                                "其中没有 xbl_config 或无法读取——这不等于 ARB 0。如果固件的 ARB 低于手机，安装后将无法启动——变砖；如果更高，则无法回退。请确认您知道两者的值。",
+                                "其中沒有 xbl_config 或無法讀取——這不等於 ARB 0。如果韌體的 ARB 低於手機，安裝後將無法開機——變磚；如果更高，則無法回退。請確認您知道兩者的值。")
                         : root.kind == 1 ? Tr.t(
                                 "But the phone may already run firmware with ARB. If the phone's ARB is higher than this firmware's, it will not boot after installing — a brick. Make sure you know your phone's current ARB.",
                                 "Но на смартфоне уже может стоять прошивка с ARB. Если ARB смартфона выше, чем у этой прошивки, после установки он не загрузится и превратится в «кирпич». Убедитесь, что знаете текущий ARB смартфона.",
