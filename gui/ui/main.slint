@@ -121,6 +121,9 @@ export component MainWindow inherits MaterialWindow {
     // ARB installed on the phone, read over adb with root right before the
     // sheet opens: -1 when it could not be read.
     in-out property <int> phone-arb: -1;
+    // Why phone-arb is -1: 0 not asked, 1 no phone over adb, 2 no root for
+    // Shell, 3 xbl_config unreadable.
+    in-out property <int> phone-arb-why: 0;
     in-out property <bool> arb-checking: false;
     // Reads the phone's ARB (Snapdragon), then opens the sheet.
     callback check-arb();
@@ -1042,6 +1045,7 @@ export component MainWindow inherits MaterialWindow {
         kind: root.sheet - 1;
         arb: root.fw-arb;
         phone-arb: root.phone-arb;
+        phone-arb-why: root.phone-arb-why;
         phone: root.device.name;
         chip-name: root.chip == 1 ? "Snapdragon" : "MediaTek";
         wrong-device: root.fw-wrong-device;

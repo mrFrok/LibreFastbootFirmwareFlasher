@@ -654,6 +654,15 @@ pub fn poll(
                 refresh_cached_firmwares(&ui);
             }
             WMsg::PhoneArb(v) => {
+                use lfff_lib::arb::DeviceArbError;
+                // The sheet says why the phone's ARB is unknown; the
+                // details are in the log.
+                ui.set_phone_arb_why(match &v {
+                    Ok(_) => 0,
+                    Err(DeviceArbError::NoDevice) => 1,
+                    Err(DeviceArbError::NoRoot) => 2,
+                    Err(_) => 3,
+                });
                 ui.set_phone_arb(v.map_or(-1, |v| v as i32));
                 ui.set_arb_checking(false);
                 ui.invoke_open_sheet();
@@ -1518,6 +1527,7 @@ fn register_install_callbacks(
             }
             if ui.get_chip() != 1 {
                 ui.set_phone_arb(-1);
+                ui.set_phone_arb_why(0);
                 ui.invoke_open_sheet();
                 return;
             }
@@ -1525,6 +1535,7 @@ fn register_install_callbacks(
             if t.send(Cmd::ReadPhoneArb).is_err() {
                 ui.set_arb_checking(false);
                 ui.set_phone_arb(-1);
+                ui.set_phone_arb_why(3);
                 ui.invoke_open_sheet();
             }
         }

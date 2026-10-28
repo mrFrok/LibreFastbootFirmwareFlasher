@@ -43,6 +43,9 @@ export component ConfirmSheet inherits Rectangle {
     in property <int> arb;
     // ARB installed on the phone; -1 when it could not be read.
     in property <int> phone-arb: -1;
+    // Why phone-arb is -1: 0 not asked, 1 no phone over adb, 2 no root for
+    // Shell, 3 xbl_config unreadable.
+    in property <int> phone-arb-why: 0;
     in property <string> phone;
     in property <string> chip-name;
     in property <string> firmware;
@@ -130,6 +133,30 @@ export component ConfirmSheet inherits Rectangle {
                         wrap: word-wrap;
                         vertical-alignment: center;
                     }
+                }
+
+                // The check ran but could not tell: say why, so the generic
+                // warning below does not look like no check at all.
+                if root.kind < 2 && root.phone-arb < 0 && root.phone-arb-why > 0: Text {
+                    text: root.phone-arb-why == 1 ? Tr.t(
+                                "The phone's ARB was not checked: the phone is not connected over adb (Android with USB debugging on).",
+                                "ARB смартфона не проверен: смартфон не подключён по adb (Android с включённой отладкой по USB).",
+                                "未检查手机的 ARB：手机未通过 adb 连接（开启 USB 调试的 Android）。",
+                                "未檢查手機的 ARB：手機未透過 adb 連接（開啟 USB 偵錯的 Android）。")
+                        : root.phone-arb-why == 2 ? Tr.t(
+                                "The phone's ARB was not checked: no root for Shell. KernelSU / APatch: grant root to Shell in the manager (turn on showing system apps). Magisk: allow the request on the phone.",
+                                "ARB смартфона не проверен: у Shell нет root. KernelSU / APatch: выдайте root приложению Shell в менеджере (включите показ системных приложений). Magisk: разрешите запрос на смартфоне.",
+                                "未检查手机的 ARB：Shell 没有 root 权限。KernelSU / APatch：在管理器中为 Shell 授予 root（打开显示系统应用）。Magisk：在手机上允许请求。",
+                                "未檢查手機的 ARB：Shell 沒有 root 權限。KernelSU / APatch：在管理器中為 Shell 授予 root（開啟顯示系統應用程式）。Magisk：在手機上允許請求。")
+                        : Tr.t(
+                                "The phone's ARB was not checked: xbl_config could not be read from the phone.",
+                                "ARB смартфона не проверен: не удалось прочитать xbl_config со смартфона.",
+                                "未检查手机的 ARB：无法从手机读取 xbl_config。",
+                                "未檢查手機的 ARB：無法從手機讀取 xbl_config。");
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: StatusColors.warning;
+                    wrap: word-wrap;
                 }
 
                 if root.kind == 0 && root.phone-arb >= 0: Text {

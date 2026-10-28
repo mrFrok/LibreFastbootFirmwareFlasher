@@ -18,9 +18,13 @@ impl Drop for Idle<'_> {
     }
 }
 
-/// The ARB installed on the phone, or `None` with the reason logged. Only a
-/// phone in Android or a recovery, with root, can tell.
-fn read_phone_arb(tx: &mpsc::Sender<WMsg>, serial: Option<&str>, tab: u8) -> Option<u32> {
+/// The ARB installed on the phone, or why it is unknown (also logged). Only
+/// a phone in Android or a recovery, with root, can tell.
+fn read_phone_arb(
+    tx: &mpsc::Sender<WMsg>,
+    serial: Option<&str>,
+    tab: u8,
+) -> Result<u32, lfff_lib::arb::DeviceArbError> {
     log(
         tx,
         LogLevel::Info,
@@ -35,11 +39,13 @@ fn read_phone_arb(tx: &mpsc::Sender<WMsg>, serial: Option<&str>, tab: u8) -> Opt
                 tab,
                 format!("Phone: {} (slot {})", d.info, d.slot.to_uppercase()),
             );
-            d.info.version
+            d.info
+                .version
+                .ok_or(lfff_lib::arb::DeviceArbError::Unparsed)
         }
         Err(e) => {
             log(tx, LogLevel::Warn, tab, format!("Phone's ARB unknown: {e}"));
-            None
+            Err(e)
         }
     }
 }
@@ -1155,7 +1161,7 @@ pub fn worker(
                     None
                 };
                 let phone_arb = if arb.is_some() {
-                    read_phone_arb(&tx, serial.as_deref(), 2)
+                    read_phone_arb(&tx, serial.as_deref(), 2).ok()
                 } else {
                     None
                 };

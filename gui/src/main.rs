@@ -117,9 +117,8 @@ enum WMsg {
         phone_arb: Option<u32>,
         has_preloader: bool,
     },
-    /// The phone's ARB for the install sheet; `None` when it could not be
-    /// read (not in Android or recovery, or no root).
-    PhoneArb(Option<u32>),
+    /// The phone's ARB for the install sheet, or why it could not be read.
+    PhoneArb(Result<u32, lfff_lib::arb::DeviceArbError>),
     ReadyToFlash,
     CableTestProgress {
         step: u8,
