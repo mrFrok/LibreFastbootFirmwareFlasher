@@ -1,6 +1,6 @@
 [package]
 name = "lfff-gui"
-version = "3.4.0"
+version = "3.5.0"
 edition = "2024"
 description = "GUI frontend for LibreFastbootFirmwareFlasher"
 license = "GPL-3.0"

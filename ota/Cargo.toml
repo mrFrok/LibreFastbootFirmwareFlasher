@@ -1,6 +1,6 @@
 [package]
 name = "lfff-ota"
-version = "3.4.0"
+version = "3.5.0"
 edition = "2024"
 description = "Asks the OPPO / OnePlus / realme update servers for official firmware"
 license = "GPL-3.0"
