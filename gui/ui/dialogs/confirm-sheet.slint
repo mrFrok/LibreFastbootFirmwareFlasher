@@ -128,7 +128,7 @@ export component ConfirmSheet inherits Rectangle {
                             : root.kind == 1 && root.arb >= 0 ? Tr.t("This firmware has no ARB", "В прошивке нет ARB", "此固件没有 ARB", "此韌體沒有 ARB")
                             : root.kind == 1 ? Tr.t("This firmware's ARB is unknown", "ARB прошивки неизвестен", "此固件的 ARB 未知", "此韌體的 ARB 未知")
                             : root.kind == 4 ? Tr.t("The phone has ARB ", "На смартфоне ARB ", "手机的 ARB 为 ", "手機的 ARB 為 ") + root.phone-arb
-                                + Tr.t(", the firmware only ", ", а в прошивке только ", "，而固件只有 ", "，而韌體只有 ") + root.arb
+                            + Tr.t(", the firmware only ", ", а в прошивке только ", "，而固件只有 ", "，而韌體只有 ") + root.arb
                             : Tr.t("This firmware contains a preloader", "В прошивке есть preloader", "此固件包含 preloader", "此韌體包含 preloader");
                         font-size: 19px;
                         font-weight: 600;
@@ -186,7 +186,7 @@ export component ConfirmSheet inherits Rectangle {
                                 "Загрузчик смартфона не пропустит прошивку с меньшим ARB: после установки он не загрузится и превратится в «кирпич». Установка невозможна. Выберите прошивку с ARB ",
                                 "手机的引导程序会拒绝 ARB 更低的固件：安装后手机将无法启动——变砖。无法安装。请选择 ARB 不低于 ",
                                 "手機的引導程式會拒絕 ARB 更低的韌體：安裝後手機將無法開機——變磚。無法安裝。請選擇 ARB 不低於 ")
-                            + root.phone-arb + Tr.t(" or higher.", " или выше.", " 的固件。", " 的韌體。")
+                        + root.phone-arb + Tr.t(" or higher.", " или выше.", " 的固件。", " 的韌體。")
                         : root.kind == 0 ? Tr.t(
                                 "After installing, the phone can never go back to firmware with a lower ARB: it would no longer boot — a brick. Updating to newer firmware stays possible.",
                                 "После установки вернуться на прошивку с меньшим ARB будет нельзя: смартфон перестанет загружаться и превратится в «кирпич». Обновляться на более новые прошивки можно.",

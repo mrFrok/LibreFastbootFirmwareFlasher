@@ -104,7 +104,11 @@ export component FlashMethodDialog {
                                 for item in [
                                     { label: Tr.flash-method-snapdragon, desc: Tr.flash-method-snapdragon-desc, val: 1 },
                                     { label: Tr.flash-method-mtk, desc: Tr.flash-method-mtk-desc, val: 2 },
-                                    { label: Tr.flash-method-snapdragon-bootloader, desc: Tr.flash-method-snapdragon-bootloader-desc, val: 3 },
+                                    {
+                                        label: Tr.flash-method-snapdragon-bootloader,
+                                        desc: Tr.flash-method-snapdragon-bootloader-desc,
+                                        val: 3
+                                    },
                                 ]: TouchArea {
                                     height: 68px;
                                     clicked => { root.method = item.val; }
