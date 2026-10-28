@@ -53,8 +53,9 @@ export component ConfirmSheet inherits Rectangle {
     in property <string> wrong-device;
     // Settings → Experimental → Rebuild super is on.
     in property <bool> rebuild-super;
-    // Settings → Experimental → Modem in fastbootd is on, for a Snapdragon.
-    in property <bool> modem-fastbootd;
+    // Settings → Firmware → the legacy bootloader route is on, for a
+    // Snapdragon: worth a warning before Install.
+    in property <bool> modem-bootloader;
     in property <string> super-plan;
     // The rebuild was acknowledged; Install waits for it.
     property <bool> rebuild-ok: false;
@@ -299,11 +300,11 @@ export component ConfirmSheet inherits Rectangle {
                         }
                     }
 
-                    if root.modem-fastbootd: FieldRow {
+                    if root.modem-bootloader: FieldRow {
                         label-width: 150px;
                         label: "Modem";
                         Text {
-                            text: Tr.t("in fastbootd, the phone switches to the other slot", "в fastbootd, смартфон переключится на другой слот", "在 fastbootd 中刷写，手机将切换到另一个槽位", "在 fastbootd 中刷寫，手機將切換到另一個槽位");
+                            text: Tr.t("through the bootloader — not recommended", "через bootloader — не рекомендуется", "经由 bootloader——不推荐", "經由 bootloader——不建議");
                             font-size: 14px;
                             font-weight: 500;
                             color: StatusColors.warning;

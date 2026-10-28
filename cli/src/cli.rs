@@ -152,14 +152,16 @@ pub enum Commands {
         #[arg(short, long, value_name = "SERIAL")]
         serial: Option<String>,
 
-        /// Flash method: 'snapdragon' (Qualcomm), 'mtk' (MediaTek), or
-        /// 'snapdragon-fastbootd' (Qualcomm, modem flashed in fastbootd after
-        /// switching to the other slot; experimental).
+        /// Flash method: 'snapdragon' (Qualcomm: everything in fastbootd, the
+        /// modem into the other slot after switching to it), 'mtk' (MediaTek),
+        /// or 'snapdragon-bootloader' (Qualcomm, the old way: the modem through
+        /// the bootloader; not recommended, some phones cannot reach it).
+        /// 'snapdragon-fastbootd' is the same as 'snapdragon'.
         /// Prompted interactively if omitted.
         #[arg(
             long,
             value_name = "METHOD",
-            value_parser = ["snapdragon", "mtk", "snapdragon-fastbootd"]
+            value_parser = ["snapdragon", "mtk", "snapdragon-bootloader", "snapdragon-fastbootd"]
         )]
         method: Option<String>,
 

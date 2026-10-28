@@ -1154,7 +1154,9 @@ pub fn worker(
                 let method_name = match method {
                     FlashMethod::Snapdragon => "Snapdragon",
                     FlashMethod::Mtk => "MediaTek",
-                    FlashMethod::SnapdragonFastbootd => "Snapdragon, modem in fastbootd",
+                    FlashMethod::SnapdragonBootloader => {
+                        "Snapdragon, via bootloader (not recommended)"
+                    }
                 };
                 log(
                     &tx,
@@ -1304,7 +1306,7 @@ pub fn worker(
                     skip_xbl_abl: skip_xbl_abl || method == FlashMethod::Mtk,
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
-                    modem_in_fastbootd: method == FlashMethod::SnapdragonFastbootd,
+                    modem_in_fastbootd: method != FlashMethod::SnapdragonBootloader,
                     skip_partitions,
                     ..Default::default()
                 };
@@ -2255,7 +2257,7 @@ pub fn worker(
                 stage(&tx, 0, 1, "");
                 let mode = lfff_lib::flasher::detect_mode(serial.as_deref());
                 // Before the phone leaves Android: what it should keep.
-                let keep_images = if method == FlashMethod::SnapdragonFastbootd {
+                let keep_images = if method == FlashMethod::Snapdragon {
                     match keep_from_phone(
                         &tx,
                         serial.as_deref(),
@@ -2400,7 +2402,7 @@ pub fn worker(
                     skip_xbl_abl: skip_xbl_abl || method == FlashMethod::Mtk,
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
-                    modem_in_fastbootd: method == FlashMethod::SnapdragonFastbootd,
+                    modem_in_fastbootd: method != FlashMethod::SnapdragonBootloader,
                     keep_images,
                     skip_partitions,
                     super_layout,

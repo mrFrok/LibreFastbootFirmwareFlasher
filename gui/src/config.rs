@@ -37,10 +37,11 @@ pub struct Config {
     /// Rebuild super's layout from the firmware before flashing (experimental).
     #[serde(default)]
     pub rebuild_super: bool,
-    /// Snapdragon installs flash the modem from fastbootd after switching to
-    /// the other slot, instead of rebooting to the bootloader (experimental).
+    /// Snapdragon installs take the legacy route: the modem through the
+    /// bootloader, instead of from fastbootd after switching slots. Not
+    /// recommended — some phones cannot reach the bootloader.
     #[serde(default)]
-    pub modem_in_fastbootd: bool,
+    pub modem_bootloader: bool,
     /// Delete a .zip the user picked once it is unpacked. Archives the app
     /// downloaded itself are always deleted.
     #[serde(default)]
@@ -88,7 +89,7 @@ impl Default for Config {
             notice_accepted: false,
             sound: true,
             rebuild_super: false,
-            modem_in_fastbootd: false,
+            modem_bootloader: false,
             delete_picked_zip: false,
             known_devices: BTreeMap::new(),
         }

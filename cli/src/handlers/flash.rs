@@ -24,10 +24,12 @@ fn prompt_flash_method() -> Option<&'static str> {
     );
     println!("  Select the flash method for your device:");
     println!();
-    println!("  [1] Snapdragon (Qualcomm) — modem flashed in bootloader mode, ARB check");
+    println!(
+        "  [1] Snapdragon (Qualcomm) — everything in fastbootd, the phone switches slots; ARB check"
+    );
     println!("  [2] MediaTek              — everything flashed in fastbootd, xbl/abl skipped");
     println!(
-        "  [3] Snapdragon, modem in fastbootd — switches to the other slot, no bootloader reboot (experimental)"
+        "  [3] Snapdragon via bootloader — the old way, modem through the bootloader (not recommended)"
     );
     println!("  [q] Abort");
 
@@ -36,7 +38,7 @@ fn prompt_flash_method() -> Option<&'static str> {
         match c.as_str() {
             "1" => return Some("snapdragon"),
             "2" => return Some("mtk"),
-            "3" => return Some("snapdragon-fastbootd"),
+            "3" => return Some("snapdragon-bootloader"),
             "q" | "Q" => return None,
             _ => println!("  Enter 1, 2, 3 or q"),
         }
@@ -203,7 +205,9 @@ pub fn run(
         },
     };
     let as_mediatek = method == "mtk";
-    let modem_in_fastbootd = method == "snapdragon-fastbootd";
+    // The bootloader route only when asked for by name: some phones cannot
+    // reach the bootloader, and a flash stopped there can brick them.
+    let modem_in_fastbootd = method != "snapdragon-bootloader";
 
     // Warn on an apparent method/firmware mismatch, but respect the user's choice.
     let has_preloader = images.keys().any(|k| is_preloader(k));

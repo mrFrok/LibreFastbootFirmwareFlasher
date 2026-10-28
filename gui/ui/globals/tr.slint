@@ -212,19 +212,19 @@ export global Tr {
         ? "骁龙（高通）" : lang == "zh-TW"
         ? "Snapdragon（Qualcomm）" : "Snapdragon (Qualcomm)";
     out property <string> flash-method-snapdragon-desc: lang == "ru"
-        ? "modem прошивается в bootloader, остальное в fastbootd; проверка ARB"
-        : lang == "zh-CN" ? "modem 在 bootloader 模式下刷写，其余在 fastbootd 中刷写；进行 ARB 检查"
-        : lang == "zh-TW" ? "modem 在 bootloader 模式下刷寫，其餘在 fastbootd 中刷寫；進行 ARB 檢查"
-        : "modem flashed in bootloader mode, the rest in fastbootd; ARB check";
-    out property <string> flash-method-snapdragon-fastbootd: lang == "ru"
-        ? "Snapdragon, modem в fastbootd" : lang == "zh-CN"
-        ? "骁龙，modem 在 fastbootd 中刷写" : lang == "zh-TW"
-        ? "Snapdragon，modem 在 fastbootd 中刷寫" : "Snapdragon, modem in fastbootd";
-    out property <string> flash-method-snapdragon-fastbootd-desc: lang == "ru"
-        ? "без перезагрузки в bootloader; слот меняется на другой (экспериментально)"
-        : lang == "zh-CN" ? "无需重启到 bootloader；切换到另一个槽位（实验性）"
-        : lang == "zh-TW" ? "無需重新啟動到 bootloader；切換到另一個槽位（實驗性）"
-        : "no bootloader reboot; switches to the other slot (experimental)";
+        ? "всё в fastbootd, смартфон переключится на другой слот; проверка ARB"
+        : lang == "zh-CN" ? "全部在 fastbootd 中刷写，手机将切换到另一个槽位；进行 ARB 检查"
+        : lang == "zh-TW" ? "全部在 fastbootd 中刷寫，手機將切換到另一個槽位；進行 ARB 檢查"
+        : "everything in fastbootd, the phone switches to the other slot; ARB check";
+    out property <string> flash-method-snapdragon-bootloader: lang == "ru"
+        ? "Snapdragon через bootloader" : lang == "zh-CN"
+        ? "骁龙，经由 bootloader" : lang == "zh-TW"
+        ? "Snapdragon，經由 bootloader" : "Snapdragon via bootloader";
+    out property <string> flash-method-snapdragon-bootloader-desc: lang == "ru"
+        ? "старый способ: modem через bootloader — не рекомендуется"
+        : lang == "zh-CN" ? "旧方式：modem 经由 bootloader 刷写——不推荐"
+        : lang == "zh-TW" ? "舊方式：modem 經由 bootloader 刷寫——不建議"
+        : "the old way: modem through the bootloader — not recommended";
     out property <string> flash-method-mtk: lang == "ru"
         ? "MediaTek" : lang == "zh-CN"
         ? "MediaTek" : lang == "zh-TW"

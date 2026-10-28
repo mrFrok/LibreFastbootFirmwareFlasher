@@ -1,5 +1,6 @@
 import { MaterialPalette, Switch, TextButton } from "@material";
 import { Tr } from "../globals/tr.slint";
+import { StatusColors } from "../globals/status-colors.slint";
 import { Section, FieldRow, Segmented } from "../components/wizard.slint";
 
 export component SettingsPage inherits VerticalLayout {
@@ -16,7 +17,7 @@ export component SettingsPage inherits VerticalLayout {
     in property <bool> classic-ui;
     in property <bool> sound;
     in property <bool> rebuild-super;
-    in property <bool> modem-fastbootd;
+    in property <bool> modem-bootloader;
     in property <bool> delete-picked-zip;
     callback set-dark(bool);
     callback set-scheme(int);
@@ -29,7 +30,7 @@ export component SettingsPage inherits VerticalLayout {
     callback set-classic(bool);
     callback set-sound(bool);
     callback set-rebuild-super(bool);
-    callback set-modem-fastbootd(bool);
+    callback set-modem-bootloader(bool);
     callback set-delete-picked-zip(bool);
 
     // Each scheme's dark-mode primary, as in the classic top bar.
@@ -199,6 +200,36 @@ export component SettingsPage inherits VerticalLayout {
                 }
 
                 FieldRow {
+                    label: Tr.t("Modem via bootloader", "Modem через bootloader", "modem 经由 bootloader", "modem 經由 bootloader");
+                    Switch {
+                        height: 32px;
+                        y: (parent.height - self.height) / 2;
+                        checked: root.modem-bootloader;
+                        checked-state-changed(c) => {
+                            root.set-modem-bootloader(c);
+                        }
+                    }
+
+                    Text {
+                        text: Tr.t("not recommended", "не рекомендуется", "不推荐", "不建議");
+                        font-size: 13px;
+                        color: StatusColors.warning;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: Tr.t(
+                        "Snapdragon only. By default everything is flashed in fastbootd: the phone switches to the other slot, and the modem and the system go there. This switch brings back the old way, with a restart into the bootloader for the modem — some phones cannot reach it, and the install stops halfway, up to a brick.",
+                        "Только для Snapdragon. По умолчанию всё прошивается в fastbootd: смартфон переключается на другой слот, и modem с системой ставятся туда. Этот переключатель возвращает старый способ с перезагрузкой в bootloader ради modem — на некоторых смартфонах он недоступен, и установка обрывается на полпути, вплоть до «кирпича».",
+                        "仅限骁龙。默认全部在 fastbootd 中刷写：手机切换到另一个槽位，modem 和系统都安装到那里。此开关恢复旧方式，为刷写 modem 重启到 bootloader——部分手机无法进入，安装会中途停止，甚至变砖。",
+                        "僅限 Snapdragon。預設全部在 fastbootd 中刷寫：手機切換到另一個槽位，modem 和系統都安裝到那裡。此開關恢復舊方式，為刷寫 modem 重新啟動到 bootloader——部分手機無法進入，安裝會中途停止，甚至變磚。");
+                    font-size: 12px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
+                }
+
+                FieldRow {
                     label: Tr.t("Remembered processors", "Запомненные процессоры", "已记住的处理器", "已記住的處理器");
                     Text {
                         text: root.chips-summary == "" ? Tr.t("none", "нет", "无", "無") : root.chips-summary;
@@ -238,29 +269,6 @@ export component SettingsPage inherits VerticalLayout {
                         "Перед прошивкой заменяет разметку super на ту, что описана в прошивке: группы разделов и разделы только для чтения, как с завода. Чинит OTA, которые падают после прошивки старыми версиями. Проверено не на многих устройствах — на ваш страх и риск. Работает только с прошивкой .zip.",
                         "刷写前将 super 的分区布局替换为固件描述的布局：分区组和只读分区，与出厂一致。可修复使用旧版本刷写后 OTA 失败的问题。尚未在多数设备上测试——风险自负。仅适用于 .zip 固件。",
                         "刷寫前將 super 的分割區配置替換為韌體描述的配置：分割區群組和唯讀分割區，與出廠一致。可修復使用舊版本刷寫後 OTA 失敗的問題。尚未在多數裝置上測試——風險自負。僅適用於 .zip 韌體。");
-                    font-size: 12px;
-                    color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
-                }
-
-                FieldRow {
-                    label: Tr.t("Modem in fastbootd", "Modem в fastbootd", "modem 在 fastbootd 中刷写", "modem 在 fastbootd 中刷寫");
-                    Switch {
-                        height: 32px;
-                        y: (parent.height - self.height) / 2;
-                        checked: root.modem-fastbootd;
-                        checked-state-changed(c) => {
-                            root.set-modem-fastbootd(c);
-                        }
-                    }
-                }
-
-                Text {
-                    text: Tr.t(
-                        "Snapdragon only. The modem is flashed without restarting into the bootloader: the phone switches to the other slot first, and the modem and the system go there. The old slot keeps its old modem. At your own risk.",
-                        "Только для Snapdragon. Modem прошивается без перезагрузки в bootloader: сначала смартфон переключается на другой слот, и modem с системой ставятся туда. На старом слоте остаётся старый modem. На ваш страх и риск.",
-                        "仅限骁龙。刷写 modem 无需重启到 bootloader：手机先切换到另一个槽位，modem 和系统都安装到那里。旧槽位保留旧的 modem。风险自负。",
-                        "僅限 Snapdragon。刷寫 modem 無需重新啟動到 bootloader：手機先切換到另一個槽位，modem 和系統都安裝到那裡。舊槽位保留舊的 modem。風險自負。");
                     font-size: 12px;
                     color: MaterialPalette.on-surface-variant;
                     wrap: word-wrap;

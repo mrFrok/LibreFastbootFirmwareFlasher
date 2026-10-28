@@ -347,11 +347,16 @@ pub fn set_active_slot(serial: Option<&str>, slot: &str) -> bool {
 /// Where the modem goes in a Snapdragon flash.
 #[derive(Debug, PartialEq, Eq)]
 enum ModemRoute {
-    /// Reboot to the bootloader and flash it to both slots.
+    /// Reboot to the bootloader and flash it to both slots — the legacy way,
+    /// or no modem at all (then nothing goes to the bootloader).
     Bootloader,
     /// Switch to the other slot first and flash it there from fastbootd,
     /// together with the dynamic partitions.
     Fastbootd,
+    /// The fastbootd route was asked for but the flash has a modem and no
+    /// system: refused rather than falling back to the bootloader, which
+    /// some phones cannot reach — the reason this route exists.
+    NeedsSystem,
 }
 
 /// The fastbootd route boots the phone from the other slot, so it needs that
@@ -359,10 +364,10 @@ enum ModemRoute {
 /// would come up with an old or empty system. Without a modem there is
 /// nothing to gain from switching.
 fn modem_route(wanted: bool, has_modem: bool, has_super: bool) -> ModemRoute {
-    if wanted && has_modem && has_super {
-        ModemRoute::Fastbootd
-    } else {
-        ModemRoute::Bootloader
+    match (wanted && has_modem, has_super) {
+        (true, true) => ModemRoute::Fastbootd,
+        (true, false) => ModemRoute::NeedsSystem,
+        (false, _) => ModemRoute::Bootloader,
     }
 }
 
@@ -1261,8 +1266,11 @@ pub struct FlashOptions {
     pub as_mediatek: Option<bool>,
     /// Comma-separated partition names the user explicitly wants to skip.
     pub skip_partitions: String,
-    /// Snapdragon only: flash the modem from fastbootd instead of rebooting
-    /// to the bootloader. The session switches to the other slot first, then
+    /// Snapdragon only, and the default the frontends pass: flash the modem
+    /// from fastbootd instead of rebooting to the bootloader, which some
+    /// phones cannot reach (a flash stuck halfway, up to a brick). false is
+    /// the legacy bootloader route, kept as an explicit, not recommended
+    /// choice. The session switches to the other slot first, then
     /// writes the modem and the dynamic partitions there; the old slot keeps
     /// its old modem.
     pub modem_in_fastbootd: bool,
@@ -1498,22 +1506,31 @@ pub fn run_flash_session_with_log(
         }
     };
 
-    let modem_fastbootd = !is_mediatek
-        && modem_route(
+    let route = if is_mediatek {
+        ModemRoute::Bootloader
+    } else {
+        modem_route(
             options.modem_in_fastbootd,
             filtered.keys().any(|k| is_bootloader_partition(k)),
             filtered.keys().any(|k| is_super_partition(k)),
-        ) == ModemRoute::Fastbootd;
+        )
+    };
+    let modem_fastbootd = route == ModemRoute::Fastbootd;
 
+    if route == ModemRoute::NeedsSystem {
+        on_log("Refusing to flash: the modem is flashed from fastbootd into the other slot, which needs the system in the same flash — and this one has none. Flash the system too, or choose the bootloader method on purpose.".into());
+        session.aborted = true;
+        session.end_reason = Some("ModemNeedsSystem".into());
+        return session;
+    }
     if is_mediatek {
         on_log("MediaTek method — all partitions will be flashed in fastbootd mode".into());
     } else if modem_fastbootd {
         on_log("Snapdragon method — modem flashed in fastbootd, to the other slot together with the system".into());
+    } else if options.modem_in_fastbootd {
+        on_log("Snapdragon method — no modem in this flash, nothing goes to the bootloader".into());
     } else {
-        if options.modem_in_fastbootd {
-            on_log("Modem in fastbootd needs both the modem and the system images in this flash — falling back to bootloader mode for the modem".into());
-        }
-        on_log("Snapdragon method — modem goes through bootloader mode".into());
+        on_log("Snapdragon method, bootloader route (not recommended) — modem goes through bootloader mode".into());
     }
 
     // After the switch the phone boots the other slot, where a partition
@@ -2022,8 +2039,9 @@ mod tests {
     #[test]
     fn modem_goes_through_fastbootd_only_with_the_system() {
         assert_eq!(modem_route(true, true, true), ModemRoute::Fastbootd);
-        // Switching slots without the system would boot an old or empty one.
-        assert_eq!(modem_route(true, true, false), ModemRoute::Bootloader);
+        // Switching slots without the system would boot an old or empty one,
+        // and the bootloader may be unreachable: refused, not rerouted.
+        assert_eq!(modem_route(true, true, false), ModemRoute::NeedsSystem);
         // Without a modem there is no reason to switch.
         assert_eq!(modem_route(true, false, true), ModemRoute::Bootloader);
         assert_eq!(modem_route(false, true, true), ModemRoute::Bootloader);

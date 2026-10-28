@@ -1567,7 +1567,7 @@ fn register_install_callbacks(
         if let Some(ui) = w.upgrade() {
             // The sheet only opens with a chip chosen; never start without one.
             let method = match ui.get_chip() {
-                1 if ui.get_modem_fastbootd() => FlashMethod::SnapdragonFastbootd,
+                1 if ui.get_modem_bootloader() => FlashMethod::SnapdragonBootloader,
                 1 => FlashMethod::Snapdragon,
                 2 => FlashMethod::Mtk,
                 _ => return,
@@ -1648,9 +1648,9 @@ fn register_install_callbacks(
         save_config(&config);
     });
 
-    ui.on_set_modem_fastbootd(|on| {
+    ui.on_set_modem_bootloader(|on| {
         let mut config = load_config();
-        config.modem_in_fastbootd = on;
+        config.modem_bootloader = on;
         save_config(&config);
     });
 

@@ -42,11 +42,14 @@ mod confirm_action {
 /// Flash method — always an explicit user choice, never auto-detected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FlashMethod {
+    /// Everything from fastbootd: the phone switches to the other slot and
+    /// the modem goes there with the system. No bootloader, which some
+    /// phones cannot reach.
     Snapdragon,
     Mtk,
-    /// Snapdragon with the modem flashed from fastbootd after switching to
-    /// the other slot, instead of rebooting to the bootloader.
-    SnapdragonFastbootd,
+    /// The legacy Snapdragon way: the modem through the bootloader. Not
+    /// recommended; kept as an explicit choice.
+    SnapdragonBootloader,
 }
 
 impl FlashMethod {
@@ -56,7 +59,7 @@ impl FlashMethod {
         match v {
             1 => Some(Self::Snapdragon),
             2 => Some(Self::Mtk),
-            3 => Some(Self::SnapdragonFastbootd),
+            3 => Some(Self::SnapdragonBootloader),
             _ => None,
         }
     }
@@ -428,7 +431,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_show_notice(!config.notice_accepted);
     ui.set_sound(config.sound);
     ui.set_rebuild_super(config.rebuild_super);
-    ui.set_modem_fastbootd(config.modem_in_fastbootd);
+    ui.set_modem_bootloader(config.modem_bootloader);
     ui.set_delete_picked_zip(config.delete_picked_zip);
     ui_callbacks::apply_pins(&ui, &config.pinned_tools);
     ui.set_chips_summary(ui_callbacks::chips_summary(&config).into());

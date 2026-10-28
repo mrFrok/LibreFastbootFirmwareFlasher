@@ -172,30 +172,21 @@ lfff completion zsh  > ~/.zfunc/_lfff            # with ~/.zfunc on $fpath
 lfff completion fish > ~/.config/fish/completions/lfff.fish
 ```
 
-**Flash flow:**
-
-```
-[Stage 1 — fastbootd]
-  Non-super partitions  →  slot A  +  slot B
-  Super/dynamic parts   →  active slot only (super wiped first)
-      ↓
-[Stage 2 — bootloader]
-  modem  →  slot A  +  slot B
-      ↓
-[Offer: reboot to system  /  wipe data + reboot]
-```
-
-**Modem in fastbootd** (`--method snapdragon-fastbootd`; in the GUI, Settings → Experimental → Modem in fastbootd; experimental): no bootloader reboot. fastbootd can only write the modem of the slot it is not running from, so the slot is switched first:
+**Flash flow** (Snapdragon): everything happens in fastbootd, with no restart into the bootloader — some phones cannot reach it, and a flash stopped there could brick them. fastbootd can only write the modem of the slot it is not running from, so the slot is switched first:
 
 ```
 [fastbootd]
   set_active → the other slot
   Non-super partitions  →  slot A  +  slot B
   modem                 →  new active slot
-  Super/dynamic parts   →  new active slot
+  Super/dynamic parts   →  new active slot (super wiped first)
+      ↓
+[Offer: reboot to system  /  wipe data + reboot]
 ```
 
-The old slot keeps its old modem. Without the system images in the flash, the modem falls back to the bootloader stage. Partitions you choose not to flash (e.g. a rooted `init_boot`) are copied from the phone's active slot over adb as root before the switch and written to the new slot; if they cannot be copied, nothing is flashed.
+The old slot keeps its old modem. A flash with a modem but no system images is refused rather than sent to the bootloader. Partitions you choose not to flash (e.g. a rooted `init_boot`) are copied from the phone's active slot over adb as root before the switch and written to the new slot; if they cannot be copied, nothing is flashed.
+
+**The old way** (`--method snapdragon-bootloader`; in the GUI, Settings → Firmware → Modem via bootloader; not recommended): the dynamic partitions go to the active slot, then the phone restarts into the bootloader and the modem goes to both slots.
 
 On error: **retry** / **reboot** / **skip partition** / **abort**
 
