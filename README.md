@@ -29,7 +29,7 @@ LFFF flashes full firmware on **OnePlus / OPPO / Realme** devices with Qualcomm 
 
 `full flash` · `A/B slots` · `ARB protection` · `source build flash` · `official firmware search` · `OTA extraction` · `download` · `single-partition flash` · `error recovery` · `dependency installer`
 
-✈️ [Author](https://t.me/mrFrok228) · 💬 [Telegram Group](https://t.me/lfffcomunity) · 👥 [Realme Community in Telegram](https://t.me/gt3neo5hub) · ☕ [Donate](https://boosty.to/mrfrok/donate)
+✈️ [Author](https://t.me/mrFrok228) · 💬 [Telegram Group](https://t.me/lfffcomunity) · 👥 [Realme Community in Telegram](https://t.me/gt3neo5hub) · 👥 [OnePlus Community in Telegram](https://t.me/oneplusmod) · ☕ [Donate](https://boosty.to/mrfrok/donate)
 
 ---
 

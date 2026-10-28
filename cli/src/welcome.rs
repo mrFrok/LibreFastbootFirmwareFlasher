@@ -37,6 +37,7 @@ pub fn print() {
     println!("  GitHub     https://github.com/mrFrok/LibreFastbootFirmwareFlasher");
     println!("  Telegram   https://t.me/lfffcomunity");
     println!("  Realme     https://t.me/gt3neo5hub");
+    println!("  OnePlus    https://t.me/oneplusmod");
     println!("  Author     https://t.me/mrFrok228");
     println!();
     println!("  -v / --verbose    debug output");

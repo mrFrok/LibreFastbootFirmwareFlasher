@@ -89,6 +89,13 @@ export component AboutPage {
                 }
 
                 AboutLink {
+                    icon: @image-url("../icons/telegram.svg");
+                    label: "OnePlus Community in Telegram";
+                    url: "https://t.me/oneplusmod";
+                    open(u) => { root.open-url(u); }
+                }
+
+                AboutLink {
                     icon: @image-url("../icons/boosty.svg");
                     label: "Donate — Boosty";
                     url: "https://boosty.to/mrfrok/donate";
