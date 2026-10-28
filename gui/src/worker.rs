@@ -576,8 +576,10 @@ fn spawn_unpack_counter(tx: mpsc::Sender<WMsg>, dir: PathBuf) -> mpsc::Sender<()
 }
 
 /// Unpack (unless already unpacked) and check a firmware. Runs on its own
-/// thread; answers with FirmwareReady or FirmwareFailed.
-fn prepare_firmware(path: &str, tx: &mpsc::Sender<WMsg>) {
+/// thread; answers with FirmwareReady or FirmwareFailed. Once the images
+/// check out, the archive is deleted if the app downloaded it, or if the
+/// user asked for picked ones to go too.
+fn prepare_firmware(path: &str, downloaded: bool, tx: &mpsc::Sender<WMsg>) {
     let src = Path::new(path);
     // A file is taken as an archive whatever its name; it has to be a ZIP.
     let is_zip = src.is_file();
@@ -687,6 +689,23 @@ fn prepare_firmware(path: &str, tx: &mpsc::Sender<WMsg>) {
         2,
         format!("Firmware ready: {} images", images.len()),
     );
+    // Only now: a failed or empty unpack keeps the archive to try again.
+    if is_zip && (downloaded || crate::config::load_config().delete_picked_zip) {
+        match std::fs::remove_file(src) {
+            Ok(()) => log(
+                tx,
+                LogLevel::Info,
+                2,
+                format!("Deleted the archive: {}", src.display()),
+            ),
+            Err(e) => log(
+                tx,
+                LogLevel::Warn,
+                2,
+                format!("Could not delete the archive {}: {e}", src.display()),
+            ),
+        }
+    }
     tx.send(WMsg::FirmwareReady {
         dir: dir.display().to_string(),
         name,
@@ -2137,10 +2156,10 @@ pub fn worker(
                 });
             }
 
-            Cmd::PrepareFirmware { path } => {
+            Cmd::PrepareFirmware { path, downloaded } => {
                 UNPACK_CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
                 let tx = tx.clone();
-                thread::spawn(move || prepare_firmware(&path, &tx));
+                thread::spawn(move || prepare_firmware(&path, downloaded, &tx));
             }
 
             Cmd::RunInstall {

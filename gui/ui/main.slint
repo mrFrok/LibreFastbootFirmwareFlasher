@@ -115,6 +115,10 @@ export component MainWindow inherits MaterialWindow {
     // fastbootd, switching to the other slot.
     in-out property <bool> modem-fastbootd: false;
     callback set-modem-fastbootd(bool);
+    // Settings → Firmware: delete a picked .zip once unpacked (downloaded
+    // archives always go).
+    in-out property <bool> delete-picked-zip: false;
+    callback set-delete-picked-zip(bool);
     callback pick-cached(int);
     // ARB of the chosen firmware: -1 unknown, 0 none, >0 the level
     in-out property <int> fw-arb: -1;
@@ -843,6 +847,11 @@ export component MainWindow inherits MaterialWindow {
                             set-rebuild-super(on) => {
                                 root.rebuild-super = on;
                                 root.set-rebuild-super(on);
+                            }
+                            delete-picked-zip: root.delete-picked-zip;
+                            set-delete-picked-zip(on) => {
+                                root.delete-picked-zip = on;
+                                root.set-delete-picked-zip(on);
                             }
                             modem-fastbootd: root.modem-fastbootd;
                             set-modem-fastbootd(on) => {

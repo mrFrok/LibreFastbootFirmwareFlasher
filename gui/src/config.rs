@@ -41,6 +41,10 @@ pub struct Config {
     /// the other slot, instead of rebooting to the bootloader (experimental).
     #[serde(default)]
     pub modem_in_fastbootd: bool,
+    /// Delete a .zip the user picked once it is unpacked. Archives the app
+    /// downloaded itself are always deleted.
+    #[serde(default)]
+    pub delete_picked_zip: bool,
     /// Notify with a sound when an install ends.
     #[serde(default = "default_true")]
     pub sound: bool,
@@ -85,6 +89,7 @@ impl Default for Config {
             sound: true,
             rebuild_super: false,
             modem_in_fastbootd: false,
+            delete_picked_zip: false,
             known_devices: BTreeMap::new(),
         }
     }

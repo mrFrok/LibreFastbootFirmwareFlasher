@@ -253,6 +253,9 @@ enum Cmd {
     /// thread of its own so the phone can be found meanwhile.
     PrepareFirmware {
         path: String,
+        /// The app downloaded the archive itself, so it may delete it once
+        /// unpacked.
+        downloaded: bool,
     },
     /// Read the ARB installed on the phone (adb, root), for the install sheet.
     ReadPhoneArb,
@@ -426,6 +429,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_sound(config.sound);
     ui.set_rebuild_super(config.rebuild_super);
     ui.set_modem_fastbootd(config.modem_in_fastbootd);
+    ui.set_delete_picked_zip(config.delete_picked_zip);
     ui_callbacks::apply_pins(&ui, &config.pinned_tools);
     ui.set_chips_summary(ui_callbacks::chips_summary(&config).into());
     ui.set_cache_summary(ui_callbacks::cache_summary().into());

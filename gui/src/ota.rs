@@ -98,7 +98,7 @@ pub fn register(ui: &MainWindow, mtx: &mpsc::Sender<WMsg>, ctx: &mpsc::Sender<Cm
             return;
         };
         if let Some(path) = build.size.and_then(downloaded_before) {
-            crate::ui_callbacks::prepare(&ui, &t, &path.display().to_string());
+            crate::ui_callbacks::prepare(&ui, &t, &path.display().to_string(), true);
         } else if let Some(link) = build.link() {
             ui.set_download_url(link.into());
             t.send(Cmd::Download { url: link.into() }).ok();

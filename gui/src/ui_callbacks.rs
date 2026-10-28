@@ -469,7 +469,7 @@ pub fn poll(
                 // In the new interface a downloaded firmware goes straight on
                 // to unpacking, like a picked one.
                 if !ui.get_classic_ui() {
-                    prepare(&ui, ctx, &p);
+                    prepare(&ui, ctx, &p, true);
                 }
             }
             WMsg::DlProgress {
@@ -822,8 +822,9 @@ fn firmware_error_text(lang: &str, e: &str) -> String {
     }
 }
 
-/// Start unpacking/checking a firmware for the install page.
-pub fn prepare(ui: &MainWindow, ctx: &mpsc::Sender<Cmd>, path: &str) {
+/// Start unpacking/checking a firmware for the install page. `downloaded`:
+/// the app fetched the archive itself, so it is deleted once unpacked.
+pub fn prepare(ui: &MainWindow, ctx: &mpsc::Sender<Cmd>, path: &str, downloaded: bool) {
     let name = std::path::Path::new(path)
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -835,6 +836,7 @@ pub fn prepare(ui: &MainWindow, ctx: &mpsc::Sender<Cmd>, path: &str) {
     ui.set_fw_state(2);
     ctx.send(Cmd::PrepareFirmware {
         path: path.to_string(),
+        downloaded,
     })
     .ok();
 }
@@ -1467,7 +1469,7 @@ fn register_install_callbacks(
             .pick_file()
             && let Some(ui) = w.upgrade()
         {
-            prepare(&ui, &t, &p.display().to_string());
+            prepare(&ui, &t, &p.display().to_string(), false);
         }
     });
 
@@ -1479,7 +1481,7 @@ fn register_install_callbacks(
             .pick_folder()
             && let Some(ui) = w.upgrade()
         {
-            prepare(&ui, &t, &p.display().to_string());
+            prepare(&ui, &t, &p.display().to_string(), false);
         }
     });
 
@@ -1504,7 +1506,7 @@ fn register_install_callbacks(
             usize::try_from(i).ok().and_then(|i| dirs.get(i)),
             w.upgrade(),
         ) {
-            prepare(&ui, &t, &d.display().to_string());
+            prepare(&ui, &t, &d.display().to_string(), false);
         }
     });
 
@@ -1637,6 +1639,12 @@ fn register_install_callbacks(
     ui.on_set_rebuild_super(|on| {
         let mut config = load_config();
         config.rebuild_super = on;
+        save_config(&config);
+    });
+
+    ui.on_set_delete_picked_zip(|on| {
+        let mut config = load_config();
+        config.delete_picked_zip = on;
         save_config(&config);
     });
 

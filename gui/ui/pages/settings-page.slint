@@ -17,6 +17,7 @@ export component SettingsPage inherits VerticalLayout {
     in property <bool> sound;
     in property <bool> rebuild-super;
     in property <bool> modem-fastbootd;
+    in property <bool> delete-picked-zip;
     callback set-dark(bool);
     callback set-scheme(int);
     callback set-translucent(bool);
@@ -29,6 +30,7 @@ export component SettingsPage inherits VerticalLayout {
     callback set-sound(bool);
     callback set-rebuild-super(bool);
     callback set-modem-fastbootd(bool);
+    callback set-delete-picked-zip(bool);
 
     // Each scheme's dark-mode primary, as in the classic top bar.
     property <[color]> swatches: [#66B2FF, #ADC6FF, #00C7BF, #7EC16D, #E39C40, #F68792, #BA98F6];
@@ -164,6 +166,36 @@ export component SettingsPage inherits VerticalLayout {
                             root.clear-cache();
                         }
                     }
+                }
+
+                FieldRow {
+                    label: Tr.t("Delete picked .zip", "Удалять выбранный .zip", "删除所选 .zip", "刪除所選 .zip");
+                    Switch {
+                        height: 32px;
+                        y: (parent.height - self.height) / 2;
+                        checked: root.delete-picked-zip;
+                        checked-state-changed(c) => {
+                            root.set-delete-picked-zip(c);
+                        }
+                    }
+
+                    Text {
+                        text: Tr.t("after unpacking", "после распаковки", "解压后", "解壓後");
+                        font-size: 13px;
+                        color: MaterialPalette.on-surface-variant;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: Tr.t(
+                        "Archives the app downloaded itself are always deleted once unpacked. This switch also deletes a .zip you picked yourself.",
+                        "Архивы, скачанные самой программой, удаляются после распаковки всегда. Этот переключатель удаляет и .zip, выбранный вручную.",
+                        "应用自己下载的压缩包在解压后总会被删除。此开关还会删除您手动选择的 .zip。",
+                        "應用程式自己下載的壓縮檔在解壓後一律會被刪除。此開關還會刪除您手動選擇的 .zip。");
+                    font-size: 12px;
+                    color: MaterialPalette.on-surface-variant;
+                    wrap: word-wrap;
                 }
 
                 FieldRow {
