@@ -114,6 +114,12 @@ export component MainWindow inherits MaterialWindow {
     callback pick-cached(int);
     // ARB of the chosen firmware: -1 unknown, 0 none, >0 the level
     in-out property <int> fw-arb: -1;
+    // ARB installed on the phone, read over adb with root right before the
+    // sheet opens: -1 when it could not be read.
+    in-out property <int> phone-arb: -1;
+    in-out property <bool> arb-checking: false;
+    // Reads the phone's ARB (Snapdragon), then opens the sheet.
+    callback check-arb();
     in-out property <bool> fw-has-preloader: false;
     // Chip remembered for the connected model: 0 none, 1 Snapdragon, 2 MediaTek
     in-out property <int> chip: 0;
@@ -155,12 +161,19 @@ export component MainWindow inherits MaterialWindow {
         root.page = id == 1 ? 4 : id == 2 ? 3 : id == 7 ? 2 : id == 8 ? 13 : id == 9 ? 15 : 1;
     }
     // First sheet for the chosen firmware and chip: the ARB or preloader
-    // warning, else straight to the summary.
+    // warning, else straight to the summary. With both ARBs known: equal
+    // needs no warning, a higher firmware ARB is warned about, and a phone
+    // ARB above the firmware's is a brick, so the install is refused.
     pure function first-sheet() -> int {
-        return root.chip == 1 ? (root.fw-arb > 0 ? 1 : 2)
-            : root.fw-has-preloader ? 3 : 4;
+        if root.chip != 1 {
+            return root.fw-has-preloader ? 3 : 4;
+        }
+        if root.phone-arb >= 0 && root.fw-arb >= 0 {
+            return root.phone-arb > root.fw-arb ? 5 : root.phone-arb == root.fw-arb ? 4 : 1;
+        }
+        return root.fw-arb > 0 ? 1 : 2;
     }
-    function open-sheet() {
+    public function open-sheet() {
         root.skip-xbl-abl = false;
         root.skip-preloader = false;
         // Each install starts from flashing everything: a skip chosen last
@@ -688,6 +701,7 @@ export component MainWindow inherits MaterialWindow {
 
                         if root.page == 10: InstallPage {
                             view: root.install-view;
+                            arb-checking: root.arb-checking;
                             deps-state: root.deps-state;
                             deps-missing: root.deps-missing;
                             fw-state: root.fw-state;
@@ -746,7 +760,7 @@ export component MainWindow inherits MaterialWindow {
                             cancel-download => { root.cancel-download(); }
                             change-firmware => { root.change-firmware(); }
                             choose-chip(c) => { root.choose-chip(c); }
-                            install => { root.open-sheet(); }
+                            install => { root.check-arb(); }
                             cable-retry => { root.cable-retry(); }
                             cable-stop => { root.cable-stop(); }
                             stop-install => { root.cancel-flash(); }
@@ -1018,6 +1032,7 @@ export component MainWindow inherits MaterialWindow {
     if root.sheet > 0: ConfirmSheet {
         kind: root.sheet - 1;
         arb: root.fw-arb;
+        phone-arb: root.phone-arb;
         phone: root.device.name;
         chip-name: root.chip == 1 ? "Snapdragon" : "MediaTek";
         wrong-device: root.fw-wrong-device;

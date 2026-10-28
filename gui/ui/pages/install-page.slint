@@ -23,6 +23,8 @@ import { OtaFinder, OtaBuild } from "../components/ota-finder.slint";
 // 4 done and the phone restarting.
 export component InstallPage inherits VerticalLayout {
     in property <int> view;
+    // The phone's ARB is being read before the confirm sheet opens.
+    in property <bool> arb-checking;
 
     // ── Checklist state ─────────────────────────────────────────────────────
     // 0 checking, 1 missing, 2 ready, 3 installing
@@ -546,9 +548,11 @@ export component InstallPage inherits VerticalLayout {
             FilledButton {
                 min-width: 260px;
                 height: 52px;
-                enabled: root.ready;
+                enabled: root.ready && !root.arb-checking;
                 icon: @image-url("../icons/flash.svg");
-                text: Tr.t("Install firmware", "Установить прошивку", "安装固件", "安裝韌體");
+                text: root.arb-checking
+                    ? Tr.t("Checking the phone's ARB…", "Проверяю ARB смартфона…", "正在检查手机的 ARB…", "正在檢查手機的 ARB…")
+                    : Tr.t("Install firmware", "Установить прошивку", "安装固件", "安裝韌體");
                 clicked => {
                     root.install();
                 }
@@ -562,7 +566,10 @@ export component InstallPage inherits VerticalLayout {
             }
 
             Text {
-                text: root.ready ? Tr.t("Takes 10–20 minutes", "Займёт 10–20 минут", "需要 10–20 分钟", "需要 10–20 分鐘")
+                // Magisk may be waiting for a tap; KernelSU never asks, Shell
+                // has to be granted in its manager beforehand.
+                text: root.arb-checking ? Tr.t("Allow root for Shell in Magisk or KernelSU", "Разрешите root для Shell в Magisk или KernelSU", "请在 Magisk 或 KernelSU 中允许 Shell 的 root 权限", "請在 Magisk 或 KernelSU 中允許 Shell 的 root 權限")
+                    : root.ready ? Tr.t("Takes 10–20 minutes", "Займёт 10–20 минут", "需要 10–20 分钟", "需要 10–20 分鐘")
                     : Tr.t("Finish the steps above first", "Сначала завершите шаги выше", "请先完成上面的步骤", "請先完成上面的步驟");
                 font-size: 13px;
                 color: MaterialPalette.on-surface-variant;

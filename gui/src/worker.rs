@@ -18,6 +18,32 @@ impl Drop for Idle<'_> {
     }
 }
 
+/// The ARB installed on the phone, or `None` with the reason logged. Only a
+/// phone in Android or a recovery, with root, can tell.
+fn read_phone_arb(tx: &mpsc::Sender<WMsg>, serial: Option<&str>, tab: u8) -> Option<u32> {
+    log(
+        tx,
+        LogLevel::Info,
+        tab,
+        "Reading the phone's ARB over adb...",
+    );
+    match lfff_lib::arb::device_arb(serial) {
+        Ok(d) => {
+            log(
+                tx,
+                LogLevel::Info,
+                tab,
+                format!("Phone: {} (slot {})", d.info, d.slot.to_uppercase()),
+            );
+            d.info.version
+        }
+        Err(e) => {
+            log(tx, LogLevel::Warn, tab, format!("Phone's ARB unknown: {e}"));
+            None
+        }
+    }
+}
+
 fn log(tx: &mpsc::Sender<WMsg>, l: LogLevel, tab: u8, m: impl Into<String>) {
     tx.send(WMsg::Log {
         level: l,
@@ -200,7 +226,7 @@ fn wait_for_fastboot(
     }
 }
 
-fn fastbootd_fallback_detail(status: lfff_lib::flasher::FastbootdStatus) -> String {
+pub(crate) fn fastbootd_fallback_detail(status: lfff_lib::flasher::FastbootdStatus) -> String {
     match status {
         lfff_lib::flasher::FastbootdStatus::UserspaceFastboot => {
             "The device is listed as plain 'fastboot', but it reports 'is-userspace: yes'. This is a known OnePlus / OPPO / Realme fastbootd label issue. Continuing will use this userspace fastboot session for dynamic partitions.".into()
@@ -223,12 +249,11 @@ fn confirm_fastbootd_fallback(
     tab: u8,
     status: lfff_lib::flasher::FastbootdStatus,
 ) -> bool {
-    let detail = fastbootd_fallback_detail(status);
-    log(tx, LogLevel::Warn, tab, detail.clone());
+    log(tx, LogLevel::Warn, tab, fastbootd_fallback_detail(status));
     let (resp_tx, resp_rx) = std::sync::mpsc::channel();
     if tx
         .send(WMsg::FastbootdFallback {
-            detail,
+            status,
             response: resp_tx,
         })
         .is_err()
@@ -1033,6 +1058,7 @@ pub fn worker(
                 let method_name = match method {
                     FlashMethod::Snapdragon => "Snapdragon",
                     FlashMethod::Mtk => "MediaTek",
+                    FlashMethod::SnapdragonFastbootd => "Snapdragon, modem in fastbootd",
                 };
                 log(
                     &tx,
@@ -1095,7 +1121,7 @@ pub fn worker(
                 // explicit choice still wins, but they should know.
                 let has_preloader = images.keys().any(|k| lfff_lib::flasher::is_preloader(k));
                 let has_xbl = images.keys().any(|k| lfff_lib::flasher::is_xbl_abl(k));
-                if method == FlashMethod::Snapdragon && has_preloader {
+                if method.is_snapdragon() && has_preloader {
                     log(
                         &tx,
                         LogLevel::Warn,
@@ -1114,7 +1140,7 @@ pub fn worker(
 
                 // Snapdragon firmware: read the ARB version so the GUI can
                 // show the mandatory ARB warning before the final confirm.
-                let arb = if method == FlashMethod::Snapdragon && !is_source {
+                let arb = if method.is_snapdragon() && !is_source {
                     let verdict = lfff_lib::arb::firmware_arb(&dir);
                     let msg = match verdict {
                         ArbVerdict::Known(v) => {
@@ -1128,12 +1154,18 @@ pub fn worker(
                 } else {
                     None
                 };
+                let phone_arb = if arb.is_some() {
+                    read_phone_arb(&tx, serial.as_deref(), 2)
+                } else {
+                    None
+                };
 
                 tx.send(WMsg::Flashing(false)).ok();
                 tx.send(WMsg::FlashPrepared {
                     dir: dir.display().to_string(),
                     is_source,
                     arb,
+                    phone_arb,
                     has_preloader,
                 })
                 .ok();
@@ -1176,6 +1208,7 @@ pub fn worker(
                     skip_xbl_abl: skip_xbl_abl || method == FlashMethod::Mtk,
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
+                    modem_in_fastbootd: method == FlashMethod::SnapdragonFastbootd,
                     skip_partitions,
                     ..Default::default()
                 };
@@ -2088,6 +2121,16 @@ pub fn worker(
                 );
             }
 
+            Cmd::ReadPhoneArb => {
+                let tx = tx.clone();
+                let serial = serial.clone();
+                // Magisk may wait for a tap on the phone; keep the worker free.
+                thread::spawn(move || {
+                    let v = read_phone_arb(&tx, serial.as_deref(), 2);
+                    tx.send(WMsg::PhoneArb(v)).ok();
+                });
+            }
+
             Cmd::PrepareFirmware { path } => {
                 UNPACK_CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
                 let tx = tx.clone();
@@ -2241,6 +2284,7 @@ pub fn worker(
                     skip_xbl_abl: skip_xbl_abl || method == FlashMethod::Mtk,
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
+                    modem_in_fastbootd: method == FlashMethod::SnapdragonFastbootd,
                     skip_partitions,
                     super_layout,
                     ..Default::default()

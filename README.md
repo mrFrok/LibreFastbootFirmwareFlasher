@@ -157,7 +157,7 @@ export LFFF_PAYLOAD_DUMPER=/path/to/payload_dumper
 | `find-ota <model>` | Official builds from the OPPO / OnePlus / realme servers | `lfff find-ota CPH2747 -r EU --changes` |
 | `download <url>` | Multi-connection OTA download; `-` reads the link from stdin | `lfff download <url> -c 8` |
 | `devices` | List fastboot/adb devices | `lfff devices --check` |
-| `arb` | Compare ARB: firmware vs device | `lfff arb --firmware-dir ./fw` |
+| `arb` | Compare ARB: firmware vs device (`--device` reads the phone over adb, needs root) | `lfff arb --device --firmware-dir ./fw` |
 | `deps [tool..]` | Install missing dependencies | `lfff deps` / `lfff deps --check` |
 | `completion <shell>` | Emit a shell completion script | `lfff completion zsh` |
 
@@ -184,6 +184,18 @@ lfff completion fish > ~/.config/fish/completions/lfff.fish
       ↓
 [Offer: reboot to system  /  wipe data + reboot]
 ```
+
+**Modem in fastbootd** (`--method snapdragon-fastbootd`, experimental): no bootloader reboot. fastbootd can only write the modem of the slot it is not running from, so the slot is switched first:
+
+```
+[fastbootd]
+  set_active → the other slot
+  Non-super partitions  →  slot A  +  slot B
+  modem                 →  new active slot
+  Super/dynamic parts   →  new active slot
+```
+
+The old slot keeps its old modem. Without the system images in the flash, the modem falls back to the bootloader stage.
 
 On error: **retry** / **reboot** / **skip partition** / **abort**
 

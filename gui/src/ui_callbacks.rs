@@ -7,7 +7,7 @@ use crate::log_models::{LogModels, add_log_m};
 use crate::{
     ArbState, Cmd, DeviceInfo, FlashMethod, LogEntry, LogLevel, MainWindow, WMsg, confirm_action,
 };
-use lfff_lib::arb::ArbVerdict;
+use lfff_lib::arb::{ArbCompare, ArbVerdict};
 
 thread_local! {
     /// When the current install started, for the time on the result pages.
@@ -425,8 +425,10 @@ pub fn poll(
                 ui.set_show_confirm(true);
                 *fail_resp.borrow_mut() = Some(response);
             }
-            WMsg::FastbootdFallback { detail, response } => {
-                ui.set_fastbootd_fallback_detail(detail.into());
+            WMsg::FastbootdFallback { status, response } => {
+                ui.set_fastbootd_fallback_detail(
+                    fastbootd_fallback_text(&ui.get_lang(), status).into(),
+                );
                 ui.set_confirm_action(confirm_action::FASTBOOTD_FALLBACK);
                 ui.set_show_confirm(true);
                 *fastbootd_resp.borrow_mut() = Some(response);
@@ -500,14 +502,51 @@ pub fn poll(
                 dir,
                 is_source,
                 arb,
+                phone_arb,
                 has_preloader,
             } => {
                 ui.set_prepared_dir(dir.into());
                 ui.set_is_flashing(false);
                 // Warning order is fixed: ARB (Snapdragon) or preloader
                 // (MediaTek) FIRST, the final confirmation dialog AFTER.
-                let method = ui.get_flash_method(); // 1 = Snapdragon, 2 = MediaTek
-                if method == 1 && !is_source {
+                let snapdragon = FlashMethod::from_choice(ui.get_flash_method())
+                    .is_some_and(FlashMethod::is_snapdragon);
+                // Both ARBs known: the same needs no warning, a phone above
+                // the firmware is a brick and is refused outright.
+                let compared = match (phone_arb, arb) {
+                    (Some(p), Some(ArbVerdict::Known(f))) => {
+                        Some((p, f, lfff_lib::arb::compare_arb(p, f)))
+                    }
+                    _ => None,
+                };
+                if snapdragon
+                    && !is_source
+                    && let Some((p, f, ArbCompare::Lower)) = compared
+                {
+                    add_log(
+                        models,
+                        &ui,
+                        &LogLevel::Error,
+                        2,
+                        &format!(
+                            "✗ The phone has ARB {p}, the firmware only {f}: the phone would not boot after installing. Flashing refused — choose firmware with ARB {p} or higher."
+                        ),
+                    );
+                    ui.set_prepared_dir("".into());
+                } else if snapdragon
+                    && !is_source
+                    && let Some((p, _, ArbCompare::Same)) = compared
+                {
+                    add_log(
+                        models,
+                        &ui,
+                        &LogLevel::Success,
+                        2,
+                        &format!("✓ Same ARB on the phone and in the firmware ({p})"),
+                    );
+                    ui.set_confirm_action(confirm_action::FLASH_ALL_FINAL);
+                    ui.set_show_confirm(true);
+                } else if snapdragon && !is_source {
                     // The worker always sends a verdict on this path; if it
                     // somehow did not, warn as for an unknown ARB, never as zero.
                     let (state, version, msg) = match arb.unwrap_or(ArbVerdict::Unparsed) {
@@ -535,7 +574,9 @@ pub fn poll(
                     ui.set_arb_warning_state(state);
                     ui.set_arb_warning_version(version);
                     ui.set_show_arb_warning(true);
-                } else if method == 2 && has_preloader {
+                } else if FlashMethod::from_choice(ui.get_flash_method()) == Some(FlashMethod::Mtk)
+                    && has_preloader
+                {
                     add_log(
                         models,
                         &ui,
@@ -611,6 +652,11 @@ pub fn poll(
                 ui.set_fw_state(if cached { 4 } else { 3 });
                 ui.set_cache_summary(cache_summary().into());
                 refresh_cached_firmwares(&ui);
+            }
+            WMsg::PhoneArb(v) => {
+                ui.set_phone_arb(v.map_or(-1, |v| v as i32));
+                ui.set_arb_checking(false);
+                ui.invoke_open_sheet();
             }
             WMsg::FirmwareFailed(e) if e == "Cancelled" => ui.set_fw_state(0),
             WMsg::FirmwareFailed(e) => {
@@ -698,6 +744,42 @@ pub fn poll(
 
 /// The firmware errors a beginner meets, in the interface language; anything
 /// else is shown as the tools reported it.
+/// The fastbootd-fallback dialog's body in the UI language; the log keeps
+/// the English of `worker::fastbootd_fallback_detail`.
+fn fastbootd_fallback_text(lang: &str, status: lfff_lib::flasher::FastbootdStatus) -> String {
+    use lfff_lib::flasher::FastbootdStatus;
+    let en = crate::worker::fastbootd_fallback_detail(status);
+    let (ru, cn, tw) = match status {
+        FastbootdStatus::UserspaceFastboot => (
+            "Смартфон виден как обычный fastboot, но сообщает «is-userspace: yes». Это известная особенность OnePlus / OPPO / Realme: так выглядит fastbootd. Если продолжить, динамические разделы будут прошиты в этом режиме.",
+            "手机显示为普通 fastboot，但报告“is-userspace: yes”。这是 OnePlus / OPPO / Realme 的已知现象：fastbootd 就是这样显示的。继续将在此模式下刷写动态分区。",
+            "手機顯示為一般 fastboot，但回報「is-userspace: yes」。這是 OnePlus / OPPO / Realme 的已知現象：fastbootd 就是這樣顯示的。繼續將在此模式下刷寫動態分割區。",
+        ),
+        FastbootdStatus::BootloaderFastboot => (
+            "Смартфон всё ещё в режиме bootloader и не подтвердил userspace fastboot. Прошивка динамических разделов из этого режима может не пройти. Продолжайте, только если точно знаете, что ваш смартфон это поддерживает.",
+            "手机仍处于 bootloader 模式，未确认 userspace fastboot。在此模式下刷写动态分区可能失败。只有确定您的手机支持时才继续。",
+            "手機仍處於 bootloader 模式，未確認 userspace fastboot。在此模式下刷寫動態分割區可能失敗。只有確定您的手機支援時才繼續。",
+        ),
+        FastbootdStatus::UnknownFastboot => (
+            "Смартфон подключён в режиме fastboot, но подтвердить fastbootd не удалось. Прошивка динамических разделов из этого режима может не пройти.",
+            "手机以 fastboot 模式连接，但无法确认 fastbootd。在此模式下刷写动态分区可能失败。",
+            "手機以 fastboot 模式連接，但無法確認 fastbootd。在此模式下刷寫動態分割區可能失敗。",
+        ),
+        FastbootdStatus::NotFound => (
+            "Смартфон в режиме fastboot не найден.",
+            "未找到处于 fastboot 模式的手机。",
+            "未找到處於 fastboot 模式的手機。",
+        ),
+        FastbootdStatus::Fastbootd => return en,
+    };
+    match lang {
+        "ru" => ru.to_string(),
+        "zh-CN" => cn.to_string(),
+        "zh-TW" => tw.to_string(),
+        _ => en,
+    }
+}
+
 fn firmware_error_text(lang: &str, e: &str) -> String {
     let pick = |en: &str, ru: &str, cn: &str, tw: &str| match lang {
         "ru" => ru.to_string(),
@@ -913,10 +995,9 @@ pub fn register_callbacks(
             }
             // The flash-method dialog guarantees a choice, but never start
             // flashing without one even if the UI state is inconsistent.
-            let method = match ui.get_flash_method() {
-                1 => FlashMethod::Snapdragon,
-                2 => FlashMethod::Mtk,
-                _ => {
+            let method = match FlashMethod::from_choice(ui.get_flash_method()) {
+                Some(m) => m,
+                None => {
                     add_log_m(
                         &fl,
                         &ui,
@@ -956,10 +1037,9 @@ pub fn register_callbacks(
                 );
                 return;
             }
-            let method = match ui.get_flash_method() {
-                1 => FlashMethod::Snapdragon,
-                2 => FlashMethod::Mtk,
-                _ => {
+            let method = match FlashMethod::from_choice(ui.get_flash_method()) {
+                Some(m) => m,
+                None => {
                     add_log_m(
                         &fl,
                         &ui,
@@ -1424,6 +1504,29 @@ fn register_install_callbacks(
         if let Some(ui) = w.upgrade() {
             ui.set_fw_state(0);
             ui.set_fw_dir("".into());
+        }
+    });
+
+    // Snapdragon: read the phone's ARB first, so the sheet can compare it
+    // with the firmware's; the sheet opens when the answer arrives.
+    let t = ctx.clone();
+    let w = ui.as_weak();
+    ui.on_check_arb(move || {
+        if let Some(ui) = w.upgrade() {
+            if ui.get_arb_checking() {
+                return;
+            }
+            if ui.get_chip() != 1 {
+                ui.set_phone_arb(-1);
+                ui.invoke_open_sheet();
+                return;
+            }
+            ui.set_arb_checking(true);
+            if t.send(Cmd::ReadPhoneArb).is_err() {
+                ui.set_arb_checking(false);
+                ui.set_phone_arb(-1);
+                ui.invoke_open_sheet();
+            }
         }
     });
 

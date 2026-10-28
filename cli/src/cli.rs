@@ -128,6 +128,15 @@ pub enum Commands {
         /// Extracted firmware directory (xbl_config.img located automatically)
         #[arg(long, value_name = "DIR", group = "arb_src")]
         firmware_dir: Option<PathBuf>,
+
+        /// Read the ARB installed on the phone (adb, needs root). With
+        /// --xbl or --firmware-dir, also compares the two
+        #[arg(long)]
+        device: bool,
+
+        /// Target a specific device by serial number (with --device)
+        #[arg(short, long, value_name = "SERIAL", requires = "device")]
+        serial: Option<String>,
     },
 
     /// Flash an extracted firmware directory (or source build with --source)
@@ -143,9 +152,15 @@ pub enum Commands {
         #[arg(short, long, value_name = "SERIAL")]
         serial: Option<String>,
 
-        /// Flash method: 'snapdragon' (Qualcomm) or 'mtk' (MediaTek).
+        /// Flash method: 'snapdragon' (Qualcomm), 'mtk' (MediaTek), or
+        /// 'snapdragon-fastbootd' (Qualcomm, modem flashed in fastbootd after
+        /// switching to the other slot; experimental).
         /// Prompted interactively if omitted.
-        #[arg(long, value_name = "METHOD", value_parser = ["snapdragon", "mtk"])]
+        #[arg(
+            long,
+            value_name = "METHOD",
+            value_parser = ["snapdragon", "mtk", "snapdragon-fastbootd"]
+        )]
         method: Option<String>,
 
         /// Detect images and run checks without flashing

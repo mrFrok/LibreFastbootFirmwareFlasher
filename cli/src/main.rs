@@ -79,7 +79,14 @@ fn main() {
         Some(Commands::Arb {
             ref xbl,
             ref firmware_dir,
-        }) => handlers::arb::run(xbl.as_ref(), firmware_dir.as_ref()),
+            device,
+            ref serial,
+        }) => handlers::arb::run(
+            xbl.as_ref(),
+            firmware_dir.as_ref(),
+            device,
+            serial.as_deref(),
+        ),
 
         Some(Commands::Flash {
             ref firmware_dir,

@@ -83,7 +83,16 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
             return ArbInfo::unknown(&format!("read error: {}", e));
         }
     };
+    let fname = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown");
+    extract_arb_from_bytes(&data, fname)
+}
 
+/// Parse an xbl_config image already in memory; `name` only labels the
+/// result's `source`.
+pub fn extract_arb_from_bytes(data: &[u8], name: &str) -> ArbInfo {
     if data.len() < 64 {
         return ArbInfo::unknown("file too small for ELF header");
     }
@@ -193,18 +202,14 @@ pub fn extract_arb_from_xbl_config(path: &Path) -> ArbInfo {
     let oem_minor = u32::from_le_bytes(seg[oem_off + 4..oem_off + 8].try_into().unwrap_or([0; 4]));
     let arb = u32::from_le_bytes(seg[oem_off + 8..oem_off + 12].try_into().unwrap_or([0; 4]));
 
-    let fname = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown");
     info!(
         "OEM Metadata Major={} Minor={} ARB={} (from {})",
-        oem_major, oem_minor, arb, fname
+        oem_major, oem_minor, arb, name
     );
 
     ArbInfo {
         version: Some(arb),
-        source: format!("xbl_config ELF OEM metadata ({})", fname),
+        source: format!("xbl_config ELF OEM metadata ({})", name),
         oem_major: Some(oem_major),
         oem_minor: Some(oem_minor),
     }
@@ -242,6 +247,156 @@ pub fn firmware_arb(dir: &Path) -> ArbVerdict {
             Some(v) => ArbVerdict::Known(v),
             None => ArbVerdict::Unparsed,
         },
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ARB of the firmware installed on the phone
+// ---------------------------------------------------------------------------
+
+/// Why the installed firmware's ARB could not be read.
+///
+/// fastbootd cannot help here: its `fetch` is compiled out of user builds,
+/// refused on locked devices and limited to vendor_boot. The partition can
+/// only be read from Android or a recovery over adb, as root.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceArbError {
+    /// No phone in adb mode (booted Android with USB debugging, or recovery).
+    NoDevice,
+    /// The adb shell is not root and `su` was refused or is missing.
+    NoRoot,
+    /// Root works but the partition could not be read.
+    ReadFailed(String),
+    /// The partition was read but holds no ARB this parser understands.
+    Unparsed,
+}
+
+impl fmt::Display for DeviceArbError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoDevice => write!(f, "no phone found over adb"),
+            Self::NoRoot => write!(f, "root is required to read xbl_config from the phone"),
+            Self::ReadFailed(e) => write!(f, "could not read xbl_config from the phone: {e}"),
+            Self::Unparsed => write!(f, "xbl_config from the phone could not be parsed"),
+        }
+    }
+}
+
+/// ARB read from the phone's active slot.
+#[derive(Debug, Clone)]
+pub struct DeviceArb {
+    /// `a`, `b`, or empty on a non-A/B phone.
+    pub slot: String,
+    pub info: ArbInfo,
+}
+
+fn adb_args<'a>(serial: Option<&'a str>, rest: &[&'a str]) -> Vec<&'a str> {
+    let mut args = vec!["adb"];
+    if let Some(s) = serial {
+        args.extend(["-s", s]);
+    }
+    args.extend_from_slice(rest);
+    args
+}
+
+/// How to run a command as root on the phone: as is when the adb shell is
+/// already root (recovery, `adb root` on a userdebug build), through `su`
+/// otherwise. `None` when neither works. Magisk asks on the phone's screen
+/// the first time, hence the long timeout; KernelSU and APatch never ask —
+/// Shell must already be granted in their manager, or `su` is refused.
+fn root_wrapper(serial: Option<&str>) -> Option<bool> {
+    let r = crate::utils::run_cmd(&adb_args(serial, &["shell", "id -u"]), 15);
+    if r.code == 0 && r.stdout.trim() == "0" {
+        return Some(false);
+    }
+    let r = crate::utils::run_cmd(&adb_args(serial, &["shell", "su -c 'id -u'"]), 60);
+    (r.code == 0 && r.stdout.trim() == "0").then_some(true)
+}
+
+/// Read the ARB of the firmware installed on the phone, from the active
+/// slot's xbl_config, over adb as root.
+pub fn device_arb(serial: Option<&str>) -> Result<DeviceArb, DeviceArbError> {
+    let devices = crate::device::list_adb_devices();
+    let present = match serial {
+        Some(s) => devices.iter().any(|d| d == s),
+        None => !devices.is_empty(),
+    };
+    if !present {
+        return Err(DeviceArbError::NoDevice);
+    }
+
+    let use_su = root_wrapper(serial).ok_or(DeviceArbError::NoRoot)?;
+
+    let suffix = crate::utils::run_cmd(
+        &adb_args(serial, &["shell", "getprop ro.boot.slot_suffix"]),
+        15,
+    )
+    .stdout
+    .trim()
+    .to_string();
+    let slot = suffix.trim_start_matches('_').to_string();
+    let part = format!("xbl_config{suffix}");
+
+    let mut last_err = String::new();
+    for dir in ["/dev/block/by-name", "/dev/block/bootdevice/by-name"] {
+        let cat = format!("cat {dir}/{part}");
+        let cmd = if use_su {
+            format!("su -c '{cat}'")
+        } else {
+            cat
+        };
+        // exec-out, not shell: the image is binary and must arrive unmangled.
+        let args = adb_args(serial, &["exec-out", &cmd]);
+        let out = match std::process::Command::new(args[0])
+            .args(&args[1..])
+            .output()
+        {
+            Ok(o) => o,
+            Err(e) => return Err(DeviceArbError::ReadFailed(e.to_string())),
+        };
+        if out.status.success() && out.stdout.starts_with(&ELF_MAGIC) {
+            debug!("Read {} bytes of {} from {}", out.stdout.len(), part, dir);
+            let info = extract_arb_from_bytes(&out.stdout, &format!("{part} on the phone"));
+            if info.version.is_none() {
+                return Err(DeviceArbError::Unparsed);
+            }
+            return Ok(DeviceArb { slot, info });
+        }
+        // cat's error ends up on stdout through exec-out.
+        last_err = String::from_utf8_lossy(if out.stderr.is_empty() {
+            &out.stdout
+        } else {
+            &out.stderr
+        })
+        .chars()
+        .take(200)
+        .collect::<String>()
+        .trim()
+        .to_string();
+    }
+    Err(DeviceArbError::ReadFailed(format!("{part}: {last_err}")))
+}
+
+/// What flashing a firmware does to a phone's anti-rollback, from the ARB
+/// installed on the phone and the firmware's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArbCompare {
+    /// Same ARB: nothing changes.
+    Same,
+    /// The firmware's is higher: the counter rises and older firmware is
+    /// locked out for good.
+    Raises,
+    /// The firmware's is lower: the bootloader rejects it — a hard brick on
+    /// Qualcomm.
+    Lower,
+}
+
+pub fn compare_arb(device: u32, firmware: u32) -> ArbCompare {
+    use std::cmp::Ordering::*;
+    match firmware.cmp(&device) {
+        Equal => ArbCompare::Same,
+        Greater => ArbCompare::Raises,
+        Less => ArbCompare::Lower,
     }
 }
 
@@ -514,5 +669,24 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let info = extract_arb_from_xbl_config(&dir.path().join("xbl_config.img"));
         assert_eq!(info.version, None);
+    }
+
+    // A lower firmware ARB than the phone's is the brick case; it must never
+    // come out as Same or Raises.
+    #[test]
+    fn compare_arb_flags_a_lower_firmware() {
+        assert_eq!(compare_arb(1, 0), ArbCompare::Lower);
+        assert_eq!(compare_arb(2, 1), ArbCompare::Lower);
+        assert_eq!(compare_arb(1, 1), ArbCompare::Same);
+        assert_eq!(compare_arb(0, 1), ArbCompare::Raises);
+    }
+
+    #[test]
+    fn bytes_that_are_not_elf_have_no_arb() {
+        assert_eq!(
+            extract_arb_from_bytes(b"/system/bin/sh: su: not found", "x").version,
+            None
+        );
+        assert_eq!(extract_arb_from_bytes(&[], "x").version, None);
     }
 }

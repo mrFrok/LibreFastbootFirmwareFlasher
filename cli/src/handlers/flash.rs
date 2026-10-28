@@ -16,7 +16,8 @@ use crate::output::{
 
 /// Ask the user which flash method to use. Flashing never starts without an
 /// explicit choice — there is no platform auto-detection.
-fn prompt_flash_method() -> Option<bool> {
+/// Returns the method as `--method` spells it.
+fn prompt_flash_method() -> Option<&'static str> {
     println!(
         "\n{}",
         "── Flash method ─────────────────────────────────────────".dimmed()
@@ -25,15 +26,19 @@ fn prompt_flash_method() -> Option<bool> {
     println!();
     println!("  [1] Snapdragon (Qualcomm) — modem flashed in bootloader mode, ARB check");
     println!("  [2] MediaTek              — everything flashed in fastbootd, xbl/abl skipped");
+    println!(
+        "  [3] Snapdragon, modem in fastbootd — switches to the other slot, no bootloader reboot (experimental)"
+    );
     println!("  [q] Abort");
 
     loop {
         let c = prompt("\n  Choice", "");
         match c.as_str() {
-            "1" => return Some(false),
-            "2" => return Some(true),
+            "1" => return Some("snapdragon"),
+            "2" => return Some("mtk"),
+            "3" => return Some("snapdragon-fastbootd"),
             "q" | "Q" => return None,
-            _ => println!("  Enter 1, 2 or q"),
+            _ => println!("  Enter 1, 2, 3 or q"),
         }
     }
 }
@@ -187,17 +192,18 @@ pub fn run(
     }
 
     // -- Mandatory flash-method selection (no auto-detection) --
-    let as_mediatek = match method {
-        Some("mtk") => true,
-        Some(_) => false,
+    let method = match method {
+        Some(m) => m,
         None => match prompt_flash_method() {
-            Some(v) => v,
+            Some(m) => m,
             None => {
                 println!("{}", "Aborted by user.".yellow());
                 return 1;
             }
         },
     };
+    let as_mediatek = method == "mtk";
+    let modem_in_fastbootd = method == "snapdragon-fastbootd";
 
     // Warn on an apparent method/firmware mismatch, but respect the user's choice.
     let has_preloader = images.keys().any(|k| is_preloader(k));
@@ -278,6 +284,7 @@ pub fn run(
         skip_xbl_abl,
         skip_preloader,
         as_mediatek: Some(as_mediatek),
+        modem_in_fastbootd,
         skip_partitions: String::new(),
         // The experimental super rebuild is GUI-only for now.
         super_layout: None,

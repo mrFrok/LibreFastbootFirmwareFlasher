@@ -44,6 +44,26 @@ mod confirm_action {
 enum FlashMethod {
     Snapdragon,
     Mtk,
+    /// Snapdragon with the modem flashed from fastbootd after switching to
+    /// the other slot, instead of rebooting to the bootloader.
+    SnapdragonFastbootd,
+}
+
+impl FlashMethod {
+    /// From the flash-method dialog's value; 0 (no choice) and anything
+    /// unknown give `None`.
+    fn from_choice(v: i32) -> Option<Self> {
+        match v {
+            1 => Some(Self::Snapdragon),
+            2 => Some(Self::Mtk),
+            3 => Some(Self::SnapdragonFastbootd),
+            _ => None,
+        }
+    }
+
+    fn is_snapdragon(self) -> bool {
+        self != Self::Mtk
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -93,8 +113,13 @@ enum WMsg {
         is_source: bool,
         /// `None` when no ARB warning applies (MediaTek, or a source build).
         arb: Option<lfff_lib::arb::ArbVerdict>,
+        /// ARB installed on the phone, when it could be read (adb, root).
+        phone_arb: Option<u32>,
         has_preloader: bool,
     },
+    /// The phone's ARB for the install sheet; `None` when it could not be
+    /// read (not in Android or recovery, or no root).
+    PhoneArb(Option<u32>),
     ReadyToFlash,
     CableTestProgress {
         step: u8,
@@ -107,8 +132,10 @@ enum WMsg {
         error: String,
         response: std::sync::mpsc::Sender<lfff_lib::flasher::FailureAction>,
     },
+    /// The phone is not confirmed as fastbootd; the UI words the reason in
+    /// its own language.
     FastbootdFallback {
-        detail: String,
+        status: lfff_lib::flasher::FastbootdStatus,
         response: std::sync::mpsc::Sender<bool>,
     },
     UpdateAvailable {
@@ -228,6 +255,8 @@ enum Cmd {
     PrepareFirmware {
         path: String,
     },
+    /// Read the ARB installed on the phone (adb, root), for the install sheet.
+    ReadPhoneArb,
     /// Restart into fastbootd, delete the inactive slot's partitions so the
     /// next OTA installs (lfff_lib::flasher::repair_ota_slots), restart.
     RepairOta,

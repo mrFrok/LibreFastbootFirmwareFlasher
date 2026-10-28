@@ -328,6 +328,55 @@ pub fn get_active_slot(serial: Option<&str>) -> Option<String> {
     slot
 }
 
+/// The other A/B slot.
+fn other_slot(slot: &str) -> &'static str {
+    if slot == "a" { "b" } else { "a" }
+}
+
+/// Make `slot` the active one. In fastbootd this does not reboot: fastbootd
+/// keeps running from the slot it booted, which is what lets the modem be
+/// written to the newly active one.
+pub fn set_active_slot(serial: Option<&str>, slot: &str) -> bool {
+    let (code, _, err) = fastboot_cmd_serial(serial, &["set_active", slot], 15);
+    if code != 0 {
+        warn!("fastboot set_active {} failed: {}", slot, err.trim());
+    }
+    code == 0
+}
+
+/// Where the modem goes in a Snapdragon flash.
+#[derive(Debug, PartialEq, Eq)]
+enum ModemRoute {
+    /// Reboot to the bootloader and flash it to both slots.
+    Bootloader,
+    /// Switch to the other slot first and flash it there from fastbootd,
+    /// together with the dynamic partitions.
+    Fastbootd,
+}
+
+/// The fastbootd route boots the phone from the other slot, so it needs that
+/// slot's dynamic partitions in the same session; without them the phone
+/// would come up with an old or empty system. Without a modem there is
+/// nothing to gain from switching.
+fn modem_route(wanted: bool, has_modem: bool, has_super: bool) -> ModemRoute {
+    if wanted && has_modem && has_super {
+        ModemRoute::Fastbootd
+    } else {
+        ModemRoute::Bootloader
+    }
+}
+
+/// Logged when a session stops after the slot switch, so the user knows the
+/// phone would now boot a slot whose system is not fully flashed.
+fn warn_switched_slot(switched_to: Option<&str>, on_log: &dyn Fn(String)) {
+    if let Some(slot) = switched_to {
+        on_log(format!(
+            "Warning: the active slot is already {} and its system was not fully flashed — finish flashing before rebooting",
+            slot.to_uppercase()
+        ));
+    }
+}
+
 /// Pull the active slot out of `fastboot getvar current-slot` output. Only a
 /// bare `a` or `b` is accepted; anything else is `None`, so the caller aborts.
 fn parse_current_slot(output: &str) -> Option<String> {
@@ -1201,6 +1250,11 @@ pub struct FlashOptions {
     pub as_mediatek: Option<bool>,
     /// Comma-separated partition names the user explicitly wants to skip.
     pub skip_partitions: String,
+    /// Snapdragon only: flash the modem from fastbootd instead of rebooting
+    /// to the bootloader. The session switches to the other slot first, then
+    /// writes the modem and the dynamic partitions there; the old slot keeps
+    /// its old modem.
+    pub modem_in_fastbootd: bool,
     /// An empty super layout (super_layout::SuperLayout::to_image) to install
     /// with `fastboot wipe-super` before the dynamic partitions are flashed,
     /// replacing whatever layout the device has. Experimental; `None` keeps
@@ -1428,18 +1482,30 @@ pub fn run_flash_session_with_log(
         }
     };
 
+    let modem_fastbootd = !is_mediatek
+        && modem_route(
+            options.modem_in_fastbootd,
+            filtered.keys().any(|k| is_bootloader_partition(k)),
+            filtered.keys().any(|k| is_super_partition(k)),
+        ) == ModemRoute::Fastbootd;
+
     if is_mediatek {
         on_log("MediaTek method — all partitions will be flashed in fastbootd mode".into());
+    } else if modem_fastbootd {
+        on_log("Snapdragon method — modem flashed in fastbootd, to the other slot together with the system".into());
     } else {
+        if options.modem_in_fastbootd {
+            on_log("Modem in fastbootd needs both the modem and the system images in this flash — falling back to bootloader mode for the modem".into());
+        }
         on_log("Snapdragon method — modem goes through bootloader mode".into());
     }
 
     let fastbootd_images: HashMap<&str, &PathBuf> = filtered
         .iter()
-        .filter(|(k, _)| is_mediatek || !is_bootloader_partition(k))
+        .filter(|(k, _)| is_mediatek || modem_fastbootd || !is_bootloader_partition(k))
         .map(|(k, v)| (k.as_str(), v))
         .collect();
-    let bootloader_images: HashMap<&str, &PathBuf> = if is_mediatek {
+    let bootloader_images: HashMap<&str, &PathBuf> = if is_mediatek || modem_fastbootd {
         HashMap::new()
     } else {
         filtered
@@ -1453,11 +1519,14 @@ pub fn run_flash_session_with_log(
         let mut sorted: Vec<&&str> = fastbootd_images.keys().collect();
         sorted.sort();
         for name in sorted {
-            let mode = if is_super_partition(name) {
-                "fastbootd, active slot"
-            } else {
-                "fastbootd, both slots"
-            };
+            let mode =
+                if modem_fastbootd && (is_super_partition(name) || is_bootloader_partition(name)) {
+                    "fastbootd, other slot, after set_active"
+                } else if is_super_partition(name) {
+                    "fastbootd, active slot"
+                } else {
+                    "fastbootd, both slots"
+                };
             on_log(format!("[dry-run] would flash: {} ({})", name, mode));
         }
         let mut sorted_bl: Vec<&&str> = bootloader_images.keys().collect();
@@ -1502,23 +1571,58 @@ pub fn run_flash_session_with_log(
         };
         on_log(format!("Active slot: {}", active_slot.to_uppercase()));
 
+        // Modem in fastbootd: fastbootd can only write the modem of the slot
+        // it is not running from, so switch first; the modem and the system
+        // then go to the newly active slot. Nothing is flashed yet if the
+        // switch fails.
+        let switched: Option<String> = if modem_fastbootd {
+            let target = other_slot(&active_slot);
+            on_log(format!(
+                "Switching the active slot to {}...",
+                target.to_uppercase()
+            ));
+            if !set_active_slot(serial, target) {
+                on_log(format!(
+                    "Could not switch to slot {} — nothing was flashed",
+                    target.to_uppercase()
+                ));
+                session.aborted = true;
+                session.end_reason = Some("SetActiveFailed".into());
+                return session;
+            }
+            Some(target.to_string())
+        } else {
+            None
+        };
+        let system_slot = switched.clone().unwrap_or_else(|| active_slot.clone());
+
         let super_imgs: HashMap<&str, &PathBuf> = fastbootd_images
             .iter()
             .filter(|(k, _)| is_super_partition(k))
             .map(|(k, v)| (*k, *v))
             .collect();
+        let mut modem_imgs: Vec<(&str, &PathBuf)> = fastbootd_images
+            .iter()
+            .filter(|(k, _)| modem_fastbootd && is_bootloader_partition(k))
+            .map(|(k, v)| (*k, *v))
+            .collect();
+        modem_imgs.sort_by_key(|(k, _)| *k);
         let non_super_imgs: HashMap<&str, &PathBuf> = fastbootd_images
             .iter()
-            .filter(|(k, _)| !is_super_partition(k))
+            .filter(|(k, _)| {
+                !is_super_partition(k) && !(modem_fastbootd && is_bootloader_partition(k))
+            })
             .map(|(k, v)| (*k, *v))
             .collect();
 
-        let total_ops = non_super_imgs.len() * 2 + super_imgs.len();
+        let total_ops = non_super_imgs.len() * 2 + modem_imgs.len() + super_imgs.len();
         let flash_start = std::time::Instant::now();
         let mut done_ops = 0usize;
 
+        let stages = if bootloader_images.is_empty() { 1 } else { 2 };
         on_log(format!(
-            "Stage 1/2: fastbootd — {} non-super × 2 slots, {} super × 1 slot",
+            "Stage 1/{}: fastbootd — {} non-super × 2 slots, {} super × 1 slot",
+            stages,
             non_super_imgs.len(),
             super_imgs.len()
         ));
@@ -1542,11 +1646,13 @@ pub fn run_flash_session_with_log(
             ) {
                 BatchOutcome::Done => {}
                 BatchOutcome::Cancelled => {
+                    warn_switched_slot(switched.as_deref(), on_log);
                     session.aborted = true;
                     session.end_reason = Some("Cancelled".into());
                     return session;
                 }
                 BatchOutcome::Aborted => {
+                    warn_switched_slot(switched.as_deref(), on_log);
                     session.aborted = true;
                     session.end_reason = Some("UserAborted".into());
                     return session;
@@ -1554,26 +1660,11 @@ pub fn run_flash_session_with_log(
             }
         }
 
-        // Super → active slot only
-        if !super_imgs.is_empty() {
-            if let Some(layout) = &options.super_layout
-                && let Err(e) = wipe_super(serial, layout, on_log)
-            {
-                on_log(format!("Refusing to flash dynamic partitions: {e}"));
-                session.aborted = true;
-                session.end_reason = Some("WipeSuperFailed".into());
-                return session;
-            }
-            on_log("Preparing super partition...".into());
-            let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
-            prepare_super_with_log(serial, &super_names, &active_slot, &|msg| on_log(msg));
-
-            let mut sorted_super: Vec<(&str, &PathBuf)> = super_imgs.into_iter().collect();
-            sorted_super.sort_by_key(|(k, _)| *k);
-
+        // Modem in fastbootd → the newly active slot only
+        if !modem_imgs.is_empty() {
             match flash_batch_with_log(
-                &sorted_super,
-                &active_slot,
+                &modem_imgs,
+                &system_slot,
                 serial,
                 total_ops,
                 &mut done_ops,
@@ -1585,16 +1676,72 @@ pub fn run_flash_session_with_log(
             ) {
                 BatchOutcome::Done => {}
                 BatchOutcome::Cancelled => {
+                    warn_switched_slot(switched.as_deref(), on_log);
                     session.aborted = true;
                     session.end_reason = Some("Cancelled".into());
                     return session;
                 }
                 BatchOutcome::Aborted => {
+                    warn_switched_slot(switched.as_deref(), on_log);
                     session.aborted = true;
                     session.end_reason = Some("UserAborted".into());
                     return session;
                 }
             }
+        }
+
+        // Super → one slot: the active one, or the one just switched to
+        if !super_imgs.is_empty() {
+            if let Some(layout) = &options.super_layout
+                && let Err(e) = wipe_super(serial, layout, on_log)
+            {
+                on_log(format!("Refusing to flash dynamic partitions: {e}"));
+                warn_switched_slot(switched.as_deref(), on_log);
+                session.aborted = true;
+                session.end_reason = Some("WipeSuperFailed".into());
+                return session;
+            }
+            on_log("Preparing super partition...".into());
+            let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
+            prepare_super_with_log(serial, &super_names, &system_slot, &|msg| on_log(msg));
+
+            let mut sorted_super: Vec<(&str, &PathBuf)> = super_imgs.into_iter().collect();
+            sorted_super.sort_by_key(|(k, _)| *k);
+
+            match flash_batch_with_log(
+                &sorted_super,
+                &system_slot,
+                serial,
+                total_ops,
+                &mut done_ops,
+                &cancel,
+                &mut session,
+                on_log,
+                on_progress,
+                on_failure,
+            ) {
+                BatchOutcome::Done => {}
+                BatchOutcome::Cancelled => {
+                    warn_switched_slot(switched.as_deref(), on_log);
+                    session.aborted = true;
+                    session.end_reason = Some("Cancelled".into());
+                    return session;
+                }
+                BatchOutcome::Aborted => {
+                    warn_switched_slot(switched.as_deref(), on_log);
+                    session.aborted = true;
+                    session.end_reason = Some("UserAborted".into());
+                    return session;
+                }
+            }
+        }
+
+        if let Some(slot) = &switched {
+            on_log(format!(
+                "Active slot is now {}; slot {} keeps its old modem",
+                slot.to_uppercase(),
+                active_slot.to_uppercase()
+            ));
         }
 
         let elapsed = flash_start.elapsed().as_secs();
@@ -1769,6 +1916,22 @@ mod tests {
                 "{name} should not be critical"
             );
         }
+    }
+
+    #[test]
+    fn modem_goes_through_fastbootd_only_with_the_system() {
+        assert_eq!(modem_route(true, true, true), ModemRoute::Fastbootd);
+        // Switching slots without the system would boot an old or empty one.
+        assert_eq!(modem_route(true, true, false), ModemRoute::Bootloader);
+        // Without a modem there is no reason to switch.
+        assert_eq!(modem_route(true, false, true), ModemRoute::Bootloader);
+        assert_eq!(modem_route(false, true, true), ModemRoute::Bootloader);
+    }
+
+    #[test]
+    fn other_slot_flips() {
+        assert_eq!(other_slot("a"), "b");
+        assert_eq!(other_slot("b"), "a");
     }
 
     #[test]

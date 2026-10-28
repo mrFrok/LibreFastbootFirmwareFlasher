@@ -216,6 +216,15 @@ export global Tr {
         : lang == "zh-CN" ? "modem 在 bootloader 模式下刷写，其余在 fastbootd 中刷写；进行 ARB 检查"
         : lang == "zh-TW" ? "modem 在 bootloader 模式下刷寫，其餘在 fastbootd 中刷寫；進行 ARB 檢查"
         : "modem flashed in bootloader mode, the rest in fastbootd; ARB check";
+    out property <string> flash-method-snapdragon-fastbootd: lang == "ru"
+        ? "Snapdragon, modem в fastbootd" : lang == "zh-CN"
+        ? "骁龙，modem 在 fastbootd 中刷写" : lang == "zh-TW"
+        ? "Snapdragon，modem 在 fastbootd 中刷寫" : "Snapdragon, modem in fastbootd";
+    out property <string> flash-method-snapdragon-fastbootd-desc: lang == "ru"
+        ? "без перезагрузки в bootloader; слот меняется на другой (экспериментально)"
+        : lang == "zh-CN" ? "无需重启到 bootloader；切换到另一个槽位（实验性）"
+        : lang == "zh-TW" ? "無需重新啟動到 bootloader；切換到另一個槽位（實驗性）"
+        : "no bootloader reboot; switches to the other slot (experimental)";
     out property <string> flash-method-mtk: lang == "ru"
         ? "MediaTek" : lang == "zh-CN"
         ? "MediaTek" : lang == "zh-TW"

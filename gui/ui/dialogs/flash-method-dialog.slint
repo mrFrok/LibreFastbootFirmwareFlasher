@@ -3,7 +3,7 @@ import { Tr } from "../globals/tr.slint";
 import { StatusColors } from "../globals/status-colors.slint";
 
 // Mandatory flash-method selection: the flash flow cannot continue until the
-// user explicitly picks Snapdragon or MediaTek, and only the "Continue"
+// user explicitly picks a method, and only the "Continue"
 // button advances the flow — selecting a card never auto-closes the dialog.
 //
 // No drop-shadow here on purpose: Slint renders the shadow of an
@@ -17,7 +17,8 @@ export component FlashMethodDialog {
     width: 100%;
     height: 100%;
     in property <bool> show;
-    // 0 = not chosen, 1 = Snapdragon, 2 = MediaTek
+    // 0 = not chosen, 1 = Snapdragon, 2 = MediaTek,
+    // 3 = Snapdragon with the modem flashed in fastbootd
     in-out property <int> method: 0;
 
     callback cancel();
@@ -53,12 +54,18 @@ export component FlashMethodDialog {
                     root.proceed();
                     return accept;
                 }
-                if event.text == Key.UpArrow || event.text == Key.DownArrow {
-                    root.method = root.method == 1 ? 2 : 1;
+                // Arrows follow the order the cards are shown in: 1, 3, 2.
+                if event.text == Key.DownArrow {
+                    root.method = root.method == 1 ? 3 : root.method == 3 ? 2 : 1;
+                    return accept;
+                }
+                if event.text == Key.UpArrow {
+                    root.method = root.method == 2 ? 3 : root.method == 3 ? 1 : 2;
                     return accept;
                 }
                 if event.text == "1" { root.method = 1; return accept; }
                 if event.text == "2" { root.method = 2; return accept; }
+                if event.text == "3" { root.method = 3; return accept; }
                 reject
             }
 
@@ -96,9 +103,10 @@ export component FlashMethodDialog {
                                 spacing: 8px;
                                 for item in [
                                     { label: Tr.flash-method-snapdragon, desc: Tr.flash-method-snapdragon-desc, val: 1 },
+                                    { label: Tr.flash-method-snapdragon-fastbootd, desc: Tr.flash-method-snapdragon-fastbootd-desc, val: 3 },
                                     { label: Tr.flash-method-mtk, desc: Tr.flash-method-mtk-desc, val: 2 },
                                 ]: TouchArea {
-                                    height: 58px;
+                                    height: 68px;
                                     clicked => { root.method = item.val; }
 
                                     Rectangle {
