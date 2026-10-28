@@ -19,6 +19,8 @@ Thumbs.db
 firmwares/
 *.zip
 *.img
+# ...except the stand-ins the super rebuild embeds (lib/src/super_layout.rs)
+!lib/assets/stubs/*.img
 payload.bin
 
 # Temporary files from lfff

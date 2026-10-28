@@ -101,7 +101,11 @@ pub fn register(ui: &MainWindow, mtx: &mpsc::Sender<WMsg>, ctx: &mpsc::Sender<Cm
             crate::ui_callbacks::prepare(&ui, &t, &path.display().to_string(), true);
         } else if let Some(link) = build.link() {
             ui.set_download_url(link.into());
-            t.send(Cmd::Download { url: link.into() }).ok();
+            t.send(Cmd::Download {
+                url: link.into(),
+                md5: build.md5.clone(),
+            })
+            .ok();
         }
     });
 

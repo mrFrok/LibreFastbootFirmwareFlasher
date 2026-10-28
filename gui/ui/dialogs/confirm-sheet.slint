@@ -51,15 +51,13 @@ export component ConfirmSheet inherits Rectangle {
     in property <string> firmware;
     // Codenames the firmware is built for when they differ from the phone's.
     in property <string> wrong-device;
-    // Settings → Experimental → Rebuild super is on.
+    // Settings → Firmware → Rebuild super when needed is on.
     in property <bool> rebuild-super;
     // Settings → Firmware → the legacy bootloader route is on, for a
     // Snapdragon: worth a warning before Install.
     in property <bool> modem-bootloader;
+    // The firmware's super layout, one line per group; empty without one.
     in property <string> super-plan;
-    // The rebuild was acknowledged; Install waits for it.
-    property <bool> rebuild-ok: false;
-    property <bool> can-install: !root.rebuild-super || (root.super-plan != "" && root.rebuild-ok);
     // xbl/abl for kinds 0 and 1, preloader for kind 2
     in-out property <bool> skip-checked;
     // Partitions to leave as they are on the phone; joined into the
@@ -404,7 +402,9 @@ export component ConfirmSheet inherits Rectangle {
                     }
                 }
 
-                if root.kind == 3 && root.rebuild-super: Rectangle {
+                // Informational: the install's own confirmation covers it;
+                // the session rebuilds only when the new slot is empty.
+                if root.kind == 3 && root.rebuild-super && root.super-plan != "": Rectangle {
                     border-radius: 12px;
                     background: StatusColors.warning-container.with-alpha(0.6);
                     VerticalLayout {
@@ -412,42 +412,20 @@ export component ConfirmSheet inherits Rectangle {
                         spacing: 6px;
                         Text {
                             width: 508px;
-                            text: root.super-plan == ""
-                                ? Tr.t("Rebuild super is on, but this firmware has no partition layout (not a .zip, or unpacked by an older version). Turn it off in Settings or choose the .zip again.", "Пересоздание super включено, но в этой прошивке нет разметки разделов (не .zip или распакована старой версией). Выключите его в настройках или выберите .zip заново.", "已开启重建 super，但此固件没有分区布局（不是 .zip，或由旧版本解压）。请在设置中关闭，或重新选择 .zip。", "已開啟重建 super，但此韌體沒有分割區配置（不是 .zip，或由舊版本解壓）。請在設定中關閉，或重新選擇 .zip。")
-                                : Tr.t("Experimental: super will be wiped and rebuilt with this layout (group sizes are fitted to the phone):", "Экспериментально: super будет стёрт и пересоздан с такой разметкой (размеры групп подгоняются под смартфон):", "实验性：super 将被清除并按此布局重建（分组大小会适配手机）：", "實驗性：super 將被清除並按此配置重建（群組大小會配合手機）：");
+                            text: Tr.t("If the slot being flashed has no partitions, super is wiped and rebuilt with this layout, as from the factory — then system updates work without a repair:", "Если в прошиваемом слоте нет разделов, super будет стёрт и пересоздан с такой разметкой, как с завода, — тогда обновления системы ставятся без починки:", "如果要刷写的槽位没有分区，super 将被清除并按此布局重建（与出厂一致），之后系统更新无需修复即可安装：", "如果要刷寫的槽位沒有分割區，super 將被清除並按此配置重建（與出廠一致），之後系統更新無需修復即可安裝：");
                             font-size: 13px;
                             font-weight: 500;
                             color: StatusColors.on-warning-container;
                             wrap: word-wrap;
                         }
 
-                        if root.super-plan != "": Text {
+                        Text {
                             width: 508px;
                             text: root.super-plan;
                             font-family: "monospace";
                             font-size: 10px;
                             overflow: elide;
                             color: StatusColors.on-warning-container;
-                        }
-
-                        if root.super-plan != "": HorizontalLayout {
-                            spacing: 4px;
-                            CheckBox {
-                                check-state: root.rebuild-ok ? CheckState.checked : CheckState.unchecked;
-                                checked-state-changed(c) => {
-                                    root.rebuild-ok = c == CheckState.checked;
-                                }
-                            }
-
-                            Text {
-                                width: 460px;
-                                text: Tr.t("I understand: rebuild super", "Понимаю: пересоздать super", "我明白：重建 super", "我明白：重建 super");
-                                font-size: 13px;
-                                font-weight: 500;
-                                color: StatusColors.on-warning-container;
-                                vertical-alignment: center;
-                                wrap: word-wrap;
-                            }
                         }
                     }
                 }
@@ -497,7 +475,6 @@ export component ConfirmSheet inherits Rectangle {
                     }
 
                     if root.kind != 4: FilledButton {
-                        enabled: root.kind != 3 || root.can-install;
                         text: root.kind == 3 ? Tr.t("Install", "Установить", "安装", "安裝") : Tr.t("I understand, next", "Понятно, дальше", "我明白，下一步", "我明白，下一步");
                         clicked => {
                             if root.kind == 3 {

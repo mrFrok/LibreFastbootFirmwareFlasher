@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 
 /// LibreFastbootFirmwareFlasher — extract, check, and flash Android firmware.
 #[derive(Parser)]
@@ -12,6 +12,22 @@ pub struct Cli {
 
     #[command(subcommand)]
     pub command: Option<Commands>,
+}
+
+/// Where `lfff reboot` sends the phone.
+#[derive(ValueEnum, Clone, Copy, Debug)]
+pub enum RebootTo {
+    System,
+    Recovery,
+    Bootloader,
+    Fastbootd,
+}
+
+/// An A/B slot.
+#[derive(ValueEnum, Clone, Copy, Debug)]
+pub enum Slot {
+    A,
+    B,
 }
 
 /// Shells `lfff completion` can emit a script for.
@@ -84,6 +100,11 @@ pub enum Commands {
         /// Number of parallel connections for aria2c
         #[arg(short, long, default_value = "16")]
         connections: u32,
+
+        /// Expected MD5 of the archive (find-ota prints it); a mismatch
+        /// fails the download
+        #[arg(long, value_name = "MD5")]
+        md5: Option<String>,
     },
 
     /// Extract a firmware .zip archive
@@ -120,6 +141,12 @@ pub enum Commands {
     },
 
     /// Check Anti-Rollback version of a firmware
+    #[command(group(
+        ArgGroup::new("arb_what")
+            .required(true)
+            .multiple(true)
+            .args(["xbl", "firmware_dir", "device"])
+    ))]
     Arb {
         /// Direct path to xbl_config.img
         #[arg(long, value_name = "XBL_IMG", group = "arb_src")]
@@ -142,6 +169,7 @@ pub enum Commands {
     /// Flash an extracted firmware directory (or source build with --source)
     Flash {
         /// Path to the extracted firmware directory
+        #[arg(required_unless_present = "source")]
         firmware_dir: Option<PathBuf>,
 
         /// Android source build output directory (skips ARB check)
@@ -176,13 +204,19 @@ pub enum Commands {
         /// Skip preloader partition during flashing
         #[arg(long)]
         skip_preloader: bool,
+
+        /// Keep super's layout even when the slot being flashed has no
+        /// partitions (they are then created outside their group, and the
+        /// next system updates need the OTA repair)
+        #[arg(long)]
+        no_rebuild_super: bool,
     },
 
     /// Flash a single .img file to a specific partition
     #[command(name = "flash-partition")]
     FlashPartition {
         /// Path to .img file, or partition name (requires --firmware-dir)
-        image: Option<String>,
+        image: String,
 
         /// Extracted firmware directory to search for the partition image
         #[arg(long, value_name = "DIR")]
@@ -205,6 +239,29 @@ pub enum Commands {
         dry_run: bool,
 
         /// Target a specific device
+        #[arg(short, long, value_name = "SERIAL")]
+        serial: Option<String>,
+    },
+
+    /// Reboot the phone (through adb or fastboot, whichever sees it)
+    Reboot {
+        /// Where to reboot to
+        #[arg(value_enum, default_value = "system")]
+        to: RebootTo,
+
+        /// Target a specific device by serial number
+        #[arg(short, long, value_name = "SERIAL")]
+        serial: Option<String>,
+    },
+
+    /// Make an A/B slot the active one (fastboot or fastbootd)
+    #[command(name = "set-slot")]
+    SetSlot {
+        /// The slot to boot from next
+        #[arg(value_enum)]
+        slot: Slot,
+
+        /// Target a specific device by serial number
         #[arg(short, long, value_name = "SERIAL")]
         serial: Option<String>,
     },

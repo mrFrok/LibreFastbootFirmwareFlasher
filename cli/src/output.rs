@@ -2,27 +2,40 @@
 //!
 //! Everything here used to live in `lfff-lib`; the library now returns data
 //! and emits log lines through callbacks, and this module renders them.
+//!
+//! All of it goes to stderr. stdout carries only a command's result — a
+//! path, a link, a list — so that `$(lfff …)` and pipes get just that.
 
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 use lfff_lib::device::PreFlashCheck;
+use lfff_lib::device::{RebootTarget, Via, reboot, wipe_userdata};
 use lfff_lib::extractor::ExtractionResult;
 use lfff_lib::flasher::{FlashResult, FlashSession, is_critical_partition};
-use lfff_lib::utils::{check_tools, fastboot, tool_install_hint};
+use lfff_lib::utils::{check_tools, tool_install_hint};
 
 // ---------------------------------------------------------------------------
 // Interactive input
 // ---------------------------------------------------------------------------
 
-/// Prompt user for input, return default on empty.
+/// Whether there is a person to answer: stdin is a terminal.
+pub fn interactive() -> bool {
+    io::stdin().is_terminal()
+}
+
+/// Prompt user for input, return default on empty. With no terminal on
+/// stdin nobody can answer, so the default is taken without asking.
 pub fn prompt(message: &str, default: &str) -> String {
+    if !interactive() {
+        return default.to_string();
+    }
     let suffix = if default.is_empty() {
         String::new()
     } else {
         format!(" [{}]", default)
     };
-    print!("{}{}: ", message, suffix);
-    io::stdout().flush().ok();
+    eprint!("{}{}: ", message, suffix);
+    io::stderr().flush().ok();
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
     let trimmed = input.trim();
@@ -49,7 +62,7 @@ pub fn require_tools(tools: &[&str]) -> bool {
         } else {
             format!("  →  {}", tool_install_hint(tool))
         };
-        println!("  {}  {}{}", status, tool, hint);
+        eprintln!("  {}  {}{}", status, tool, hint);
         if !found {
             all_ok = false;
         }
@@ -64,77 +77,77 @@ pub fn require_tools(tools: &[&str]) -> bool {
 /// Print human-readable pre-flash check report.
 pub fn print_check_report(check: &PreFlashCheck) {
     let s = |ok: bool| if ok { "✓" } else { "✗" };
-    println!("\n── Pre-flash check report ─────────────────────────────");
-    println!("  {:<3} Device detected", s(check.device_found));
-    println!("  {:<3} Fastboot communication", s(check.communication_ok));
-    println!(
+    eprintln!("\n── Pre-flash check report ─────────────────────────────");
+    eprintln!("  {:<3} Device detected", s(check.device_found));
+    eprintln!("  {:<3} Fastboot communication", s(check.communication_ok));
+    eprintln!(
         "  {:<3} Cable speed ({:.2} MB/s)",
         s(check.cable_ok),
         check.cable_result.speed_mbs
     );
-    println!(
+    eprintln!(
         "  {:<3} Battery level ({}%)",
         s(check.battery_ok),
         check.device_info.battery_level
     );
-    println!("  {:<3} Bootloader unlocked", s(check.unlocked));
+    eprintln!("  {:<3} Bootloader unlocked", s(check.unlocked));
     if !check.warnings.is_empty() {
-        println!("\n  Warnings:");
+        eprintln!("\n  Warnings:");
         for w in &check.warnings {
-            println!("    ⚠  {}", w);
+            eprintln!("    ⚠  {}", w);
         }
     }
     if !check.errors.is_empty() {
-        println!("\n  Errors:");
+        eprintln!("\n  Errors:");
         for e in &check.errors {
-            println!("    ✗  {}", e);
+            eprintln!("    ✗  {}", e);
         }
     }
-    println!();
+    eprintln!();
     if check.ready() {
-        println!("  ✓ Device is ready for flashing.");
+        eprintln!("  ✓ Device is ready for flashing.");
     } else {
-        println!("  ✗ Device is NOT ready. Fix errors above.");
+        eprintln!("  ✗ Device is NOT ready. Fix errors above.");
     }
-    println!("────────────────────────────────────────────────────────\n");
+    eprintln!("────────────────────────────────────────────────────────\n");
 }
 
 // ---------------------------------------------------------------------------
 // Extraction report
 // ---------------------------------------------------------------------------
 
-/// Print extraction result summary to stdout.
+/// Print extraction result summary.
 pub fn print_extraction_result(result: &ExtractionResult) {
     if !result.success {
-        println!("\n✗ Extraction failed: {}", result.error);
+        eprintln!("\n✗ Extraction failed: {}", result.error);
         return;
     }
-    println!("\n✓ Extracted to: {}", result.output_dir.display());
+    eprintln!("\n✓ Extracted to: {}", result.output_dir.display());
     let mut sorted: Vec<_> = result.groups.iter().collect();
     sorted.sort_by_key(|(k, _)| *k);
     for (group, images) in &sorted {
-        println!("\n  {}/", group);
+        eprintln!("\n  {}/", group);
         let mut imgs: Vec<_> = images.iter().collect();
         imgs.sort();
         for img in imgs {
             let mb = std::fs::metadata(img)
                 .map(|m| m.len() as f64 / 1024.0 / 1024.0)
                 .unwrap_or(0.0);
-            println!(
+            eprintln!(
                 "    {:<45} {:>7.1} MB",
                 img.file_name().unwrap_or_default().to_string_lossy(),
                 mb
             );
         }
     }
-    println!("\n  Total: {} image(s)", result.all_images().len());
+    eprintln!("\n  Total: {} image(s)", result.all_images().len());
     if let Some(arb) = &result.arb_info {
-        println!("\n── ARB ──────────────────────────────────────────────────");
-        println!("  {}", arb);
+        eprintln!("\n── ARB ──────────────────────────────────────────────────");
+        eprintln!("  {}", arb);
         if arb.enforced() {
-            println!("  ⚠  Hard ARB is ACTIVE on this firmware.");
+            eprintln!("  ⚠  Hard ARB is ACTIVE on this firmware.");
         }
-        println!("────────────────────────────────────────────────────────");
+        eprintln!("────────────────────────────────────────────────────────");
     }
 }
 
@@ -147,38 +160,38 @@ pub fn report_failure(result: &FlashResult) {
     let is_crit = is_critical_partition(&result.partition);
     let err_lower = result.error.to_lowercase();
 
-    println!();
-    println!("{}", "━".repeat(60));
-    println!("  ✗  FAILED  {}_{}", result.partition, result.slot);
-    println!("  {}", result.error);
-    println!();
+    eprintln!();
+    eprintln!("{}", "━".repeat(60));
+    eprintln!("  ✗  FAILED  {}_{}", result.partition, result.slot);
+    eprintln!("  {}", result.error);
+    eprintln!();
 
     if err_lower.contains("resize") || err_lower.contains("not enough space") {
-        println!("  Cause: Dynamic partition resize failed.");
-        println!("  Fix  : Make sure the device is in fastbootd and retry.");
+        eprintln!("  Cause: Dynamic partition resize failed.");
+        eprintln!("  Fix  : Make sure the device is in fastbootd and retry.");
     } else if err_lower.contains("does not exist") || err_lower.contains("not found") {
-        println!("  Cause: Partition not present on this device.");
-        println!("  Fix  : This image may not be compatible with your device variant.");
+        eprintln!("  Cause: Partition not present on this device.");
+        eprintln!("  Fix  : This image may not be compatible with your device variant.");
     } else if err_lower.contains("permission denied") || err_lower.contains("not allowed") {
-        println!("  Cause: Bootloader is locked.");
-        println!("  Fix  : fastboot flashing unlock");
+        eprintln!("  Cause: Bootloader is locked.");
+        eprintln!("  Fix  : fastboot flashing unlock");
     } else if err_lower.contains("timeout") {
-        println!("  Cause: USB timeout.");
-        println!("  Fix  : Try a different cable or USB 3.0 port.");
+        eprintln!("  Cause: USB timeout.");
+        eprintln!("  Fix  : Try a different cable or USB 3.0 port.");
     } else {
-        println!("  Possible causes:");
-        println!("    • Faulty USB cable — try a different one");
-        println!("    • Bootloader is locked  →  fastboot flashing unlock");
-        println!("    • Corrupted image — re-download the firmware");
-        println!("    • Low battery during flash");
+        eprintln!("  Possible causes:");
+        eprintln!("    • Faulty USB cable — try a different one");
+        eprintln!("    • Bootloader is locked  →  fastboot flashing unlock");
+        eprintln!("    • Corrupted image — re-download the firmware");
+        eprintln!("    • Low battery during flash");
     }
 
     if is_crit {
-        println!();
-        println!("  ⚠  CRITICAL partition — do NOT reboot or unplug until resolved.");
+        eprintln!();
+        eprintln!("  ⚠  CRITICAL partition — do NOT reboot or unplug until resolved.");
     }
-    println!("{}", "━".repeat(60));
-    println!();
+    eprintln!("{}", "━".repeat(60));
+    eprintln!();
 }
 
 // ---------------------------------------------------------------------------
@@ -192,27 +205,27 @@ pub fn print_summary(session: &FlashSession) {
     let ok = session.succeeded().len();
     let failed_count = session.failed().len();
 
-    println!("\n── Flash session summary ───────────────────────────────");
-    println!("  Total      :  {}", total);
-    println!("  ✓ OK       :  {}", ok);
+    eprintln!("\n── Flash session summary ───────────────────────────────");
+    eprintln!("  Total      :  {}", total);
+    eprintln!("  ✓ OK       :  {}", ok);
     if failed_count > 0 {
-        println!("  ✗ Failed   :  {}", failed_count);
+        eprintln!("  ✗ Failed   :  {}", failed_count);
     }
 
     if !session.failed().is_empty() {
-        println!("\n  Failed partitions:");
+        eprintln!("\n  Failed partitions:");
         for r in session.failed() {
             let crit = if is_critical_partition(&r.partition) {
                 "  [CRITICAL]"
             } else {
                 ""
             };
-            println!("    ✗  {}_{}{}", r.partition, r.slot, crit);
-            println!("       {}", r.error);
+            eprintln!("    ✗  {}_{}{}", r.partition, r.slot, crit);
+            eprintln!("       {}", r.error);
         }
     }
 
-    println!();
+    eprintln!();
 
     if session.failed().is_empty() && !session.aborted {
         let elapsed_total: f64 = session.succeeded().iter().map(|r| r.duration_s).sum();
@@ -224,30 +237,39 @@ pub fn print_summary(session: &FlashSession) {
             format!("{}s", secs)
         };
 
-        println!("{}", "━".repeat(60));
-        println!("  ✓  Flash complete!");
-        println!("{}", "━".repeat(60));
-        println!("  Partitions flashed :  {}", ok);
-        println!("  Total flash time   :  {}", time_str);
-        println!("{}", "━".repeat(60));
-        println!();
+        eprintln!("{}", "━".repeat(60));
+        eprintln!("  ✓  Flash complete!");
+        eprintln!("{}", "━".repeat(60));
+        eprintln!("  Partitions flashed :  {}", ok);
+        eprintln!("  Total flash time   :  {}", time_str);
+        eprintln!("{}", "━".repeat(60));
+        eprintln!();
+        if !session.outside_group.is_empty() {
+            eprintln!(
+                "  ⚠  {} partition(s) were created outside their group.",
+                session.outside_group.len()
+            );
+            eprintln!("     Before each of the next two system updates, run");
+            eprintln!("     \"Repair updates (OTA)\" in lfff-gui, or the second may fail.");
+            eprintln!();
+        }
     } else if !session.critical_failed().is_empty() {
-        println!("{}", "━".repeat(60));
-        println!("  ✗  Critical failure");
-        println!("  One or more CRITICAL partitions failed to flash.");
-        println!("  The device may not boot.");
-        println!("  Do NOT reboot or unplug until resolved.");
-        println!("{}", "━".repeat(60));
+        eprintln!("{}", "━".repeat(60));
+        eprintln!("  ✗  Critical failure");
+        eprintln!("  One or more CRITICAL partitions failed to flash.");
+        eprintln!("  The device may not boot.");
+        eprintln!("  Do NOT reboot or unplug until resolved.");
+        eprintln!("{}", "━".repeat(60));
     } else if !session.failed().is_empty() {
-        println!("{}", "━".repeat(60));
-        println!("  ⚠  Flash completed with errors");
-        println!("  Non-critical partitions failed — device should still boot.");
-        println!("  Re-flash the failed partitions to complete the update.");
-        println!("{}", "━".repeat(60));
+        eprintln!("{}", "━".repeat(60));
+        eprintln!("  ⚠  Flash completed with errors");
+        eprintln!("  Non-critical partitions failed — device should still boot.");
+        eprintln!("  Re-flash the failed partitions to complete the update.");
+        eprintln!("{}", "━".repeat(60));
     } else if session.aborted {
-        println!("{}", "━".repeat(60));
-        println!("  ⚠  Flash was aborted");
-        println!("{}", "━".repeat(60));
+        eprintln!("{}", "━".repeat(60));
+        eprintln!("  ⚠  Flash was aborted");
+        eprintln!("{}", "━".repeat(60));
     }
 }
 
@@ -256,50 +278,35 @@ pub fn print_summary(session: &FlashSession) {
 pub fn offer_wipe_and_reboot(session: &FlashSession) {
     offer_wipe(session);
 
-    println!("\n  Rebooting to system ...");
-    let mut args: Vec<&str> = Vec::new();
-    if let Some(s) = session.serial.as_deref() {
-        args.push("-s");
-        args.push(s);
+    eprintln!("\n  Rebooting to system ...");
+    if let Err(e) = reboot(
+        session.serial.as_deref(),
+        Via::Fastboot,
+        RebootTarget::System,
+    ) {
+        eprintln!("  ✗ Reboot failed: {}", e.trim());
     }
-    args.push("reboot");
-    fastboot(&args, 30);
 }
 
 fn offer_wipe(session: &FlashSession) {
-    println!("── Format userdata ──────────────────────────────────────");
-    println!("  'fastboot -w' wipes ALL user data (contacts, apps, files).");
-    println!("  Recommended after a major version change or cross-region flash.");
-    println!();
-    println!("  ⚠  ALL DATA WILL BE PERMANENTLY ERASED.");
-    println!();
+    eprintln!("── Format userdata ──────────────────────────────────────");
+    eprintln!("  'fastboot -w' wipes ALL user data (contacts, apps, files).");
+    eprintln!("  Recommended after a major version change or cross-region flash.");
+    eprintln!();
+    eprintln!("  ⚠  ALL DATA WILL BE PERMANENTLY ERASED.");
+    eprintln!();
 
     let answer = prompt("  Wipe userdata now? (yes / no)", "no");
     if answer != "yes" {
-        println!("  Skipped. Wipe manually later: fastboot -w");
-        println!("────────────────────────────────────────────────────────\n");
+        eprintln!("  Skipped. Wipe manually later: fastboot -w");
+        eprintln!("────────────────────────────────────────────────────────\n");
         return;
     }
 
-    println!("  Wiping userdata ...");
-    let mut args: Vec<&str> = Vec::new();
-    if let Some(s) = session.serial.as_deref() {
-        args.push("-s");
-        args.push(s);
+    eprintln!("  Wiping userdata ...");
+    match wipe_userdata(session.serial.as_deref()) {
+        Ok(()) => eprintln!("  ✓ Userdata wiped successfully."),
+        Err(e) => eprintln!("  ✗ Wipe failed: {}", e.trim()),
     }
-    args.push("-w");
-    let r = fastboot(&args, 120);
-    if r.code == 0 {
-        println!("  ✓ Userdata wiped successfully.");
-    } else {
-        println!(
-            "  ✗ Wipe failed: {}",
-            if r.stderr.is_empty() {
-                &r.stdout
-            } else {
-                &r.stderr
-            }
-        );
-    }
-    println!("────────────────────────────────────────────────────────\n");
+    eprintln!("────────────────────────────────────────────────────────\n");
 }

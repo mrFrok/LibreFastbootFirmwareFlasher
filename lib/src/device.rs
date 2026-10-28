@@ -181,6 +181,69 @@ pub fn reboot_to_fastbootd(serial: Option<&str>) -> bool {
     true
 }
 
+/// The tool a reboot is sent through: adb for a booted phone or a recovery
+/// with adb, fastboot for the bootloader and fastbootd.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Via {
+    Adb,
+    Fastboot,
+}
+
+/// Where a reboot lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RebootTarget {
+    System,
+    Recovery,
+    Bootloader,
+    Fastbootd,
+}
+
+/// The arguments after `adb`/`fastboot [-s SERIAL]` for a reboot.
+fn reboot_args(via: Via, target: RebootTarget) -> &'static [&'static str] {
+    match (via, target) {
+        (_, RebootTarget::System) => &["reboot"],
+        (_, RebootTarget::Recovery) => &["reboot", "recovery"],
+        (Via::Adb, RebootTarget::Bootloader) => &["reboot", "bootloader"],
+        (Via::Fastboot, RebootTarget::Bootloader) => &["reboot-bootloader"],
+        (_, RebootTarget::Fastbootd) => &["reboot", "fastboot"],
+    }
+}
+
+/// Run `tool [-s serial] args…`. A serial that is not connected makes
+/// fastboot wait for it forever, so every call has a timeout.
+fn run_on(tool: &str, serial: Option<&str>, args: &[&str], timeout: u64) -> Result<(), String> {
+    let mut cmd = vec![tool];
+    if let Some(s) = serial {
+        cmd.extend(["-s", s]);
+    }
+    cmd.extend_from_slice(args);
+    let r = run_cmd(&cmd, timeout);
+    if r.code == 0 {
+        Ok(())
+    } else if r.stderr.is_empty() {
+        Err(r.stdout)
+    } else {
+        Err(r.stderr)
+    }
+}
+
+/// Send a reboot to the device `serial` (or the only one, when `None`).
+pub fn reboot(serial: Option<&str>, via: Via, target: RebootTarget) -> Result<(), String> {
+    let (tool, timeout) = match (via, target) {
+        (Via::Adb, _) => ("adb", 15),
+        // `fastboot reboot fastboot` waits until the phone is back in
+        // fastbootd, which takes a while; the other reboots return at once.
+        (Via::Fastboot, RebootTarget::Fastbootd) => ("fastboot", 90),
+        (Via::Fastboot, _) => ("fastboot", 10),
+    };
+    run_on(tool, serial, reboot_args(via, target), timeout)
+}
+
+/// `fastboot -w`: erase userdata (and metadata). Does not reboot.
+pub fn wipe_userdata(serial: Option<&str>) -> Result<(), String> {
+    run_on("fastboot", serial, &["-w"], 120)
+}
+
 /// Poll fastboot devices until one appears or timeout expires.
 pub fn wait_for_device(timeout: u64) -> Option<String> {
     let deadline = Instant::now() + Duration::from_secs(timeout);
@@ -722,5 +785,24 @@ mod tests {
         assert!(check_whole("xbl_config_b", msg.len() as u64, 1 << 20, msg).is_err());
         assert!(check_whole("boot_a", 0, 0, &[]).is_err());
         assert!(check_whole("boot_a", 4096, 4096, &[]).is_ok());
+    }
+
+    // fastboot spells "to the bootloader" differently from adb; everything
+    // else is the same words.
+    #[test]
+    fn reboot_args_follow_each_tool() {
+        assert_eq!(
+            reboot_args(Via::Fastboot, RebootTarget::Bootloader),
+            ["reboot-bootloader"]
+        );
+        assert_eq!(
+            reboot_args(Via::Adb, RebootTarget::Bootloader),
+            ["reboot", "bootloader"]
+        );
+        assert_eq!(
+            reboot_args(Via::Adb, RebootTarget::Fastbootd),
+            ["reboot", "fastboot"]
+        );
+        assert_eq!(reboot_args(Via::Fastboot, RebootTarget::System), ["reboot"]);
     }
 }

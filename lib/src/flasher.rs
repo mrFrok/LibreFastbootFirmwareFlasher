@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tracing::{info, warn};
 
@@ -211,6 +211,10 @@ pub struct FlashSession {
     pub aborted: bool,
     pub dry_run: bool,
     pub end_reason: Option<String>,
+    /// Dynamic partitions the phone did not have, created by fastbootd in
+    /// group `default`. The phone boots, but the next OTA may refuse them
+    /// until the OTA repair is run.
+    pub outside_group: Vec<String>,
 }
 
 impl FlashSession {
@@ -223,6 +227,7 @@ impl FlashSession {
             aborted: false,
             dry_run,
             end_reason: None,
+            outside_group: Vec::new(),
         }
     }
 
@@ -336,12 +341,14 @@ fn other_slot(slot: &str) -> &'static str {
 /// Make `slot` the active one. In fastbootd this does not reboot: fastbootd
 /// keeps running from the slot it booted, which is what lets the modem be
 /// written to the newly active one.
-pub fn set_active_slot(serial: Option<&str>, slot: &str) -> bool {
-    let (code, _, err) = fastboot_cmd_serial(serial, &["set_active", slot], 15);
-    if code != 0 {
-        warn!("fastboot set_active {} failed: {}", slot, err.trim());
+pub fn set_active_slot(serial: Option<&str>, slot: &str) -> Result<(), String> {
+    let (code, out, err) = fastboot_cmd_serial(serial, &["set_active", slot], 15);
+    if code == 0 {
+        return Ok(());
     }
-    code == 0
+    let why = if err.trim().is_empty() { out } else { err };
+    warn!("fastboot set_active {} failed: {}", slot, why.trim());
+    Err(why.trim().to_string())
 }
 
 /// Where the modem goes in a Snapdragon flash.
@@ -893,22 +900,42 @@ pub fn super_prep_plan(super_names: &[String], active_slot: &str) -> SuperPrep {
 }
 
 /// `fastboot getvar is-logical:<name>` answers on stderr, as every getvar.
-fn is_logical(base_args: &[String], name: &str) -> bool {
+/// `None` when there is no answer (timeout, USB error): that is not a "no",
+/// and taking it for one would recreate an existing partition in `default`.
+fn is_logical(base_args: &[String], name: &str) -> Option<bool> {
     let mut cmd = base_args.to_vec();
     cmd.push("getvar".into());
     cmd.push(format!("is-logical:{name}"));
     let refs: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
     let r = run_cmd(&refs, 15);
-    let out = format!("{}{}", r.stdout, r.stderr).to_lowercase();
-    r.code == 0 && out.contains(&format!("is-logical:{}: yes", name.to_lowercase()))
+    parse_is_logical(&format!("{}\n{}", r.stdout, r.stderr), name)
 }
 
+/// fastbootd answers a partition it does not have with an error,
+/// `getvar:is-logical:<name> FAILED (remote: 'Unknown partition')` — and
+/// fastboot still exits 0 for a failed getvar. Any `remote:` answer is the
+/// device's "no"; no answer at all (timeout, USB error) is `None`.
+fn parse_is_logical(output: &str, name: &str) -> Option<bool> {
+    let out = output.to_lowercase();
+    let key = format!("is-logical:{}:", name.to_lowercase());
+    if let Some(rest) = out.lines().find_map(|l| l.split_once(&key).map(|(_, v)| v)) {
+        return match rest.trim() {
+            "yes" => Some(true),
+            "no" => Some(false),
+            _ => None,
+        };
+    }
+    out.contains("remote:").then_some(false)
+}
+
+/// Returns the partitions it had to create outside their group (see
+/// [`FlashSession::outside_group`]).
 pub fn prepare_super_with_log(
     serial: Option<&str>,
     super_names: &[String],
     active_slot: &str,
     on_log: &dyn Fn(String),
-) {
+) -> Vec<String> {
     let mut base_args: Vec<String> = vec!["fastboot".into()];
     if let Some(s) = serial {
         base_args.push("-s".into());
@@ -938,26 +965,45 @@ pub fn prepare_super_with_log(
         }
     }
 
+    let mut outside_group = Vec::new();
     for name in &plan.shrink {
-        if is_logical(&base_args, name) {
+        let logical = is_logical(&base_args, name);
+        if logical == Some(true) {
             let r = run("resize-logical-partition", &[name, "0"]);
             if r.code != 0 {
                 warn!("resize-logical-partition {}: {}", name, r.stderr);
             }
-        } else {
-            // A partition this firmware adds. fastbootd can only put it in
-            // `default`; say so, since a later OTA may then refuse it.
+        } else if logical.is_none() {
+            // Not shrunk: flashing it may still fit, and if it does not,
+            // fastboot's own error says so.
             on_log(format!(
-                "WARNING: {name} does not exist on the device; creating it outside its partition group"
+                "WARNING: could not ask the device about {name}; leaving it as it is"
             ));
+        } else {
+            // Not on the phone: a partition this firmware adds, or the
+            // slot is empty (Virtual A/B after an update, or an older LFFF
+            // deleted it). fastbootd can only put it in `default`; one
+            // summary below rather than a warning per partition.
             let r = run("create-logical-partition", &[name, "0"]);
-            if r.code != 0 {
+            if r.code == 0 {
+                outside_group.push(name.clone());
+            } else {
                 warn!("create-logical-partition {}: {}", name, r.stderr);
             }
         }
     }
 
-    on_log("Super partitions prepared; groups and attributes kept".into());
+    if outside_group.is_empty() {
+        on_log("Super partitions prepared; groups and attributes kept".into());
+    } else {
+        on_log(format!(
+            "WARNING: {} partition(s) of slot {} were not on the phone and were created outside their partition group: {}. The phone boots normally; run the OTA repair before each of the next two system updates.",
+            outside_group.len(),
+            active_slot.to_uppercase(),
+            outside_group.join(", ")
+        ));
+    }
+    outside_group
 }
 
 // ---------------------------------------------------------------------------
@@ -1279,11 +1325,120 @@ pub struct FlashOptions {
     /// written to the new slot, so "don't flash" still means "keep what the
     /// phone has" (a rooted init_boot, a custom recovery) after the switch.
     pub keep_images: HashMap<String, PathBuf>,
-    /// An empty super layout (super_layout::SuperLayout::to_image) to install
-    /// with `fastboot wipe-super` before the dynamic partitions are flashed,
-    /// replacing whatever layout the device has. Experimental; `None` keeps
-    /// the device's layout and resizes in place.
-    pub super_layout: Option<Vec<u8>>,
+    /// With `modem_in_fastbootd`: when the slot switched to has none of
+    /// its dynamic partitions, rebuild super from the firmware's layout
+    /// (`fastboot wipe-super`) instead of letting fastbootd recreate them in
+    /// group `default`, which breaks the next OTAs. Needs the layout saved
+    /// at extraction ([`crate::extractor::PAYLOAD_METADATA_FILE`]); without
+    /// it, or whenever the rebuild cannot be done safely, the session says
+    /// why and keeps the layout as it is. The frontends pass true unless
+    /// the user turned it off.
+    pub rebuild_super: bool,
+}
+
+/// What a super rebuild installs: the empty layout, and the partitions the
+/// firmware lacks that get their stand-in image
+/// ([`crate::super_layout::STUB_IMAGES`]).
+#[derive(Debug, Clone)]
+pub struct SuperRebuild {
+    pub image: Vec<u8>,
+    pub stubs: Vec<String>,
+    /// Factory partitions the rebuild deletes ([`crate::super_layout::DROPPABLE`]).
+    pub dropped: Vec<String>,
+}
+
+/// Logical partitions `fastboot getvar all` lists as present, with slot
+/// suffix.
+fn logical_partitions(getvar_all: &str) -> Vec<String> {
+    getvar_all
+        .lines()
+        .filter_map(|l| l.split("is-logical:").nth(1))
+        .filter_map(|v| v.trim().strip_suffix(":yes"))
+        .map(str::to_string)
+        .collect()
+}
+
+/// The size of super from `fastboot getvar partition-size:super`, 0 when
+/// there is none. The key holds a colon itself, so not parse_fastboot_getvar.
+fn parse_super_size(out: &str) -> u64 {
+    out.lines()
+        .find_map(|l| l.split("partition-size:super:").nth(1))
+        .and_then(|v| u64::from_str_radix(v.trim().trim_start_matches("0x"), 16).ok())
+        .unwrap_or(0)
+}
+
+/// Whether and how to rebuild super before flashing `super_names` into
+/// `target_slot`, decided from `fastboot getvar all`, the size of super
+/// (0 when unknown) and the firmware's saved layout. `Err` is the reason
+/// not to — logged, and the session goes on with the layout the phone has,
+/// as before.
+pub fn super_rebuild_plan(
+    getvar_all: &str,
+    super_size: u64,
+    layout_json: Option<&str>,
+    super_names: &[String],
+    target_slot: &str,
+) -> Result<Option<SuperRebuild>, String> {
+    use crate::super_layout::{DROPPABLE, SuperLayout, stub_image};
+
+    let device = logical_partitions(getvar_all);
+    if device.is_empty() {
+        return Err("could not read the phone's partitions".into());
+    }
+    // Only an empty target slot needs it: fastbootd would recreate its
+    // partitions outside their group. A slot that has them is resized in
+    // place, groups kept.
+    if super_names
+        .iter()
+        .all(|n| device.contains(&format!("{n}_{target_slot}")))
+    {
+        return Ok(None);
+    }
+    let json = layout_json.ok_or(
+        "this firmware has no saved partition layout (unpack the .zip again with this version)",
+    )?;
+    if super_size == 0 {
+        return Err("could not read the size of super".into());
+    }
+    let size = super_size;
+
+    let plain = SuperLayout::from_payload_metadata(json, size)?;
+    let (stubs, others): (Vec<String>, Vec<String>) = plain
+        .missing_from(&device)
+        .into_iter()
+        .partition(|n| stub_image(n).is_some());
+    let (dropped, others): (Vec<String>, Vec<String>) = others
+        .into_iter()
+        .partition(|n| DROPPABLE.contains(&n.as_str()));
+    if !others.is_empty() {
+        return Err(format!(
+            "the phone has {} which this firmware does not contain, and wiping super would delete them",
+            others.join(", ")
+        ));
+    }
+    let layout = SuperLayout::from_payload_metadata_with_stubs(json, size, &stubs)?;
+    // Everything in the new layout must be flashed after wipe-super: a
+    // dynamic partition this session takes for an ordinary one goes out
+    // before it and would be wiped.
+    let suffix = format!("_{target_slot}");
+    let unknown: Vec<&str> = layout
+        .partitions
+        .iter()
+        .filter_map(|p| p.name.strip_suffix(&suffix))
+        .filter(|n| !is_super_partition(n) && stub_image(n).is_none())
+        .collect();
+    if !unknown.is_empty() {
+        return Err(format!(
+            "the firmware's layout has partitions LFFF does not flash as dynamic: {}",
+            unknown.join(", ")
+        ));
+    }
+    let image = layout.to_checked_image()?;
+    Ok(Some(SuperRebuild {
+        image,
+        stubs,
+        dropped,
+    }))
 }
 
 /// Outcome of flashing a batch of partitions.
@@ -1654,6 +1809,104 @@ pub fn run_flash_session_with_log(
         };
         on_log(format!("Active slot: {}", active_slot.to_uppercase()));
 
+        // Rebuild super? Decided before the switch, so that a layout which
+        // cannot be built stops nothing: the flash just keeps the phone's.
+        let rebuild: Option<SuperRebuild> = if modem_fastbootd && options.rebuild_super {
+            let super_names: Vec<String> = fastbootd_images
+                .keys()
+                .filter(|k| is_super_partition(k))
+                .map(|k| k.to_string())
+                .collect();
+            let target = other_slot(&active_slot);
+            let (_, out, err) = fastboot_cmd_serial(serial, &["getvar", "all"], 30);
+            // Asked on its own: OnePlus 15 leaves it out of `getvar all`, and
+            // for a second or two after coming from Android its fastbootd
+            // answers "Could not open partition" — so asked again a while.
+            let mut answer = String::new();
+            let mut super_size = 0;
+            for attempt in 0..10 {
+                if attempt > 0 {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+                let (_, so, se) =
+                    fastboot_cmd_serial(serial, &["getvar", "partition-size:super"], 10);
+                answer = format!("{so}\n{se}");
+                super_size = parse_super_size(&answer);
+                if super_size != 0 {
+                    break;
+                }
+            }
+            if super_size == 0 {
+                on_log(format!(
+                    "fastboot getvar partition-size:super answered: {}",
+                    answer.split_whitespace().collect::<Vec<_>>().join(" ")
+                ));
+            }
+            let json =
+                fs::read_to_string(firmware_dir.join(crate::extractor::PAYLOAD_METADATA_FILE)).ok();
+            match super_rebuild_plan(
+                &format!("{out}\n{err}"),
+                super_size,
+                json.as_deref(),
+                &super_names,
+                target,
+            ) {
+                Ok(Some(r)) => {
+                    on_log(format!(
+                        "Slot {} has no partitions: super will be rebuilt from the firmware's layout, every partition read-only in its group, as from the factory",
+                        target.to_uppercase()
+                    ));
+                    if !r.stubs.is_empty() {
+                        on_log(format!(
+                            "Not in the firmware, written as empty factory images: {}",
+                            r.stubs.join(", ")
+                        ));
+                    }
+                    if !r.dropped.is_empty() {
+                        on_log(format!(
+                            "Factory partitions nothing uses any more, not in the firmware, deleted: {}",
+                            r.dropped.join(", ")
+                        ));
+                    }
+                    Some(r)
+                }
+                Ok(None) => {
+                    on_log(format!(
+                        "Slot {} has its partitions: super is kept, resized in place",
+                        target.to_uppercase()
+                    ));
+                    None
+                }
+                Err(e) => {
+                    on_log(format!("Super is not rebuilt: {e}"));
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        // The stand-ins, as files fastboot can flash; kept until the end.
+        let stub_dir = tempfile::tempdir().ok();
+        let mut stub_files: Vec<(String, PathBuf)> = Vec::new();
+        if let (Some(r), Some(dir)) = (&rebuild, &stub_dir) {
+            for name in &r.stubs {
+                let path = dir.path().join(format!("{name}.img"));
+                let img = crate::super_layout::stub_image(name).unwrap_or_default();
+                if fs::write(&path, img).is_ok() {
+                    stub_files.push((name.clone(), path));
+                }
+            }
+        }
+        if rebuild
+            .as_ref()
+            .is_some_and(|r| r.stubs.len() != stub_files.len())
+        {
+            on_log("Could not write the stand-in images — nothing was flashed".into());
+            session.aborted = true;
+            session.end_reason = Some("StubWriteFailed".into());
+            return session;
+        }
+
         // Modem in fastbootd: fastbootd can only write the modem of the slot
         // it is not running from, so switch first; the modem and the system
         // then go to the newly active slot. Nothing is flashed yet if the
@@ -1664,9 +1917,9 @@ pub fn run_flash_session_with_log(
                 "Switching the active slot to {}...",
                 target.to_uppercase()
             ));
-            if !set_active_slot(serial, target) {
+            if let Err(e) = set_active_slot(serial, target) {
                 on_log(format!(
-                    "Could not switch to slot {} — nothing was flashed",
+                    "Could not switch to slot {} — nothing was flashed: {e}",
                     target.to_uppercase()
                 ));
                 session.aborted = true;
@@ -1698,7 +1951,11 @@ pub fn run_flash_session_with_log(
             .map(|(k, v)| (*k, *v))
             .collect();
 
-        let total_ops = non_super_imgs.len() * 2 + kept.len() + modem_imgs.len() + super_imgs.len();
+        let total_ops = non_super_imgs.len() * 2
+            + kept.len()
+            + modem_imgs.len()
+            + stub_files.len()
+            + super_imgs.len();
         let flash_start = std::time::Instant::now();
         let mut done_ops = 0usize;
 
@@ -1810,18 +2067,51 @@ pub fn run_flash_session_with_log(
 
         // Super → one slot: the active one, or the one just switched to
         if !super_imgs.is_empty() {
-            if let Some(layout) = &options.super_layout
-                && let Err(e) = wipe_super(serial, layout, on_log)
-            {
-                on_log(format!("Refusing to flash dynamic partitions: {e}"));
-                warn_switched_slot(switched.as_deref(), on_log);
-                session.aborted = true;
-                session.end_reason = Some("WipeSuperFailed".into());
-                return session;
+            if let Some(r) = &rebuild {
+                if let Err(e) = wipe_super(serial, &r.image, on_log) {
+                    on_log(format!("Refusing to flash dynamic partitions: {e}"));
+                    warn_switched_slot(switched.as_deref(), on_log);
+                    session.aborted = true;
+                    session.end_reason = Some("WipeSuperFailed".into());
+                    return session;
+                }
+                // Into the fresh layout, before the firmware's images.
+                let stubs: Vec<(&str, &PathBuf)> =
+                    stub_files.iter().map(|(n, p)| (n.as_str(), p)).collect();
+                if !stubs.is_empty() {
+                    match flash_batch_with_log(
+                        &stubs,
+                        &system_slot,
+                        serial,
+                        total_ops,
+                        &mut done_ops,
+                        &cancel,
+                        &mut session,
+                        on_log,
+                        on_progress,
+                        on_failure,
+                    ) {
+                        BatchOutcome::Done => {}
+                        BatchOutcome::Cancelled => {
+                            warn_switched_slot(switched.as_deref(), on_log);
+                            session.aborted = true;
+                            session.end_reason = Some("Cancelled".into());
+                            return session;
+                        }
+                        BatchOutcome::Aborted => {
+                            warn_switched_slot(switched.as_deref(), on_log);
+                            session.aborted = true;
+                            session.end_reason = Some("UserAborted".into());
+                            return session;
+                        }
+                    }
+                }
+            } else {
+                on_log("Preparing super partition...".into());
+                let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
+                session.outside_group =
+                    prepare_super_with_log(serial, &super_names, &system_slot, &|msg| on_log(msg));
             }
-            on_log("Preparing super partition...".into());
-            let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
-            prepare_super_with_log(serial, &super_names, &system_slot, &|msg| on_log(msg));
 
             let mut sorted_super: Vec<(&str, &PathBuf)> = super_imgs.into_iter().collect();
             sorted_super.sort_by_key(|(k, _)| *k);
@@ -1966,6 +2256,133 @@ mod tests {
         assert!(ota_repair_plan(&merging).is_err());
         let no_vab = GETVAR_A.replace("(bootloader) snapshot-update-status:none\n", "");
         assert!(ota_repair_plan(&no_vab).is_err());
+    }
+
+    const PAYLOAD: &str = include_str!("../testdata/rmx3709-payload-metadata.json");
+    const FIRMWARE_DYNAMIC: [&str; 15] = [
+        "system",
+        "system_ext",
+        "vendor",
+        "product",
+        "my_product",
+        "odm",
+        "my_engineering",
+        "vendor_dlkm",
+        "system_dlkm",
+        "my_stock",
+        "my_heytap",
+        "my_carrier",
+        "my_region",
+        "my_bigball",
+        "my_manifest",
+    ];
+
+    /// OnePlus 15 sized.
+    const SUPER: u64 = 0x3F9800000;
+
+    /// `fastboot getvar all` of a phone whose logical partitions are
+    /// `names`. No size of super in it, as on OnePlus 15.
+    fn getvar_all(names: &[String]) -> String {
+        let mut out = String::from("(bootloader) current-slot:a\n");
+        for n in names {
+            out.push_str(&format!("(bootloader) is-logical:{n}:yes\n"));
+        }
+        out
+    }
+
+    fn slot(names: &[&str], suffix: &str) -> Vec<String> {
+        names.iter().map(|n| format!("{n}{suffix}")).collect()
+    }
+
+    fn firmware() -> Vec<String> {
+        FIRMWARE_DYNAMIC.iter().map(|n| n.to_string()).collect()
+    }
+
+    // The phones seen so far: only `_a` partitions, plus the two factory
+    // ones the regional firmware leaves out. Rebuilt, with their stand-ins.
+    #[test]
+    fn an_empty_target_slot_is_rebuilt_with_stubs() {
+        let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
+        device.extend(slot(&["my_company", "my_preload"], "_a"));
+        let r = super_rebuild_plan(&getvar_all(&device), SUPER, Some(PAYLOAD), &firmware(), "b")
+            .unwrap()
+            .unwrap();
+        assert_eq!(r.stubs, ["my_company", "my_preload"]);
+        let parsed = crate::super_layout::parse_image(&r.image).unwrap();
+        assert!(parsed.partitions.iter().any(|p| p.name == "my_company_b"));
+    }
+
+    // OnePlus 15 from the factory with OxygenOS 16: the old OKI kernel's
+    // modules, which the firmware no longer has. Dropped, not a blocker.
+    #[test]
+    fn the_old_oki_modules_partition_is_dropped() {
+        let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
+        device.extend(slot(&["my_company", "my_preload", "system_dlkm_oki"], "_a"));
+        let r = super_rebuild_plan(&getvar_all(&device), SUPER, Some(PAYLOAD), &firmware(), "b")
+            .unwrap()
+            .unwrap();
+        assert_eq!(r.dropped, ["system_dlkm_oki"]);
+        let parsed = crate::super_layout::parse_image(&r.image).unwrap();
+        assert!(!parsed.partitions.iter().any(|p| p.name.contains("oki")));
+    }
+
+    #[test]
+    fn a_target_slot_with_its_partitions_is_left_alone() {
+        let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
+        device.extend(slot(&FIRMWARE_DYNAMIC, "_b"));
+        let r = super_rebuild_plan(&getvar_all(&device), SUPER, Some(PAYLOAD), &firmware(), "b");
+        assert!(r.unwrap().is_none());
+    }
+
+    #[test]
+    fn a_partition_without_a_stub_stops_the_rebuild() {
+        let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
+        device.push("odm_dlkm_a".into());
+        let err = super_rebuild_plan(&getvar_all(&device), SUPER, Some(PAYLOAD), &firmware(), "b")
+            .unwrap_err();
+        assert!(err.contains("odm_dlkm"), "{err}");
+    }
+
+    #[test]
+    fn no_saved_layout_or_no_answer_stops_the_rebuild() {
+        let device = slot(&FIRMWARE_DYNAMIC, "_a");
+        assert!(super_rebuild_plan(&getvar_all(&device), SUPER, None, &firmware(), "b").is_err());
+        assert!(super_rebuild_plan("", SUPER, Some(PAYLOAD), &firmware(), "b").is_err());
+        let err = super_rebuild_plan(&getvar_all(&device), 0, Some(PAYLOAD), &firmware(), "b")
+            .unwrap_err();
+        assert!(err.contains("size of super"), "{err}");
+    }
+
+    #[test]
+    fn super_size_is_read_from_its_own_getvar() {
+        assert_eq!(
+            parse_super_size("partition-size:super: 0x3F9800000\nFinished. Total time: 0.001s"),
+            SUPER
+        );
+        assert_eq!(
+            parse_super_size("(bootloader) partition-size:super:0x3F9800000"),
+            SUPER
+        );
+        assert_eq!(
+            parse_super_size("getvar:partition-size:super FAILED (remote: 'unknown')"),
+            0
+        );
+    }
+
+    // A getvar that got no answer must not read as "not logical": that
+    // would recreate an existing partition in `default`.
+    #[test]
+    fn is_logical_tells_no_from_no_answer() {
+        let yes = "is-logical:system_a: yes\nFinished. Total time: 0.001s\n";
+        assert_eq!(parse_is_logical(yes, "system_a"), Some(true));
+        let no = "is-logical:abl_a: no\n";
+        assert_eq!(parse_is_logical(no, "abl_a"), Some(false));
+        // A partition the firmware adds: fastboot exits 0 even so.
+        let unknown = "getvar:is-logical:my_new_a                         FAILED (remote: 'Unknown partition')\nFinished. Total time: 0.002s\n";
+        assert_eq!(parse_is_logical(unknown, "my_new_a"), Some(false));
+        let usb = "getvar:is-logical:system_a FAILED (Write to device failed (No such device))\n";
+        assert_eq!(parse_is_logical(usb, "system_a"), None);
+        assert_eq!(parse_is_logical("", "system_a"), None);
     }
 
     #[test]

@@ -4,7 +4,9 @@ use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use lfff_lib::downloader::{CancelToken, DownloadProgress, download_firmware_with_progress};
 
-pub fn run(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
+/// Only the saved file's path goes to stdout, for
+/// `lfff extract "$(lfff download URL)"`; everything else is stderr.
+pub fn run(url: &str, output: Option<&PathBuf>, connections: u32, md5: Option<&str>) -> i32 {
     let piped;
     let url = if url == "-" {
         let mut line = String::new();
@@ -17,7 +19,7 @@ pub fn run(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
     } else {
         url
     };
-    println!(
+    eprintln!(
         "\n{}",
         "── Firmware download ────────────────────────────────────".dimmed()
     );
@@ -72,19 +74,53 @@ pub fn run(url: &str, output: Option<&PathBuf>, connections: u32) -> i32 {
         return 1;
     }
 
-    println!("\n{} {}", "✓".green().bold(), "Download complete.".green());
-    if let Some(ref path) = result.output_path {
-        println!("  {} {}", "Saved to:".dimmed(), path.display());
-        println!("\n  {}", "Next step:".dimmed());
-        println!(
-            "    {} {}",
-            "lfff extract".cyan(),
-            format!("\"{}\"", path.display()).cyan()
+    let Some(path) = result.output_path else {
+        eprintln!(
+            "\n{} {}",
+            "✗".red().bold(),
+            "Download reported success, but the file is not there.".red()
         );
+        return 1;
+    };
+
+    if let Some(want) = md5 {
+        eprintln!("  {}", "Checking MD5...".dimmed());
+        match lfff_lib::utils::verify_md5(&path, want) {
+            Ok(true) => {}
+            Ok(false) => {
+                eprintln!(
+                    "\n{} {}",
+                    "✗".red().bold(),
+                    format!(
+                        "MD5 mismatch: {} is damaged. Delete it and download again.",
+                        path.display()
+                    )
+                    .red()
+                );
+                return 1;
+            }
+            Err(e) => {
+                eprintln!(
+                    "\n{} {}",
+                    "✗".red().bold(),
+                    format!("Could not check the MD5: {e:#}").red()
+                );
+                return 1;
+            }
+        }
     }
-    println!(
+
+    eprintln!("\n{} {}", "✓".green().bold(), "Download complete.".green());
+    eprintln!("\n  {}", "Next step:".dimmed());
+    eprintln!(
+        "    {} {}",
+        "lfff extract".cyan(),
+        format!("\"{}\"", path.display()).cyan()
+    );
+    eprintln!(
         "{}",
         "────────────────────────────────────────────────────────".dimmed()
     );
+    println!("{}", path.display());
     0
 }

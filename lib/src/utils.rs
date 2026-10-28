@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use md5::Md5;
 use sha2::{Digest, Sha256};
 use tracing::{error, info, warn};
 
@@ -278,11 +279,11 @@ pub fn adb(args: &[&str], timeout_secs: u64) -> CmdResult {
 // Integrity
 // ---------------------------------------------------------------------------
 
-/// Compute SHA-256 hex digest of a file.
-pub fn compute_sha256(file_path: &Path) -> Result<String> {
+/// Hex digest of a file with any RustCrypto hash.
+fn compute_digest<D: Digest>(file_path: &Path) -> Result<String> {
     let mut file = std::fs::File::open(file_path)
         .with_context(|| format!("Cannot open file: {}", file_path.display()))?;
-    let mut hasher = Sha256::new();
+    let mut hasher = D::new();
     let mut buf = [0u8; 8192];
     loop {
         let n = file
@@ -303,23 +304,45 @@ pub fn compute_sha256(file_path: &Path) -> Result<String> {
     Ok(hex)
 }
 
+/// Compute SHA-256 hex digest of a file.
+pub fn compute_sha256(file_path: &Path) -> Result<String> {
+    compute_digest::<Sha256>(file_path)
+}
+
+/// Compute MD5 hex digest of a file — what the OTA servers publish.
+pub fn compute_md5(file_path: &Path) -> Result<String> {
+    compute_digest::<Md5>(file_path)
+}
+
+/// Compare a computed digest with one a person or a server gave: hex is
+/// hex in either case, and a pasted hash often carries spaces.
+fn verify_digest(file_path: &Path, actual: &str, expected: &str, algo: &str) -> bool {
+    if actual.eq_ignore_ascii_case(expected.trim()) {
+        info!("Checksum OK ({}): {}", algo, actual);
+        return true;
+    }
+    error!(
+        "Checksum mismatch for {}: expected {}, got {}",
+        file_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown"),
+        expected,
+        actual
+    );
+    false
+}
+
 /// Return true if file digest matches expected.
 pub fn verify_sha256(file_path: &Path, expected: &str) -> Result<bool> {
     let actual = compute_sha256(file_path)?;
-    if actual != expected {
-        error!(
-            "Checksum mismatch for {}: expected {}, got {}",
-            file_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown"),
-            expected,
-            actual
-        );
-        return Ok(false);
-    }
-    info!("Checksum OK (sha256): {}", actual);
-    Ok(true)
+    Ok(verify_digest(file_path, &actual, expected, "sha256"))
+}
+
+/// Return true if the file's MD5 matches expected.
+pub fn verify_md5(file_path: &Path, expected: &str) -> Result<bool> {
+    let actual = compute_md5(file_path)?;
+    Ok(verify_digest(file_path, &actual, expected, "md5"))
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +410,23 @@ mod tests {
         let r = check_tools(&["echo", "__missing__"]);
         assert_eq!(r.get("echo"), Some(&true));
         assert_eq!(r.get("__missing__"), Some(&false));
+    }
+
+    #[test]
+    fn test_md5_and_case() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("test.txt");
+        std::fs::write(&f, b"hello world").unwrap();
+        assert_eq!(compute_md5(&f).unwrap(), "5eb63bbbe01eeed093cb22bb8f5acdc3");
+        assert!(verify_md5(&f, " 5EB63BBBE01EEED093CB22BB8F5ACDC3\n").unwrap());
+        assert!(!verify_md5(&f, "00000000000000000000000000000000").unwrap());
+        assert!(
+            verify_sha256(
+                &f,
+                "B94D27B9934D3E08A52E52D7DA7DABFAC484EFE37A5380EE9088F7ACE2EFCDE9"
+            )
+            .unwrap()
+        );
     }
 
     #[test]

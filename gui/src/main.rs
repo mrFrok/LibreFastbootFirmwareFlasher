@@ -232,6 +232,8 @@ enum Cmd {
     InstallDeps,
     Download {
         url: String,
+        /// The archive's MD5 from the update server, checked once it is down.
+        md5: Option<String>,
     },
     Extract {
         path: String,
@@ -430,7 +432,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_classic_ui(config.classic_ui);
     ui.set_show_notice(!config.notice_accepted);
     ui.set_sound(config.sound);
-    ui.set_rebuild_super(config.rebuild_super);
+    ui.set_rebuild_super(config.auto_rebuild_super);
     ui.set_modem_bootloader(config.modem_bootloader);
     ui.set_delete_picked_zip(config.delete_picked_zip);
     ui_callbacks::apply_pins(&ui, &config.pinned_tools);

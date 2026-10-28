@@ -7,3 +7,5 @@ pub mod extract;
 pub mod find_ota;
 pub mod flash;
 pub mod flash_partition;
+pub mod reboot;
+pub mod set_slot;

@@ -133,6 +133,9 @@ lfff find-ota CPH2747 --latest | lfff download -   # Download the newest
 lfff download https://.../firmware.zip     # Download OTA
 lfff extract firmware.zip                  # Extract OTA
 lfff flash ./firmwares/RMX3709             # Flash full firmware
+
+# Each step prints only its result on stdout, so they chain:
+lfff extract "$(lfff find-ota CPH2747 --latest | lfff download -)"
 lfff flash --source /out/target/product/   # Flash from source build
 ```
 
@@ -155,13 +158,21 @@ export LFFF_PAYLOAD_DUMPER=/path/to/payload_dumper
 | `flash-partition` | Flash a single partition | `lfff flash-partition boot --firmware-dir ./fw` |
 | `extract <zip>` | Extract OTA via payload_dumper | `lfff extract fw.zip -o ./out` |
 | `find-ota <model>` | Official builds from the OPPO / OnePlus / realme servers | `lfff find-ota CPH2747 -r EU --changes` |
-| `download <url>` | Multi-connection OTA download; `-` reads the link from stdin | `lfff download <url> -c 8` |
+| `download <url>` | Multi-connection OTA download; `-` reads the link from stdin; `--md5` checks the archive | `lfff download <url> -c 8` |
 | `devices` | List fastboot/adb devices | `lfff devices --check` |
+| `reboot [to]` | Reboot to system, recovery, bootloader or fastbootd | `lfff reboot bootloader` |
+| `set-slot <a\|b>` | Make a slot the active one (fastboot/fastbootd) | `lfff set-slot b` |
 | `arb` | Compare ARB: firmware vs device (`--device` reads the phone over adb, needs root) | `lfff arb --device --firmware-dir ./fw` |
 | `deps [tool..]` | Install missing dependencies | `lfff deps` / `lfff deps --check` |
 | `completion <shell>` | Emit a shell completion script | `lfff completion zsh` |
 
 Full flag reference: `lfff <command> --help`.
+
+stdout carries only a command's result — a link, a path, `MODE<TAB>SERIAL`
+lines from `devices` — and everything else (progress, reports, prompts,
+errors) goes to stderr. Exit codes: `0` success, `1` failure, `2` usage
+error. `flash` asks for confirmation and needs a terminal; without one only
+`--dry-run --method …` runs.
 
 **Shell completions** — the script goes to stdout, so install it wherever your
 shell looks for one. Supported: bash, zsh, fish, powershell, elvish, nushell.
@@ -179,10 +190,12 @@ lfff completion fish > ~/.config/fish/completions/lfff.fish
   set_active → the other slot
   Non-super partitions  →  slot A  +  slot B
   modem                 →  new active slot
-  Super/dynamic parts   →  new active slot (super wiped first)
+  Super/dynamic parts   →  new active slot (super rebuilt first if that slot is empty)
       ↓
 [Offer: reboot to system  /  wipe data + reboot]
 ```
+
+If the new slot has no partitions (usual on Virtual A/B), super is rebuilt from the firmware's layout with `fastboot wipe-super` — groups and read-only partitions as from the factory — so system updates keep working; `my_company` and `my_preload`, which some firmware leaves out, get empty factory images. Turn it off with `--no-rebuild-super` (GUI: Settings → Super partition).
 
 The old slot keeps its old modem. A flash with a modem but no system images is refused rather than sent to the bootloader. Partitions you choose not to flash (e.g. a rooted `init_boot`) are copied from the phone's active slot over adb as root before the switch and written to the new slot; if they cannot be copied, nothing is flashed.
 
@@ -244,7 +257,7 @@ LibreFastbootFirmwareFlasher/
 │       ├── file_ops.rs
 │       ├── flash_history.rs
 │       ├── flasher.rs       # the install, OTA repair
-│       ├── super_layout.rs  # rebuilding super (experimental)
+│       ├── super_layout.rs  # rebuilding super from the firmware's layout
 │       └── utils.rs
 ├── ota/                     # lfff-ota: the OPPO / OnePlus / realme update servers
 │   └── src/

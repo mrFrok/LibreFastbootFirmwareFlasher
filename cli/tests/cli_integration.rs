@@ -239,3 +239,56 @@ fn cli_completion_rejects_unknown_shell() {
     let mut cmd = Command::cargo_bin("lfff").unwrap();
     cmd.args(["completion", "tcsh"]).assert().failure();
 }
+
+// stdout carries only results, so `$(lfff …)` never captures an error.
+// Usage errors exit 2, as clap's own do.
+
+fn run(args: &[&str]) -> std::process::Output {
+    Command::cargo_bin("lfff")
+        .unwrap()
+        .args(args)
+        .write_stdin("")
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn usage_errors_exit_2_with_nothing_on_stdout() {
+    for args in [
+        &["arb"][..],
+        &["flash"],
+        &["flash-partition"],
+        &["set-slot", "c"],
+        &["reboot", "nowhere"],
+        &["find-ota", "RMX3706", "--channel", "AB"],
+    ] {
+        let out = run(args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        assert!(out.stdout.is_empty(), "{args:?} wrote to stdout");
+    }
+}
+
+#[test]
+fn errors_go_to_stderr() {
+    let out = run(&["extract", "/nonexistent/firmware.zip"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(out.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("File not found"));
+}
+
+#[test]
+fn flash_without_a_terminal_refuses_instead_of_asking() {
+    let dir = std::env::temp_dir().join(format!("lfff-flash-tty-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("boot.img"), b"not really").unwrap();
+    let path = dir.to_string_lossy().to_string();
+
+    // No --method and nobody to ask: exit 2, never a prompt loop.
+    let out = run(&["flash", &path, "--dry-run"]);
+    std::fs::remove_dir_all(&dir).ok();
+    if String::from_utf8_lossy(&out.stderr).contains("fastboot is required") {
+        return; // no fastboot on this machine: the check before ours stops it
+    }
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty());
+}

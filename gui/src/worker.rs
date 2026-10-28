@@ -5,6 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use lfff_lib::arb::ArbVerdict;
+use lfff_lib::device::{RebootTarget, Via};
 
 use super::{Cmd, FlashMethod, LogLevel, WMsg};
 use crate::device_poll::{self, DeviceSnapshot};
@@ -429,64 +430,6 @@ fn preflight(tx: &mpsc::Sender<WMsg>, serial: Option<&str>) -> Result<(), String
     Ok(())
 }
 
-/// Beside the unpacked images: the payload's metadata, as payload_dumper
-/// exports it.
-const PAYLOAD_METADATA_FILE: &str = ".lfff-payload-metadata.json";
-
-/// The empty super layout for the firmware in `dir` and the phone's super,
-/// when the user turned the rebuild on. Err stops the install: it was asked
-/// for, so going on without it would be a surprise.
-fn super_layout_for(dir: &Path, serial: Option<&str>) -> Result<Option<Vec<u8>>, String> {
-    if !crate::config::load_config().rebuild_super {
-        return Ok(None);
-    }
-    let json = std::fs::read_to_string(dir.join(PAYLOAD_METADATA_FILE)).map_err(|_| {
-        "This firmware has no partition layout to rebuild super from (not a payload firmware, or unpacked by an older version). Turn off “Rebuild super” in Settings, or choose the .zip again.".to_string()
-    })?;
-    let mut args = vec!["fastboot"];
-    if let Some(s) = serial {
-        args.extend(["-s", s]);
-    }
-    args.extend(["getvar", "partition-size:super"]);
-    let r = lfff_lib::utils::run_cmd(&args, 10);
-    let out = format!("{}{}", r.stdout, r.stderr);
-    let size = out
-        .lines()
-        .find_map(|l| l.split("partition-size:super:").nth(1))
-        .map(str::trim)
-        .and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-        .ok_or("Could not read the size of super from the phone")?;
-    let layout = lfff_lib::super_layout::SuperLayout::from_payload_metadata(&json, size)?;
-
-    // Refuse rather than delete partitions the firmware cannot put back.
-    let mut args = vec!["fastboot"];
-    if let Some(s) = serial {
-        args.extend(["-s", s]);
-    }
-    args.extend(["getvar", "all"]);
-    let r = lfff_lib::utils::run_cmd(&args, 30);
-    let device: Vec<String> = format!("{}{}", r.stdout, r.stderr)
-        .lines()
-        .filter_map(|l| l.split("is-logical:").nth(1))
-        .filter_map(|v| {
-            v.strip_suffix(":yes")
-                .or_else(|| v.trim().strip_suffix(":yes"))
-        })
-        .map(str::to_string)
-        .collect();
-    if device.is_empty() {
-        return Err("Could not read the phone's partitions to check the rebuild".into());
-    }
-    let missing = layout.missing_from(&device);
-    if !missing.is_empty() {
-        return Err(format!(
-            "Rebuilding super would delete partitions this firmware does not contain: {}. Turn off “Rebuild super” in Settings, or use a firmware that has them.",
-            missing.join(", ")
-        ));
-    }
-    layout.to_checked_image().map(Some)
-}
-
 /// Set to stop the firmware being unpacked; cleared when the next starts.
 static UNPACK_CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -722,19 +665,6 @@ fn prepare_firmware(path: &str, downloaded: bool, tx: &mpsc::Sender<WMsg>) {
     let devices = if is_zip {
         let d = lfff_lib::extractor::firmware_devices(src);
         std::fs::write(&devices_file, d.join("\n")).ok();
-        // The partition layout the firmware describes, for the experimental
-        // super rebuild; only payload firmware has one.
-        match lfff_lib::extractor::payload_metadata(src) {
-            Ok(json) => {
-                std::fs::write(dir.join(PAYLOAD_METADATA_FILE), json).ok();
-            }
-            Err(e) => log(
-                tx,
-                LogLevel::Info,
-                2,
-                format!("No partition layout in the firmware: {e}"),
-            ),
-        }
         d
     } else {
         std::fs::read_to_string(&devices_file)
@@ -785,7 +715,7 @@ fn prepare_firmware(path: &str, downloaded: bool, tx: &mpsc::Sender<WMsg>) {
         has_preloader: images.keys().any(|k| lfff_lib::flasher::is_preloader(k)),
         cached,
         devices,
-        super_plan: std::fs::read_to_string(dir.join(PAYLOAD_METADATA_FILE))
+        super_plan: std::fs::read_to_string(dir.join(lfff_lib::extractor::PAYLOAD_METADATA_FILE))
             .ok()
             .and_then(|j| lfff_lib::super_layout::SuperLayout::plan_from_payload_metadata(&j).ok())
             .unwrap_or_default(),
@@ -986,6 +916,13 @@ fn do_flash(
         )
     } else if session.aborted {
         "Flash aborted by user".into()
+    } else if !session.outside_group.is_empty() {
+        format!(
+            "Done! {}/{} OK\n\nBefore each of the next two system updates, run \"Repair updates (OTA)\": {} partition(s) of the new slot were created outside their group, and the second update may fail otherwise.",
+            total,
+            total,
+            session.outside_group.len()
+        )
     } else {
         format!("Done! {}/{} OK", total, total)
     };
@@ -1020,8 +957,6 @@ pub fn worker(
     busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
     current_device: std::sync::Arc<std::sync::Mutex<Option<DeviceSnapshot>>>,
 ) {
-    let mut serial: Option<String> = None;
-    let mut current_device_product = String::new();
     let mut current_source: Option<lfff_lib::flasher::FirmwareSource> = None;
     let dl_cancel_token: std::sync::Arc<
         std::sync::Mutex<Option<lfff_lib::downloader::CancelToken>>,
@@ -1031,12 +966,15 @@ pub fn worker(
         // The poller's reading is the freshest device the worker can know of
         // between commands; within one, the worker tracks it itself (a reboot
         // can change the serial it must use).
-        if let Some(d) = current_device.lock().unwrap().clone() {
-            serial = Some(d.serial);
-            current_device_product = d.product;
-        }
         busy.store(true, std::sync::atomic::Ordering::Relaxed);
         let _idle = Idle(&busy);
+        device_poll::wait_for_poll();
+        // A phone the poller saw leave is gone for the worker too; keeping
+        // its serial would send the next command to nothing.
+        let (mut serial, current_device_product) = match current_device.lock().unwrap().clone() {
+            Some(d) => (Some(d.serial), d.product),
+            None => (None, String::new()),
+        };
         match cmd {
             Cmd::CheckDevice => {
                 log(&tx, LogLevel::Info, 0, "Searching for device...");
@@ -1055,8 +993,6 @@ pub fn worker(
                 *current_device.lock().unwrap() = snap.clone();
                 match snap {
                     Some(d) => {
-                        serial = Some(d.serial.clone());
-                        current_device_product = d.product.clone();
                         let mut info = format!("Device: {} ({}) | {:?}", d.name, d.product, d.mode);
                         if d.battery >= 0 {
                             info.push_str(&format!(" | Battery: {}%", d.battery));
@@ -1078,8 +1014,6 @@ pub fn worker(
                             "No device found via ADB or fastboot",
                         );
                         tx.send(WMsg::DeviceDisconnected).ok();
-                        serial = None;
-                        current_device_product.clear();
                     }
                 }
             }
@@ -1092,14 +1026,13 @@ pub fn worker(
                         // until fastbootd is actually up — polling right away
                         // is safe and detects the device as soon as it boots.
                         log(&tx, LogLevel::Info, 2, "Rebooting to fastbootd via ADB...");
-                        let mut args: Vec<&str> = Vec::new();
-                        let ser_s;
-                        if let Some(s) = &serial {
-                            ser_s = s.clone();
-                            args.extend(["-s", ser_s.as_str()]);
+                        if let Err(e) = lfff_lib::device::reboot(
+                            serial.as_deref(),
+                            Via::Adb,
+                            RebootTarget::Fastbootd,
+                        ) {
+                            log(&tx, LogLevel::Warn, 2, format!("Reboot: {}", e.trim()));
                         }
-                        args.extend(["reboot", "fastboot"]);
-                        let _ = std::process::Command::new("adb").args(&args).status();
                         wait_for_flash_fastbootd(&tx, 2, serial.as_deref(), 90)
                     }
                     2 => {
@@ -1113,14 +1046,13 @@ pub fn worker(
                             2,
                             "Rebooting to fastbootd via fastboot...",
                         );
-                        let mut args: Vec<&str> = Vec::new();
-                        let ser_s;
-                        if let Some(s) = &serial {
-                            ser_s = s.clone();
-                            args.extend(["-s", ser_s.as_str()]);
+                        if let Err(e) = lfff_lib::device::reboot(
+                            serial.as_deref(),
+                            Via::Fastboot,
+                            RebootTarget::Fastbootd,
+                        ) {
+                            log(&tx, LogLevel::Warn, 2, format!("Reboot: {}", e.trim()));
                         }
-                        args.extend(["reboot", "fastboot"]);
-                        let _ = std::process::Command::new("fastboot").args(&args).status();
                         wait_for_flash_fastbootd(&tx, 2, serial.as_deref(), 90)
                     }
                     3 => {
@@ -1332,14 +1264,13 @@ pub fn worker(
                         // `fastboot devices` once the bootloader is up —
                         // start polling immediately, no fixed sleep needed.
                         log(&tx, LogLevel::Info, 3, "Rebooting to bootloader via ADB...");
-                        let mut args: Vec<&str> = Vec::new();
-                        let ser_s;
-                        if let Some(s) = &serial {
-                            ser_s = s.clone();
-                            args.extend(["-s", ser_s.as_str()]);
+                        if let Err(e) = lfff_lib::device::reboot(
+                            serial.as_deref(),
+                            Via::Adb,
+                            RebootTarget::Bootloader,
+                        ) {
+                            log(&tx, LogLevel::Warn, 3, format!("Reboot: {}", e.trim()));
                         }
-                        args.extend(["reboot", "bootloader"]);
-                        let _ = std::process::Command::new("adb").args(&args).status();
                         wait_for_fastboot(&tx, 3, 90, serial.as_deref())
                     }
                     2 => {
@@ -1352,14 +1283,13 @@ pub fn worker(
                             3,
                             "Rebooting to bootloader via fastboot...",
                         );
-                        let mut args: Vec<&str> = Vec::new();
-                        let ser_s;
-                        if let Some(s) = &serial {
-                            ser_s = s.clone();
-                            args.extend(["-s", ser_s.as_str()]);
+                        if let Err(e) = lfff_lib::device::reboot(
+                            serial.as_deref(),
+                            Via::Fastboot,
+                            RebootTarget::Bootloader,
+                        ) {
+                            log(&tx, LogLevel::Warn, 3, format!("Reboot: {}", e.trim()));
                         }
-                        args.push("reboot-bootloader");
-                        let _ = std::process::Command::new("fastboot").args(&args).status();
                         lfff_lib::flasher::wait_for_device_gone(serial.as_deref(), 5);
                         wait_for_fastboot(&tx, 3, 90, serial.as_deref())
                     }
@@ -1484,63 +1414,58 @@ pub fn worker(
 
             Cmd::PostFlashReboot => {
                 log(&tx, LogLevel::Info, 2, "Rebooting to system...");
-                let mut args = vec!["fastboot"];
-                let ser_s;
-                if let Some(s) = &serial {
-                    ser_s = s.clone();
-                    args.extend(&["-s", &ser_s]);
-                }
-                args.push("reboot");
-                match std::process::Command::new(args[0])
-                    .args(&args[1..])
-                    .status()
-                {
-                    Ok(s) if s.success() => log(&tx, LogLevel::Success, 2, "Reboot initiated"),
-                    _ => log(&tx, LogLevel::Error, 2, "Failed to reboot"),
+                match lfff_lib::device::reboot(
+                    serial.as_deref(),
+                    Via::Fastboot,
+                    RebootTarget::System,
+                ) {
+                    Ok(()) => log(&tx, LogLevel::Success, 2, "Reboot initiated"),
+                    Err(e) => log(
+                        &tx,
+                        LogLevel::Error,
+                        2,
+                        format!("Failed to reboot: {}", e.trim()),
+                    ),
                 }
             }
 
             Cmd::PostFlashWipe => {
                 log(&tx, LogLevel::Warn, 2, "Wiping data (fastboot -w)...");
-                let mut args = vec!["fastboot"];
-                let ser_s;
-                if let Some(s) = &serial {
-                    ser_s = s.clone();
-                    args.extend(&["-s", &ser_s]);
-                }
-                args.push("-w");
-                match std::process::Command::new(args[0])
-                    .args(&args[1..])
-                    .status()
-                {
-                    Ok(s) if s.success() => {
+                match lfff_lib::device::wipe_userdata(serial.as_deref()) {
+                    Ok(()) => {
                         log(&tx, LogLevel::Success, 2, "Wipe done, rebooting...");
-                        let mut args2 = vec!["fastboot"];
-                        let ser_s2;
-                        if let Some(s) = &serial {
-                            ser_s2 = s.clone();
-                            args2.extend(&["-s", &ser_s2]);
+                        if let Err(e) = lfff_lib::device::reboot(
+                            serial.as_deref(),
+                            Via::Fastboot,
+                            RebootTarget::System,
+                        ) {
+                            log(
+                                &tx,
+                                LogLevel::Error,
+                                2,
+                                format!("Failed to reboot: {}", e.trim()),
+                            );
                         }
-                        args2.push("reboot");
-                        std::process::Command::new(args2[0])
-                            .args(&args2[1..])
-                            .status()
-                            .ok();
                     }
-                    _ => log(&tx, LogLevel::Error, 2, "Wipe failed"),
+                    Err(e) => log(
+                        &tx,
+                        LogLevel::Error,
+                        2,
+                        format!("Wipe failed: {}", e.trim()),
+                    ),
                 }
             }
 
             Cmd::RebootTo(target) => {
-                let (cmd, args): (&str, &[&str]) = match target.as_str() {
-                    "adb-recovery" | "recovery" => ("adb", &["reboot", "recovery"]),
-                    "adb-bootloader" | "bootloader" => ("adb", &["reboot", "bootloader"]),
-                    "adb-fastboot" | "fastboot" => ("adb", &["reboot", "fastboot"]),
-                    "adb-reboot" | "reboot" => ("adb", &["reboot"]),
-                    "fb-recovery" => ("fastboot", &["reboot", "recovery"]),
-                    "fb-bootloader" => ("fastboot", &["reboot-bootloader"]),
-                    "fb-fastboot" => ("fastboot", &["reboot", "fastboot"]),
-                    "fb-reboot" => ("fastboot", &["reboot"]),
+                let (via, to) = match target.as_str() {
+                    "adb-recovery" | "recovery" => (Via::Adb, RebootTarget::Recovery),
+                    "adb-bootloader" | "bootloader" => (Via::Adb, RebootTarget::Bootloader),
+                    "adb-fastboot" | "fastboot" => (Via::Adb, RebootTarget::Fastbootd),
+                    "adb-reboot" | "reboot" => (Via::Adb, RebootTarget::System),
+                    "fb-recovery" => (Via::Fastboot, RebootTarget::Recovery),
+                    "fb-bootloader" => (Via::Fastboot, RebootTarget::Bootloader),
+                    "fb-fastboot" => (Via::Fastboot, RebootTarget::Fastbootd),
+                    "fb-reboot" => (Via::Fastboot, RebootTarget::System),
                     _ => {
                         log(&tx, LogLevel::Error, 0, "Unknown reboot target");
                         continue;
@@ -1552,113 +1477,66 @@ pub fn worker(
                     0,
                     format!("Rebooting to {}...", target),
                 );
-                let is_fastboot_cmd = cmd == "fastboot";
-                let mut child = std::process::Command::new(cmd)
-                    .args(args)
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .spawn();
-                let success = match child {
-                    Ok(ref mut c) => {
-                        let timeout = if is_fastboot_cmd { 5 } else { 15 };
-                        let deadline =
-                            std::time::Instant::now() + std::time::Duration::from_secs(timeout);
-                        loop {
-                            if let Ok(Some(status)) = c.try_wait() {
-                                break status.success();
-                            }
-                            if std::time::Instant::now() >= deadline {
-                                let _ = c.kill();
-                                break false;
-                            }
-                            std::thread::sleep(std::time::Duration::from_millis(200));
-                        }
-                    }
-                    Err(_) => false,
-                };
-                if success {
-                    log(
+                // The serial goes along: with two phones connected, fastboot
+                // without one would reboot whichever it finds first.
+                match lfff_lib::device::reboot(serial.as_deref(), via, to) {
+                    Ok(()) => log(
                         &tx,
                         LogLevel::Success,
                         0,
                         format!("Reboot to {} initiated", target),
-                    );
-                } else if is_fastboot_cmd {
-                    log(
+                    ),
+                    Err(_) if via == Via::Fastboot => log(
                         &tx,
                         LogLevel::Error,
                         0,
                         "Device not in fastboot mode — use ADB reboot buttons instead",
-                    );
-                } else {
-                    log(
+                    ),
+                    Err(e) => log(
                         &tx,
                         LogLevel::Error,
                         0,
-                        format!("Failed to reboot to {}", target),
-                    );
+                        format!("Failed to reboot to {}: {}", target, e.trim()),
+                    ),
                 }
             }
 
             Cmd::SetActiveSlot { slot } => {
-                if let Some(ref ser) = serial {
-                    // Check if device is in fastboot (bootloader) mode, not fastbootd
-                    let check = std::process::Command::new("fastboot")
-                        .args(["-s", ser, "getvar", "product"])
-                        .output();
-
-                    match check {
-                        Ok(o) if o.status.success() => {
-                            // Device is in fastboot mode, proceed with slot switch
-                            log(
-                                &tx,
-                                LogLevel::Info,
-                                0,
-                                format!("Setting active slot to {}...", slot.to_uppercase()),
-                            );
-                            let args = vec!["-s", ser, "set_active", &slot];
-                            let out = std::process::Command::new("fastboot").args(&args).output();
-                            match out {
-                                Ok(o) if o.status.success() => {
-                                    log(
-                                        &tx,
-                                        LogLevel::Success,
-                                        0,
-                                        format!("Active slot set to {}", slot.to_uppercase()),
-                                    );
-                                    if let Some(d) = device_poll::read_fastboot(ser) {
-                                        *current_device.lock().unwrap() = Some(d.clone());
-                                        tx.send(WMsg::DeviceDetected(d)).ok();
-                                    }
-                                }
-                                Ok(o) => {
-                                    let err = String::from_utf8_lossy(&o.stderr);
-                                    log(
-                                        &tx,
-                                        LogLevel::Error,
-                                        0,
-                                        format!("Failed to set slot: {}", err.trim()),
-                                    );
-                                }
-                                Err(e) => log(
-                                    &tx,
-                                    LogLevel::Error,
-                                    0,
-                                    format!("Failed to run fastboot: {}", e),
-                                ),
-                            }
-                        }
-                        _ => {
-                            log(
-                                &tx,
-                                LogLevel::Error,
-                                0,
-                                "Device is not in fastboot (bootloader) mode. Slot switching only works in fastboot mode. Please reboot to bootloader first.",
-                            );
+                let Some(ser) = serial.clone() else {
+                    log(&tx, LogLevel::Error, 0, "No device connected");
+                    continue;
+                };
+                // Listed by `fastboot devices`, or every fastboot call below
+                // would wait for it forever.
+                if !lfff_lib::device::list_fastboot_devices().contains(&ser) {
+                    log(
+                        &tx,
+                        LogLevel::Error,
+                        0,
+                        "Device is not in fastboot (bootloader) mode. Slot switching only works in fastboot mode. Please reboot to bootloader first.",
+                    );
+                    continue;
+                }
+                log(
+                    &tx,
+                    LogLevel::Info,
+                    0,
+                    format!("Setting active slot to {}...", slot.to_uppercase()),
+                );
+                match lfff_lib::flasher::set_active_slot(Some(&ser), &slot) {
+                    Ok(()) => {
+                        log(
+                            &tx,
+                            LogLevel::Success,
+                            0,
+                            format!("Active slot set to {}", slot.to_uppercase()),
+                        );
+                        if let Some(d) = device_poll::read_fastboot(&ser) {
+                            *current_device.lock().unwrap() = Some(d.clone());
+                            tx.send(WMsg::DeviceDetected(d)).ok();
                         }
                     }
-                } else {
-                    log(&tx, LogLevel::Error, 0, "No device connected");
+                    Err(e) => log(&tx, LogLevel::Error, 0, format!("Failed to set slot: {e}")),
                 }
             }
 
@@ -1967,7 +1845,7 @@ pub fn worker(
                 .ok();
             }
 
-            Cmd::Download { url } => {
+            Cmd::Download { url, md5 } => {
                 tx.send(WMsg::Downloading(true)).ok();
                 log(&tx, LogLevel::Info, 1, "Starting download...");
                 let tx_dl = tx.clone();
@@ -2014,8 +1892,33 @@ pub fn worker(
                             .unwrap_or_default();
                         match r.output_path {
                             Some(path) if lfff_lib::extractor::looks_like_zip(&path) => {
-                                log(&tx_dl, LogLevel::Success, 1, format!("Downloaded: {}", p));
-                                tx_dl.send(WMsg::FwPath(path.display().to_string())).ok();
+                                match md5.as_deref().map(|m| {
+                                    log(&tx_dl, LogLevel::Info, 1, "Checking MD5...");
+                                    lfff_lib::utils::verify_md5(&path, m)
+                                }) {
+                                    None | Some(Ok(true)) => {
+                                        log(
+                                            &tx_dl,
+                                            LogLevel::Success,
+                                            1,
+                                            format!("Downloaded: {}", p),
+                                        );
+                                        tx_dl.send(WMsg::FwPath(path.display().to_string())).ok();
+                                    }
+                                    Some(Ok(false)) => {
+                                        // Removed: a damaged archive of the
+                                        // right size would be reused later.
+                                        let msg = "The downloaded archive is damaged: its MD5 does not match the update server's. Download it again.";
+                                        log(&tx_dl, LogLevel::Error, 1, msg);
+                                        std::fs::remove_file(&path).ok();
+                                        tx_dl.send(WMsg::FirmwareFailed(msg.into())).ok();
+                                    }
+                                    Some(Err(e)) => {
+                                        let msg = format!("Could not check the MD5: {e:#}");
+                                        log(&tx_dl, LogLevel::Error, 1, &msg);
+                                        tx_dl.send(WMsg::FirmwareFailed(msg)).ok();
+                                    }
+                                }
                             }
                             Some(path) => {
                                 // Usually a web page saved in the firmware's
@@ -2183,7 +2086,6 @@ pub fn worker(
                 if let Some(ref ser) = serial
                     && let Some(info) = lfff_lib::device::get_device_info(Some(ser))
                 {
-                    current_device_product = info.product.clone();
                     if let Some(d) = device_poll::read_fastboot(ser) {
                         *current_device.lock().unwrap() = Some(d.clone());
                         tx.send(WMsg::DeviceDetected(d)).ok();
@@ -2276,25 +2178,23 @@ pub fn worker(
                 } else {
                     HashMap::new()
                 };
-                let ser_args: Vec<String> = serial
-                    .iter()
-                    .flat_map(|s| ["-s".to_string(), s.clone()])
-                    .collect();
-                let reboot = |tool: &str| {
+                let reboot = |via: Via| {
+                    let tool = if via == Via::Adb { "adb" } else { "fastboot" };
                     log(
                         &tx,
                         LogLevel::Info,
                         2,
                         format!("Restarting into fastbootd via {tool}..."),
                     );
-                    let _ = std::process::Command::new(tool)
-                        .args(&ser_args)
-                        .args(["reboot", "fastboot"])
-                        .status();
+                    if let Err(e) =
+                        lfff_lib::device::reboot(serial.as_deref(), via, RebootTarget::Fastbootd)
+                    {
+                        log(&tx, LogLevel::Warn, 2, format!("Reboot: {}", e.trim()));
+                    }
                 };
                 let status = match mode {
                     lfff_lib::flasher::DeviceMode::System => {
-                        reboot("adb");
+                        reboot(Via::Adb);
                         wait_fastbootd_cancellable(serial.as_deref(), 90, &flash_cancel)
                     }
                     lfff_lib::flasher::DeviceMode::Bootloader => {
@@ -2305,7 +2205,7 @@ pub fn worker(
                                 Some(FastbootdStatus::UserspaceFastboot)
                             }
                             _ => {
-                                reboot("fastboot");
+                                reboot(Via::Fastboot);
                                 wait_fastbootd_cancellable(serial.as_deref(), 90, &flash_cancel)
                             }
                         }
@@ -2378,22 +2278,6 @@ pub fn worker(
                     stop(msg);
                     continue;
                 }
-                let super_layout = match super_layout_for(Path::new(&dir), serial.as_deref()) {
-                    Ok(l) => l,
-                    Err(msg) => {
-                        stage(&tx, 2, 3, "");
-                        stop(msg);
-                        continue;
-                    }
-                };
-                if super_layout.is_some() {
-                    log(
-                        &tx,
-                        LogLevel::Warn,
-                        2,
-                        "Experimental: super's layout will be rebuilt from the firmware",
-                    );
-                }
                 stage(&tx, 2, 1, "");
                 let src = lfff_lib::flasher::FirmwareSource::Extracted(PathBuf::from(&dir));
                 current_source = Some(src.clone());
@@ -2405,7 +2289,7 @@ pub fn worker(
                     modem_in_fastbootd: method != FlashMethod::SnapdragonBootloader,
                     keep_images,
                     skip_partitions,
-                    super_layout,
+                    rebuild_super: crate::config::load_config().auto_rebuild_super,
                     ..Default::default()
                 };
                 do_flash(
@@ -2422,15 +2306,12 @@ pub fn worker(
             Cmd::RepairOta => {
                 use lfff_lib::flasher::{DeviceMode, FastbootdStatus};
                 let _awake = NoSleep::new();
-                let ser_args: Vec<String> = serial
-                    .iter()
-                    .flat_map(|s| ["-s".to_string(), s.clone()])
-                    .collect();
-                let reboot = |tool: &str, args: &[&str]| {
-                    let _ = std::process::Command::new(tool)
-                        .args(&ser_args)
-                        .args(args)
-                        .status();
+                let reboot = |via: Via| {
+                    if let Err(e) =
+                        lfff_lib::device::reboot(serial.as_deref(), via, RebootTarget::Fastbootd)
+                    {
+                        log(&tx, LogLevel::Warn, 0, format!("Reboot: {}", e.trim()));
+                    }
                 };
                 let mode = lfff_lib::flasher::detect_mode(serial.as_deref());
                 log(
@@ -2441,7 +2322,7 @@ pub fn worker(
                 );
                 let status = match mode {
                     DeviceMode::System => {
-                        reboot("adb", &["reboot", "fastboot"]);
+                        reboot(Via::Adb);
                         wait_fastbootd_cancellable(serial.as_deref(), 90, &flash_cancel)
                     }
                     DeviceMode::Bootloader => {
@@ -2450,7 +2331,7 @@ pub fn worker(
                                 Some(FastbootdStatus::UserspaceFastboot)
                             }
                             _ => {
-                                reboot("fastboot", &["reboot", "fastboot"]);
+                                reboot(Via::Fastboot);
                                 wait_fastbootd_cancellable(serial.as_deref(), 90, &flash_cancel)
                             }
                         }
@@ -2480,14 +2361,13 @@ pub fn worker(
                                 removed.len()
                             ),
                         );
-                        let ser: Vec<String> = serial
-                            .iter()
-                            .flat_map(|s| ["-s".to_string(), s.clone()])
-                            .collect();
-                        let _ = std::process::Command::new("fastboot")
-                            .args(&ser)
-                            .arg("reboot")
-                            .status();
+                        if let Err(e) = lfff_lib::device::reboot(
+                            serial.as_deref(),
+                            Via::Fastboot,
+                            RebootTarget::System,
+                        ) {
+                            log(&tx, LogLevel::Warn, 0, format!("Reboot: {}", e.trim()));
+                        }
                     }
                     Err(e) => log(&tx, LogLevel::Error, 0, e),
                 }

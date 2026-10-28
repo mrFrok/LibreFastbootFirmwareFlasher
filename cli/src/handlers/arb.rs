@@ -15,20 +15,18 @@ pub fn run(
         (None, Some(dir)) => match find_xbl_config(dir) {
             Some(p) => Some(p),
             None => {
-                println!("✗ xbl_config.img not found in the given firmware directory.");
+                eprintln!("✗ xbl_config.img not found in the given firmware directory.");
                 return 1;
             }
         },
         (None, None) if device => None,
-        _ => {
-            println!("✗ Provide --xbl <path>, --firmware-dir <dir> or --device.");
-            return 1;
-        }
+        // clap requires one of --xbl, --firmware-dir, --device.
+        _ => unreachable!("clap requires a source for the ARB"),
     };
 
     let mut device_version = None;
     if device {
-        println!("\n  Reading xbl_config from the phone over adb (root)...");
+        eprintln!("\n  Reading xbl_config from the phone over adb (root)...");
         match device_arb(serial) {
             Ok(d) => {
                 let slot = if d.slot.is_empty() {
@@ -40,12 +38,12 @@ pub fn run(
                 device_version = d.info.version;
             }
             Err(e) => {
-                println!("  ✗ {}", e);
+                eprintln!("  ✗ {}", e);
                 match e {
-                    DeviceArbError::NoDevice => println!(
+                    DeviceArbError::NoDevice => eprintln!(
                         "     Boot the phone into Android with USB debugging on, or into a recovery with adb."
                     ),
-                    DeviceArbError::NoRoot => println!(
+                    DeviceArbError::NoRoot => eprintln!(
                         "     Magisk: allow the prompt on the phone. KernelSU / APatch: grant root to Shell in the manager's superuser list. Or use a recovery with root adb. fastbootd cannot read xbl_config."
                     ),
                     _ => {}
@@ -77,8 +75,8 @@ pub fn run(
                     "  ⚠  Firmware ARB {} is higher than the phone's {}.",
                     fw, dev
                 );
-                println!("     Flashing will permanently raise the anti-rollback counter.");
-                println!(
+                eprintln!("     Flashing will permanently raise the anti-rollback counter.");
+                eprintln!(
                     "     You will NOT be able to go back to firmware with ARB {}.",
                     dev
                 );
@@ -88,7 +86,7 @@ pub fn run(
                     "  ✗  Firmware ARB {} is LOWER than the phone's {}.",
                     fw, dev
                 );
-                println!(
+                eprintln!(
                     "     The bootloader will reject it — flashing this firmware bricks the phone."
                 );
                 return 1;
@@ -103,8 +101,8 @@ pub fn run(
     }
     if firmware_arb.enforced() {
         println!("  ⚠  Hard ARB is ACTIVE on this firmware (ARB > 0).");
-        println!("     Flashing will permanently raise the anti-rollback counter.");
-        println!("     You will NOT be able to downgrade afterwards.");
+        eprintln!("     Flashing will permanently raise the anti-rollback counter.");
+        eprintln!("     You will NOT be able to downgrade afterwards.");
     } else {
         println!("  ✓  Hard ARB is not enforced (version = 0).");
     }

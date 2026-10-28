@@ -34,9 +34,12 @@ pub struct Config {
     /// so in bootloader and fastbootd the phone is named from here.
     #[serde(default)]
     pub known_devices: BTreeMap<String, KnownDevice>,
-    /// Rebuild super's layout from the firmware before flashing (experimental).
-    #[serde(default)]
-    pub rebuild_super: bool,
+    /// Rebuild super from the firmware's layout when the slot being flashed
+    /// has no partitions (`FlashOptions::rebuild_super`). On by default; a
+    /// new name, so the old experimental switch (off for nearly everyone)
+    /// does not carry over.
+    #[serde(default = "default_true")]
+    pub auto_rebuild_super: bool,
     /// Snapdragon installs take the legacy route: the modem through the
     /// bootloader, instead of from fastbootd after switching slots. Not
     /// recommended — some phones cannot reach the bootloader.
@@ -88,7 +91,7 @@ impl Default for Config {
             classic_ui: false,
             notice_accepted: false,
             sound: true,
-            rebuild_super: false,
+            auto_rebuild_super: true,
             modem_bootloader: false,
             delete_picked_zip: false,
             known_devices: BTreeMap::new(),
@@ -194,6 +197,6 @@ mod tests {
         // Existing users see the first-launch notice once after updating.
         assert!(!c.notice_accepted);
         assert!(c.sound);
-        assert!(!c.rebuild_super);
+        assert!(c.auto_rebuild_super);
     }
 }

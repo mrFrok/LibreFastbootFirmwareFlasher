@@ -1312,7 +1312,11 @@ pub fn register_callbacks(
 
     let t = ctx.clone();
     ui.on_download_firmware(move |u| {
-        t.send(Cmd::Download { url: u.to_string() }).ok();
+        t.send(Cmd::Download {
+            url: u.to_string(),
+            md5: None,
+        })
+        .ok();
     });
 
     let t = ctx.clone();
@@ -1638,7 +1642,7 @@ fn register_install_callbacks(
 
     ui.on_set_rebuild_super(|on| {
         let mut config = load_config();
-        config.rebuild_super = on;
+        config.auto_rebuild_super = on;
         save_config(&config);
     });
 

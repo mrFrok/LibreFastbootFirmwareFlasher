@@ -14,8 +14,9 @@
 //! empty layout is written: every partition has size 0 and no extents, and
 //! fastbootd grows each one as its image is flashed.
 //!
-//! Experimental and off by default (`FlashOptions::super_layout`): checked
-//! byte for byte against lpmake, but not yet against a factory lpdump.
+//! Checked byte for byte against lpmake and against the factory lpdump of a
+//! OnePlus 15. The flash session rebuilds super with it when the slot it
+//! flashes has no partitions (`FlashOptions::rebuild_super`).
 
 use sha2::{Digest, Sha256};
 
@@ -44,6 +45,38 @@ const BLOCK_DEVICE_ENTRY_SIZE: u32 = 64;
 
 /// The group every layout has first; it has no size limit.
 pub const DEFAULT_GROUP: &str = "default";
+
+/// Stand-ins for partitions a phone has but regional firmware leaves out:
+/// rebuilding super from such a payload would drop them, and a stock fstab
+/// without `nofail` then bootloops in init. Images from the factory set,
+/// sent by Neferon (FastbootFirmwareFlasher ships the same three, minus
+/// oplusstanvbk which no phone seen so far keeps in super): an empty erofs
+/// (my_company) and ext4 (my_preload), AVB footers included. Only these
+/// names get one; any other partition a firmware lacks stops the rebuild.
+pub const STUB_IMAGES: [(&str, &[u8]); 2] = [
+    (
+        "my_company",
+        include_bytes!("../assets/stubs/my_company.img"),
+    ),
+    (
+        "my_preload",
+        include_bytes!("../assets/stubs/my_preload.img"),
+    ),
+];
+
+/// Factory partitions a super rebuild may drop: not in the firmware and
+/// nothing on the phone uses them. `system_dlkm_oki` holds the kernel
+/// modules of OxygenOS 16's OKI kernel; later firmware boots a GKI kernel
+/// which cannot load them, and no fstab mounts the partition.
+pub const DROPPABLE: [&str; 1] = ["system_dlkm_oki"];
+
+/// The stand-in image for `name` (no slot suffix), if it has one.
+pub fn stub_image(name: &str) -> Option<&'static [u8]> {
+    STUB_IMAGES
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, img)| *img)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Group {
@@ -287,6 +320,26 @@ impl SuperLayout {
     /// slots of 64 KiB, Virtual A/B, empty `_b` entries, groups at most
     /// super minus 4 MiB.
     pub fn from_payload_metadata(json: &str, device_size: u64) -> Result<Self, String> {
+        Self::from_payload_metadata_with_stubs(json, device_size, &[])
+    }
+
+    /// As [`Self::from_payload_metadata`], with the partitions in `stubs`
+    /// (names without slot suffix, each in [`STUB_IMAGES`]) added readonly to
+    /// the first group of each slot, their stand-in's size counted against
+    /// that group.
+    pub fn from_payload_metadata_with_stubs(
+        json: &str,
+        device_size: u64,
+        stubs: &[String],
+    ) -> Result<Self, String> {
+        let stub_sizes: Vec<(&str, u64)> = stubs
+            .iter()
+            .map(|n| {
+                stub_image(n)
+                    .map(|img| (n.as_str(), img.len() as u64))
+                    .ok_or_else(|| format!("no stand-in image for {n}"))
+            })
+            .collect::<Result<_, _>>()?;
         let meta: PayloadMetadata =
             serde_json::from_str(json).map_err(|e| format!("payload metadata: {e}"))?;
         let dynamic = meta
@@ -320,6 +373,16 @@ impl SuperLayout {
                     });
                 }
             }
+            // Where the factory keeps them (lpdump of a OnePlus 15): the
+            // slot's own group, readonly.
+            let first = format!("{}_{slot}", dynamic.groups[0].name);
+            for (name, _) in &stub_sizes {
+                layout.partitions.push(Partition {
+                    name: format!("{name}_{slot}"),
+                    group: first.clone(),
+                    attributes: ATTR_READONLY,
+                });
+            }
         }
         // The images have to fit their group: checked here, before super is
         // wiped, rather than discovered halfway through flashing.
@@ -329,9 +392,13 @@ impl SuperLayout {
                 .find(|p| p.partition_name == name)
                 .map(|p| p.size_in_bytes)
         };
-        for g in &dynamic.groups {
+        for (i, g) in dynamic.groups.iter().enumerate() {
             let limit = g.size.unwrap_or(0).min(usable);
-            let mut total = 0u64;
+            let mut total = if i == 0 {
+                stub_sizes.iter().map(|(_, size)| size).sum()
+            } else {
+                0u64
+            };
             for p in &g.partition_names {
                 total += size_of(p).ok_or_else(|| {
                     format!("the firmware lists {p} but has no image size for it")
@@ -660,6 +727,56 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         assert_eq!(l.missing_from(&device), ["my_company", "my_preload"]);
+    }
+
+    #[test]
+    fn stubs_go_readonly_into_each_slots_first_group() {
+        let json = include_str!("../testdata/rmx3709-payload-metadata.json");
+        let stubs = ["my_company".to_string(), "my_preload".to_string()];
+        let l =
+            SuperLayout::from_payload_metadata_with_stubs(json, 17_062_428_672, &stubs).unwrap();
+        for slot in ["a", "b"] {
+            for name in &stubs {
+                let p = l
+                    .partitions
+                    .iter()
+                    .find(|p| p.name == format!("{name}_{slot}"))
+                    .unwrap();
+                assert_eq!(p.group, format!("qti_dynamic_partitions_{slot}"));
+                assert_eq!(p.attributes, ATTR_READONLY);
+            }
+        }
+        let device: Vec<String> = ["system_a", "my_company_a", "my_preload_a"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert!(l.missing_from(&device).is_empty());
+        l.to_checked_image().unwrap();
+    }
+
+    #[test]
+    fn only_known_partitions_have_a_stub() {
+        let json = include_str!("../testdata/rmx3709-payload-metadata.json");
+        let err = SuperLayout::from_payload_metadata_with_stubs(
+            json,
+            17_062_428_672,
+            &["odm_dlkm".to_string()],
+        )
+        .unwrap_err();
+        assert!(err.contains("odm_dlkm"), "{err}");
+    }
+
+    // The stand-ins must stay the filesystems they are: erofs magic at 1024,
+    // ext4 magic at 1080, and an AVB footer at the end.
+    #[test]
+    fn stub_images_are_the_filesystems_they_claim() {
+        let company = stub_image("my_company").unwrap();
+        assert_eq!(&company[1024..1028], &0xE0F5_E1E2u32.to_le_bytes());
+        let preload = stub_image("my_preload").unwrap();
+        assert_eq!(&preload[1080..1082], &0xEF53u16.to_le_bytes());
+        for img in [company, preload] {
+            assert_eq!(&img[img.len() - 64..img.len() - 60], b"AVBf");
+        }
     }
 
     #[test]

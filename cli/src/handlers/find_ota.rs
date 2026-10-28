@@ -37,11 +37,22 @@ pub fn run(
         search.regions = picked;
     }
     if let Some(list) = channels {
-        search.channels = list
-            .split(',')
-            .filter_map(|c| c.trim().chars().next())
-            .map(|c| c.to_ascii_uppercase())
-            .collect();
+        let mut picked = Vec::new();
+        for code in list.split(',').map(str::trim).filter(|c| !c.is_empty()) {
+            // One letter each: "AB" is a typo for "A,B", not "A".
+            let mut chars = code.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => picked.push(c.to_ascii_uppercase()),
+                _ => {
+                    eprintln!(
+                        "{} Channel {code:?} is not one letter; separate channels with commas (A,C)",
+                        "✗".red().bold()
+                    );
+                    return 2;
+                }
+            }
+        }
+        search.channels = picked;
     }
 
     let pb = ProgressBar::new(0);
@@ -113,7 +124,7 @@ pub fn run(
         }
         println!();
     }
-    println!(
+    eprintln!(
         "  {} {}",
         "Download:".dimmed(),
         "lfff download <link>".cyan()

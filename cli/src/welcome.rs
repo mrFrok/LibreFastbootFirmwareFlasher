@@ -31,6 +31,9 @@ pub fn print() {
     println!("  extract           extract .zip into partition images");
     println!("  flash             flash full firmware (A/B, super)");
     println!("  flash-partition   flash a single partition by name");
+    println!("  reboot            reboot to system/recovery/bootloader/fastbootd");
+    println!("  set-slot          make slot a or b the active one");
+    println!();
 
     println!("  Links:");
     println!("  ─────────────────────────────────────────────────────");

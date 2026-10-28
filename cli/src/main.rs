@@ -1,6 +1,7 @@
 //! LFFF CLI — LibreFastbootFirmwareFlasher entry point.
 //!
-//! Subcommands: deps, find-ota, download, extract, devices, arb, flash, flash-partition
+//! Subcommands: deps, find-ota, download, extract, devices, arb, flash, flash-partition,
+//! reboot, set-slot
 
 mod cli;
 mod handlers;
@@ -56,7 +57,8 @@ fn main() {
             ref url,
             ref output,
             connections,
-        }) => handlers::download::run(url, output.as_ref(), connections),
+            ref md5,
+        }) => handlers::download::run(url, output.as_ref(), connections, md5.as_deref()),
 
         Some(Commands::Extract {
             ref zip,
@@ -96,30 +98,23 @@ fn main() {
             dry_run,
             skip_xbl_abl,
             skip_preloader,
+            no_rebuild_super,
         }) => {
-            if let Some(dir) = firmware_dir {
-                handlers::flash::run(
-                    &FirmwareSource::Extracted(dir.clone()),
-                    serial.as_deref(),
-                    method.as_deref(),
-                    dry_run,
-                    skip_xbl_abl,
-                    skip_preloader,
-                )
-            } else if let Some(dir) = source {
-                handlers::flash::run(
-                    &FirmwareSource::SourceBuild(dir.clone()),
-                    serial.as_deref(),
-                    method.as_deref(),
-                    dry_run,
-                    skip_xbl_abl,
-                    skip_preloader,
-                )
-            } else {
-                println!("✗ Specify a firmware directory or --source DIR");
-                eprintln!("Usage: lfff flash <DIR>  or  lfff flash --source <DIR>");
-                1
-            }
+            // clap requires one of the two (`required_unless_present`).
+            let source = match (firmware_dir, source) {
+                (Some(dir), _) => FirmwareSource::Extracted(dir.clone()),
+                (None, Some(dir)) => FirmwareSource::SourceBuild(dir.clone()),
+                (None, None) => unreachable!("clap requires a firmware directory or --source"),
+            };
+            handlers::flash::run(
+                &source,
+                serial.as_deref(),
+                method.as_deref(),
+                dry_run,
+                skip_xbl_abl,
+                skip_preloader,
+                !no_rebuild_super,
+            )
         }
 
         Some(Commands::FlashPartition {
@@ -131,7 +126,7 @@ fn main() {
             dry_run,
             ref serial,
         }) => handlers::flash_partition::run(
-            image.as_deref(),
+            image,
             firmware_dir.as_ref(),
             partition.as_deref(),
             slot.as_deref(),
@@ -139,6 +134,12 @@ fn main() {
             dry_run,
             serial.as_deref(),
         ),
+
+        Some(Commands::Reboot { to, ref serial }) => handlers::reboot::run(to, serial.as_deref()),
+
+        Some(Commands::SetSlot { slot, ref serial }) => {
+            handlers::set_slot::run(slot, serial.as_deref())
+        }
     };
 
     process::exit(exit_code);

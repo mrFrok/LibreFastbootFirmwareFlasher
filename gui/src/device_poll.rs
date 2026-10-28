@@ -4,7 +4,8 @@
 // A thread of its own rather than a worker command: the worker runs one
 // command at a time and blocks, so a queued check would freeze the status for
 // the whole of a download or a flash. While the worker is busy the poller
-// stays quiet, so `fastboot devices` never interleaves with flashing.
+// stays quiet, and the worker waits out a round already running, so
+// `fastboot devices` never interleaves with flashing.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -16,6 +17,17 @@ use lfff_lib::utils::run_cmd;
 use crate::WMsg;
 
 const INTERVAL: Duration = Duration::from_secs(2);
+
+/// Held by the poller for a whole round. A round takes seconds (several
+/// getvars), so checking `busy` once at its start is not enough: the worker
+/// sets `busy`, then calls [`wait_for_poll`] to let a round already running
+/// finish before it talks to the phone itself.
+static ROUND: Mutex<()> = Mutex::new(());
+
+/// Block until a poll round in progress is over. Call after setting `busy`.
+pub fn wait_for_poll() {
+    drop(ROUND.lock().unwrap_or_else(|e| e.into_inner()));
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -195,6 +207,10 @@ pub fn spawn(
     thread::spawn(move || {
         let mut last: Vec<(String, &'static str)> = Vec::new();
         loop {
+            // `busy` is read under the lock: a worker that set it and then
+            // waited in `wait_for_poll` is seen here, so no round starts
+            // after it.
+            let round = ROUND.lock().unwrap_or_else(|e| e.into_inner());
             if !busy.load(Ordering::Relaxed) {
                 let now = listing();
                 if now != last {
@@ -223,6 +239,7 @@ pub fn spawn(
                     }
                 }
             }
+            drop(round);
             thread::sleep(INTERVAL);
         }
     });

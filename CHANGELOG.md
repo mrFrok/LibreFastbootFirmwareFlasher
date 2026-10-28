@@ -3,6 +3,63 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.5.0
+
+### Super partition
+
+- When the slot a Snapdragon flash switches to has no partitions (Virtual
+  A/B after an update, or deleted by an older LFFF), super is rebuilt from
+  the firmware's layout: every partition read-only in its group, as from
+  the factory. Before, fastbootd recreated them outside their group, and
+  system updates failed afterwards. On by default, in the app (Settings →
+  Super partition) and in `lfff flash` (`--no-rebuild-super` turns it off).
+- `my_company` and `my_preload`, which some regional firmware leaves out,
+  get empty factory images instead of being lost (images from Neferon).
+  `system_dlkm_oki`, the kernel modules of OxygenOS 16's own kernel that
+  OnePlus 15 keeps from the factory and nothing loads since OxygenOS 17, is
+  dropped. Any other partition a firmware lacks keeps the old way, with the
+  warning below.
+- Works on OnePlus 15, whose fastbootd does not list the size of super and
+  refuses to give it for a second or two after coming from Android.
+- `lfff extract` saves the firmware's partition layout too, so the command
+  line can rebuild super as well.
+
+### Command line
+
+- stdout now carries only the result: `download` prints the saved file's
+  path, `extract` the folder it made, `devices` one `MODE<TAB>SERIAL` line
+  per phone, `extract --list` the entries. Progress, reports, questions and
+  errors go to stderr, so `lfff extract "$(lfff download URL)"` works.
+  Scripts that read the old stdout need updating.
+- Usage errors exit with 2 (`lfff arb` with nothing to read, `lfff flash`
+  without a folder, `--channel AB`).
+- `flash` without a terminal stops at once instead of asking forever on a
+  closed stdin; `extract` without `-o` takes the default folder silently.
+- `lfff reboot [system|recovery|bootloader|fastbootd]` and
+  `lfff set-slot <a|b>`, which used to be GUI-only.
+- `download --md5 <HASH>` checks the archive; `find-ota` prints the hash.
+  `extract --checksum` accepts a hash in upper case.
+
+### Fixes
+
+- Reboot buttons in the app now target the selected phone; with two phones
+  connected, fastboot rebooted whichever it found first.
+- The app no longer hangs for good when the phone is unplugged just before
+  a slot switch, a reboot or a wipe: every adb/fastboot call has a timeout.
+- A firmware downloaded from the update search is checked against the
+  server's MD5, and a damaged one is removed rather than reused.
+- Preparing super no longer mistakes a fastboot that did not answer for a
+  missing partition (which logged a false warning and skipped the resize).
+- A damaged `xbl_config.img` is reported as unknown ARB instead of crashing.
+- A partial `extract --partitions` is no longer taken by the app for a full
+  extraction of that archive.
+- The device poller no longer runs fastboot at the same moment the app
+  starts working with the phone.
+- When super is not rebuilt and the new slot's partitions are missing, the
+  log says so once instead of a warning per partition, and the end of the
+  flash tells you to run "Repair updates (OTA)" before each of the next two
+  system updates.
+
 ## 3.4.0
 
 ### Flashing

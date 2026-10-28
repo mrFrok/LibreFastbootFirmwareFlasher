@@ -11,27 +11,27 @@ use lfff_lib::flasher::{
 };
 
 use crate::output::{
-    offer_wipe_and_reboot, print_check_report, print_summary, prompt, require_tools,
+    interactive, offer_wipe_and_reboot, print_check_report, print_summary, prompt, require_tools,
 };
 
 /// Ask the user which flash method to use. Flashing never starts without an
 /// explicit choice — there is no platform auto-detection.
 /// Returns the method as `--method` spells it.
 fn prompt_flash_method() -> Option<&'static str> {
-    println!(
+    eprintln!(
         "\n{}",
         "── Flash method ─────────────────────────────────────────".dimmed()
     );
-    println!("  Select the flash method for your device:");
-    println!();
-    println!(
+    eprintln!("  Select the flash method for your device:");
+    eprintln!();
+    eprintln!(
         "  [1] Snapdragon (Qualcomm) — everything in fastbootd, the phone switches slots; ARB check"
     );
-    println!("  [2] MediaTek              — everything flashed in fastbootd, xbl/abl skipped");
-    println!(
+    eprintln!("  [2] MediaTek              — everything flashed in fastbootd, xbl/abl skipped");
+    eprintln!(
         "  [3] Snapdragon via bootloader — the old way, modem through the bootloader (not recommended)"
     );
-    println!("  [q] Abort");
+    eprintln!("  [q] Abort");
 
     loop {
         let c = prompt("\n  Choice", "");
@@ -40,7 +40,7 @@ fn prompt_flash_method() -> Option<&'static str> {
             "2" => return Some("mtk"),
             "3" => return Some("snapdragon-bootloader"),
             "q" | "Q" => return None,
-            _ => println!("  Enter 1, 2, 3 or q"),
+            _ => eprintln!("  Enter 1, 2, 3 or q"),
         }
     }
 }
@@ -48,13 +48,13 @@ fn prompt_flash_method() -> Option<&'static str> {
 /// ARB confirmation gate for Snapdragon firmware. Must be confirmed BEFORE
 /// the final flash confirmation. Returns false when the user aborts.
 fn arb_gate(dir: &std::path::Path) -> bool {
-    println!(
+    eprintln!(
         "\n{}",
         "── ARB (Anti-Rollback) warning ──────────────────────────".dimmed()
     );
     match lfff_lib::arb::firmware_arb(dir) {
         ArbVerdict::Known(v) if v > 0 => {
-            println!(
+            eprintln!(
                 "  {}",
                 format!(
                     "Firmware ARB = {}. Flashing will permanently raise the anti-rollback counter.",
@@ -62,30 +62,30 @@ fn arb_gate(dir: &std::path::Path) -> bool {
                 )
                 .yellow()
             );
-            println!(
+            eprintln!(
                 "  {}",
                 "You will NOT be able to downgrade to firmware with a lower ARB afterwards."
                     .dimmed()
             );
         }
         ArbVerdict::Known(_) => {
-            println!(
+            eprintln!(
                 "  {}",
                 "Firmware ARB = 0, but the device's current ARB level cannot be verified.".yellow()
             );
-            println!(
+            eprintln!(
                 "  {}",
                 "If the device already has ARB > 0, this firmware will not boot.".dimmed()
             );
         }
         ArbVerdict::Unparsed => {
-            println!(
+            eprintln!(
                 "  {}",
                 "Firmware ARB version is unknown (xbl_config could not be parsed).".yellow()
             );
         }
         ArbVerdict::NotFound => {
-            println!(
+            eprintln!(
                 "  {}",
                 "xbl_config.img not found — firmware ARB version is unknown.".yellow()
             );
@@ -102,16 +102,16 @@ fn confirm_fastbootd_status(serial: Option<&str>) -> bool {
     match fastbootd_status(serial) {
         FastbootdStatus::Fastbootd => true,
         FastbootdStatus::UserspaceFastboot => {
-            println!(
+            eprintln!(
                 "\n{}",
                 "── Fastbootd label warning ──────────────────────────────".dimmed()
             );
-            println!(
+            eprintln!(
                 "  {}",
                 "Device reports userspace fastboot, but it is listed as plain 'fastboot'.".yellow()
             );
-            println!("  {}", "This is a known OnePlus / OPPO / Realme issue: fastbootd may be usable even when the mode label does not say fastbootd.".dimmed());
-            println!(
+            eprintln!("  {}", "This is a known OnePlus / OPPO / Realme issue: fastbootd may be usable even when the mode label does not say fastbootd.".dimmed());
+            eprintln!(
                 "  {}",
                 "Continuing will flash dynamic partitions from this userspace fastboot session."
                     .dimmed()
@@ -120,15 +120,15 @@ fn confirm_fastbootd_status(serial: Option<&str>) -> bool {
             ans.eq_ignore_ascii_case("continue")
         }
         FastbootdStatus::BootloaderFastboot | FastbootdStatus::UnknownFastboot => {
-            println!(
+            eprintln!(
                 "\n{}",
                 "── Fastbootd warning ────────────────────────────────────".dimmed()
             );
-            println!(
+            eprintln!(
                 "  {}",
                 "Device is not confirmed as fastbootd/userspace fastboot.".yellow()
             );
-            println!("  {}", "Dynamic partition flashing may fail unless your device supports flashing them from this mode.".dimmed());
+            eprintln!("  {}", "Dynamic partition flashing may fail unless your device supports flashing them from this mode.".dimmed());
             let ans = prompt("\n  Continue anyway? (continue/stop)", "stop");
             ans.eq_ignore_ascii_case("continue")
         }
@@ -150,6 +150,7 @@ pub fn run(
     dry_run: bool,
     skip_xbl_abl: bool,
     skip_preloader: bool,
+    rebuild_super: bool,
 ) -> i32 {
     let dir = source.path();
     if !dir.is_dir() {
@@ -161,12 +162,12 @@ pub fn run(
         return 1;
     }
 
-    println!(
+    eprintln!(
         "\n{}",
         "── Dependency check ─────────────────────────────────────".dimmed()
     );
     let ok = require_tools(&["fastboot"]);
-    println!(
+    eprintln!(
         "{}\n",
         "────────────────────────────────────────────────────────".dimmed()
     );
@@ -193,13 +194,29 @@ pub fn run(
         return 1;
     }
 
+    // Flashing is confirmed by a person, never by a pipe: without a terminal
+    // only a dry run with the method on the command line can go ahead.
+    if !interactive() && (!dry_run || method.is_none()) {
+        eprintln!(
+            "{} {}",
+            "✗".red().bold(),
+            if dry_run {
+                "No terminal to ask the flash method: pass --method."
+            } else {
+                "Flashing asks for confirmation and needs a terminal; run it there (or use --dry-run --method …)."
+            }
+            .red()
+        );
+        return 2;
+    }
+
     // -- Mandatory flash-method selection (no auto-detection) --
     let method = match method {
         Some(m) => m,
         None => match prompt_flash_method() {
             Some(m) => m,
             None => {
-                println!("{}", "Aborted by user.".yellow());
+                eprintln!("{}", "Aborted by user.".yellow());
                 return 1;
             }
         },
@@ -213,7 +230,7 @@ pub fn run(
     let has_preloader = images.keys().any(|k| is_preloader(k));
     let has_xbl = images.keys().any(|k| is_xbl_abl(k));
     if !as_mediatek && has_preloader {
-        println!(
+        eprintln!(
             "{} {}",
             "⚠".yellow().bold(),
             "preloader.img found — this firmware looks like MediaTek, but Snapdragon was selected."
@@ -221,7 +238,7 @@ pub fn run(
         );
     }
     if as_mediatek && has_xbl {
-        println!(
+        eprintln!(
             "{} {}",
             "⚠".yellow().bold(),
             "xbl/abl images found — this firmware looks like Qualcomm, but MediaTek was selected."
@@ -235,48 +252,47 @@ pub fn run(
     let mut skip_preloader = skip_preloader;
     if as_mediatek && has_preloader {
         if dry_run {
-            println!(
+            eprintln!(
                 "{} {}",
                 "⚠".yellow().bold(),
                 "MediaTek firmware contains preloader.img.".yellow()
             );
-            println!(
+            eprintln!(
                 "   {}",
                 "Use --skip-preloader to exclude it during actual flashing.".dimmed()
             );
         } else if !skip_preloader {
-            println!(
+            eprintln!(
                 "\n{} {}",
                 "⚠".yellow().bold(),
                 "Firmware contains preloader.img.".yellow()
             );
-            println!(
+            eprintln!(
                 "   {}",
                 "Flashing preloader via fastboot is risky and may brick your device.".red()
             );
-            println!(
+            eprintln!(
                 "   {}\n",
                 "It is recommended to skip the preloader unless you know what you are doing."
                     .dimmed()
             );
-            print!(
-                "{} ",
-                "Skip preloader? [Y/n/a] (Y=skip, n=flash preloader, a=abort):".cyan()
+            let input = prompt(
+                &format!(
+                    "{}",
+                    "Skip preloader? [Y/n/a] (Y=skip, n=flash preloader, a=abort)".cyan()
+                ),
+                "",
             );
-            use std::io::Write;
-            std::io::stdout().flush().ok();
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input).ok();
-            match input.trim().to_lowercase().as_str() {
+            match input.to_lowercase().as_str() {
                 "n" | "no" => {
-                    println!("{} {}", "→".yellow(), "Will flash preloader.".yellow());
+                    eprintln!("{} {}", "→".yellow(), "Will flash preloader.".yellow());
                 }
                 "a" | "abort" => {
-                    println!("{}", "Aborted by user.".yellow());
+                    eprintln!("{}", "Aborted by user.".yellow());
                     return 1;
                 }
                 _ => {
-                    println!("{} {}", "→".green(), "Skipping preloader.".green());
+                    eprintln!("{} {}", "→".green(), "Skipping preloader.".green());
                     skip_preloader = true;
                 }
             }
@@ -293,8 +309,7 @@ pub fn run(
         // the session refuses a skipped partition instead.
         keep_images: Default::default(),
         skip_partitions: String::new(),
-        // The experimental super rebuild is GUI-only for now.
-        super_layout: None,
+        rebuild_super,
     };
 
     if !dry_run {
@@ -311,13 +326,13 @@ pub fn run(
         }
 
         if !confirm_fastbootd_status(serial) {
-            println!("{}", "Aborted by user (fastbootd check).".yellow());
+            eprintln!("{}", "Aborted by user (fastbootd check).".yellow());
             return 1;
         }
 
         // -- Snapdragon: ARB confirmation FIRST, final confirmation AFTER --
         if !as_mediatek && !source.is_source() && !arb_gate(dir) {
-            println!("{}", "Aborted by user (ARB check).".yellow());
+            eprintln!("{}", "Aborted by user (ARB check).".yellow());
             return 1;
         }
 
@@ -326,11 +341,11 @@ pub fn run(
             lfff_lib::flasher::select_images(images.clone(), &options, source.is_source());
         let mut names: Vec<&String> = selected.keys().collect();
         names.sort();
-        println!(
+        eprintln!(
             "\n{}",
             "── Partitions to flash ──────────────────────────────────".dimmed()
         );
-        println!(
+        eprintln!(
             "  {} {}",
             format!("{}:", names.len()).bold(),
             names
@@ -340,31 +355,31 @@ pub fn run(
                 .join(", ")
         );
         for (name, reason) in &held_back {
-            println!("  {}", format!("Skipping {} ({})", name, reason).yellow());
+            eprintln!("  {}", format!("Skipping {} ({})", name, reason).yellow());
         }
 
         // -- Final confirmation --
-        println!(
+        eprintln!(
             "\n{}",
             "── Final warning ────────────────────────────────────────".dimmed()
         );
-        println!(
+        eprintln!(
             "  {}",
             "All partitions will be overwritten. This action is irreversible.".red()
         );
-        println!("  {}", "The device should be in fastbootd/userspace fastboot; any warning above must be accepted.".dimmed());
+        eprintln!("  {}", "The device should be in fastbootd/userspace fastboot; any warning above must be accepted.".dimmed());
         let ans = prompt(
             "\n  Type FLASH to start flashing, anything else to abort",
             "",
         );
         if ans != "FLASH" {
-            println!("{}", "Aborted by user.".yellow());
+            eprintln!("{}", "Aborted by user.".yellow());
             return 1;
         }
     }
 
     let cancel = Arc::new(AtomicBool::new(false));
-    let on_log = |msg: String| println!("{}", msg);
+    let on_log = |msg: String| eprintln!("{}", msg);
 
     // Progress bar for flash operations
     let pb = Arc::new(ProgressBar::new(0));
@@ -407,7 +422,7 @@ pub fn run(
 
     if !session.aborted && session.failed().is_empty() {
         offer_wipe_and_reboot(&session);
-        println!("\n{}", "✓ Flash completed successfully".green().bold());
+        eprintln!("\n{}", "✓ Flash completed successfully".green().bold());
         0
     } else if session.aborted {
         eprintln!("\n{}", "✗ Flash aborted by user".red().bold());

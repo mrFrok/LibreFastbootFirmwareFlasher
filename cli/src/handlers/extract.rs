@@ -36,15 +36,11 @@ pub fn run(
                 return 1;
             }
         };
-        println!(
-            "\nContents of {}:",
-            zip.file_name().unwrap_or_default().to_string_lossy()
-        );
         let mut names: Vec<String> = (0..archive.len())
             .filter_map(|i| {
                 archive.by_index(i).ok().map(|e| {
                     let size_mb = e.size() as f64 / 1024.0 / 1024.0;
-                    format!("  {:<55} {:>8.1} MB", e.name(), size_mb)
+                    format!("{:<55} {:>8.1} MB", e.name(), size_mb)
                 })
             })
             .collect();
@@ -63,7 +59,7 @@ pub fn run(
                 .unwrap_or_default()
                 .join("firmwares")
                 .join(&name);
-            println!("  Firmware : {}", name);
+            eprintln!("  Firmware : {}", name);
             let raw = prompt(&format!("  Output directory [{}]", default.display()), "");
             if raw.is_empty() {
                 default
@@ -79,5 +75,11 @@ pub fn run(
     let result = extract_firmware(zip, &output_dir, checksum, parts.as_deref());
 
     print_extraction_result(&result);
-    if result.success { 0 } else { 1 }
+    if result.success {
+        // The folder to hand to `lfff flash` or `lfff arb --firmware-dir`.
+        println!("{}", result.output_dir.display());
+        0
+    } else {
+        1
+    }
 }

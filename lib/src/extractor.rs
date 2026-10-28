@@ -618,6 +618,8 @@ pub fn extract_firmware_cancellable(
     // Written before extracting, so even a failed run is cleaned up next time.
     fs::write(output_dir.join(EXTRACTION_MARKER), b"").ok();
     fs::remove_file(output_dir.join(COMPLETE_MARKER)).ok();
+    // A layout left by another firmware must not be rebuilt from.
+    fs::remove_file(output_dir.join(PAYLOAD_METADATA_FILE)).ok();
     info!(
         "Extracting {} → {}",
         zip_path.file_name().unwrap_or_default().to_string_lossy(),
@@ -768,7 +770,24 @@ pub fn extract_firmware_cancellable(
         };
         let _ = fs::remove_dir(&staging);
         let arb = find_xbl_config(output_dir).map(|p| extract_arb_from_xbl(&p));
-        mark_complete(&zip_path, output_dir);
+        // Kept with the images, so `lfff flash` and the app both find it.
+        match payload_metadata(&zip_path) {
+            Ok(json) => {
+                fs::write(output_dir.join(PAYLOAD_METADATA_FILE), json).ok();
+            }
+            Err(e) => {
+                if let Some(cb) = on_log {
+                    cb(format!(
+                        "No partition layout saved (super cannot be rebuilt from this firmware): {e:#}"
+                    ));
+                }
+            }
+        }
+        // Only some partitions: the folder is not this archive unpacked, and
+        // must not be reused as if it were.
+        if partitions.is_none() {
+            mark_complete(&zip_path, output_dir);
+        }
         return ExtractionResult {
             success: true,
             output_dir: output_dir.to_path_buf(),
@@ -930,6 +949,10 @@ pub fn firmware_devices(zip_path: &Path) -> Vec<String> {
 /// The payload's metadata as JSON (`payload_dumper --metadata`), read from
 /// the archive's manifest without extracting anything. Needs
 /// payload-dumper-rust; the Go dumper has no such option.
+/// Beside the images of a payload firmware: its partition layout
+/// ([`payload_metadata`]), which the flash session rebuilds super from.
+pub const PAYLOAD_METADATA_FILE: &str = ".lfff-payload-metadata.json";
+
 pub fn payload_metadata(zip_path: &Path) -> Result<String> {
     let dumper = crate::deps::find_payload_dumper()
         .filter(|d| d.is_rust())

@@ -116,10 +116,14 @@ pub fn extract_arb_from_bytes(data: &[u8], name: &str) -> ArbInfo {
     // Find last PT_NULL segment with filesz > 0 (HASH segment)
     let (mut hash_off, mut hash_size) = (0usize, 0usize);
     for i in (0..e_phnum).rev() {
-        let ph = e_phoff + i * e_phentsz;
-        if ph + 56 > data.len() {
+        // Offsets come from the file: a corrupt one must not wrap around.
+        let Some(ph) = i
+            .checked_mul(e_phentsz)
+            .and_then(|o| o.checked_add(e_phoff))
+            .filter(|ph| ph.checked_add(56).is_some_and(|end| end <= data.len()))
+        else {
             continue;
-        }
+        };
         let p_type = u32::from_le_bytes(data[ph..ph + 4].try_into().unwrap_or([0; 4]));
         let p_offset =
             u64::from_le_bytes(data[ph + 8..ph + 16].try_into().unwrap_or([0; 8])) as usize;
@@ -136,7 +140,10 @@ pub fn extract_arb_from_bytes(data: &[u8], name: &str) -> ArbInfo {
     if hash_size == 0 {
         return ArbInfo::unknown("HASH segment not found in ELF");
     }
-    if hash_off + hash_size > data.len() {
+    if hash_off
+        .checked_add(hash_size)
+        .is_none_or(|end| end > data.len())
+    {
         return ArbInfo::unknown("HASH segment extends beyond file");
     }
 
@@ -164,7 +171,10 @@ pub fn extract_arb_from_bytes(data: &[u8], name: &str) -> ArbInfo {
             && common_sz <= 0x1000
             && oem_sz <= 0x4000
             && hash_tbl_sz <= 0x4000
-            && off + 36 + common_sz + qti_sz + oem_sz <= seg.len()
+            && [36, common_sz, qti_sz, oem_sz]
+                .iter()
+                .try_fold(off, |end, n| end.checked_add(*n))
+                .is_some_and(|end| end <= seg.len())
         {
             debug!(
                 "Hash table header at seg+{:#x}: ver={} common={} qti={} oem={}",
@@ -542,6 +552,12 @@ mod tests {
         let mut no_header = good.clone();
         let seg_start = 64 + 2 * PHENT;
         no_header[seg_start..].fill(0);
+        // offset + size wraps past usize::MAX: must not pass the bounds check.
+        let mut wrapping = good.clone();
+        let null = 64 + PHENT;
+        wrapping[null + 8..null + 16].copy_from_slice(&(u64::MAX - 8).to_le_bytes());
+        let mut wrapping_phoff = good.clone();
+        wrapping_phoff[0x20..0x28].copy_from_slice(&(u64::MAX - 8).to_le_bytes());
 
         for (what, bytes) in [
             ("truncated", truncated),
@@ -550,6 +566,8 @@ mod tests {
             ("ELF32", &elf32[..]),
             ("no PT_NULL segment", &no_null[..]),
             ("no hash table header", &no_header[..]),
+            ("HASH offset wraps around", &wrapping[..]),
+            ("program header offset wraps around", &wrapping_phoff[..]),
         ] {
             assert_eq!(parse(bytes).version, None, "{what}");
         }

@@ -107,7 +107,7 @@ export component MainWindow inherits MaterialWindow {
     callback repair-ota();
     in-out property <bool> sound: true;
     callback set-sound(bool);
-    in-out property <bool> rebuild-super: false;
+    in-out property <bool> rebuild-super: true;
     // The layout a rebuild would write, from the chosen firmware; "" if none.
     in-out property <string> super-plan;
     callback set-rebuild-super(bool);
