@@ -195,7 +195,7 @@ lfff completion fish > ~/.config/fish/completions/lfff.fish
   Super/dynamic parts   →  new active slot
 ```
 
-The old slot keeps its old modem. Without the system images in the flash, the modem falls back to the bootloader stage.
+The old slot keeps its old modem. Without the system images in the flash, the modem falls back to the bootloader stage. Partitions you choose not to flash (e.g. a rooted `init_boot`) are copied from the phone's active slot over adb as root before the switch and written to the new slot; if they cannot be copied, nothing is flashed.
 
 On error: **retry** / **reboot** / **skip partition** / **abort**
 

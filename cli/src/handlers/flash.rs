@@ -285,6 +285,9 @@ pub fn run(
         skip_preloader,
         as_mediatek: Some(as_mediatek),
         modem_in_fastbootd,
+        // Nothing is copied from the phone here; with the modem in fastbootd
+        // the session refuses a skipped partition instead.
+        keep_images: Default::default(),
         skip_partitions: String::new(),
         // The experimental super rebuild is GUI-only for now.
         super_layout: None,

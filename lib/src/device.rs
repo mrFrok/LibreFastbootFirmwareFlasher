@@ -503,6 +503,181 @@ pub fn run_pre_flash_checks(serial: Option<&str>) -> PreFlashCheck {
     c
 }
 
+// ---------------------------------------------------------------------------
+// Reading partitions over adb as root
+// ---------------------------------------------------------------------------
+
+/// Why a partition could not be read from the phone over adb.
+///
+/// fastbootd cannot help here: its `fetch` is compiled out of user builds,
+/// refused on locked devices and limited to vendor_boot. Partitions can only
+/// be read from Android or a recovery over adb, as root.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AdbReadError {
+    /// No phone in adb mode (booted Android with USB debugging, or recovery).
+    NoDevice,
+    /// The adb shell is not root and `su` was refused or is missing.
+    NoRoot,
+    /// Root works but the partition could not be read whole.
+    ReadFailed(String),
+}
+
+impl std::fmt::Display for AdbReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoDevice => write!(f, "no phone found over adb"),
+            Self::NoRoot => write!(f, "root is required to read partitions from the phone"),
+            Self::ReadFailed(e) => write!(f, "could not read from the phone: {e}"),
+        }
+    }
+}
+
+/// A root shell on a phone over adb.
+pub struct AdbRoot {
+    serial: Option<String>,
+    /// Commands go through `su -c`; false when the adb shell is root already.
+    use_su: bool,
+    /// The active slot as Android booted it: `_a`, `_b`, or empty.
+    pub slot_suffix: String,
+}
+
+impl AdbRoot {
+    /// Root on the phone: as is when the adb shell is already root
+    /// (recovery, `adb root` on a userdebug build), through `su` otherwise.
+    /// Magisk asks on the phone's screen the first time, hence the long
+    /// timeout; KernelSU and APatch never ask — Shell must already be granted
+    /// in their manager, or `su` is refused.
+    pub fn open(serial: Option<&str>) -> Result<Self, AdbReadError> {
+        let devices = list_adb_devices();
+        let present = match serial {
+            Some(s) => devices.iter().any(|d| d == s),
+            None => !devices.is_empty(),
+        };
+        if !present {
+            return Err(AdbReadError::NoDevice);
+        }
+        let mut root = Self {
+            serial: serial.map(str::to_string),
+            use_su: false,
+            slot_suffix: String::new(),
+        };
+        let r = root.run("id -u", 15);
+        if !(r.code == 0 && r.stdout.trim() == "0") {
+            root.use_su = true;
+            let r = root.run("id -u", 60);
+            if !(r.code == 0 && r.stdout.trim() == "0") {
+                return Err(AdbReadError::NoRoot);
+            }
+        }
+        root.slot_suffix = root
+            .run("getprop ro.boot.slot_suffix", 15)
+            .stdout
+            .trim()
+            .to_string();
+        Ok(root)
+    }
+
+    fn args<'a>(&'a self, rest: &[&'a str]) -> Vec<&'a str> {
+        let mut args = vec!["adb"];
+        if let Some(s) = &self.serial {
+            args.extend(["-s", s.as_str()]);
+        }
+        args.extend_from_slice(rest);
+        args
+    }
+
+    fn as_root(&self, cmd: &str) -> String {
+        if self.use_su {
+            format!("su -c '{cmd}'")
+        } else {
+            cmd.to_string()
+        }
+    }
+
+    fn run(&self, cmd: &str, timeout: u64) -> crate::utils::CmdResult {
+        let cmd = self.as_root(cmd);
+        run_cmd(&self.args(&["shell", &cmd]), timeout)
+    }
+
+    /// The block device of `part` (a full name, slot suffix included) and
+    /// its size in bytes.
+    fn locate(&self, part: &str) -> Result<(String, u64), AdbReadError> {
+        for dir in ["/dev/block/by-name", "/dev/block/bootdevice/by-name"] {
+            let dev = format!("{dir}/{part}");
+            let r = self.run(&format!("blockdev --getsize64 {dev}"), 15);
+            if r.code == 0
+                && let Ok(size) = r.stdout.trim().parse::<u64>()
+            {
+                return Ok((dev, size));
+            }
+        }
+        Err(AdbReadError::ReadFailed(format!(
+            "{part}: no such partition"
+        )))
+    }
+
+    /// Read a small partition whole into memory.
+    pub fn read(&self, part: &str) -> Result<Vec<u8>, AdbReadError> {
+        let (dev, size) = self.locate(part)?;
+        let cmd = self.as_root(&format!("cat {dev}"));
+        // exec-out, not shell: the image is binary and must arrive unmangled.
+        let args = self.args(&["exec-out", &cmd]);
+        let out = std::process::Command::new(args[0])
+            .args(&args[1..])
+            .output()
+            .map_err(|e| AdbReadError::ReadFailed(e.to_string()))?;
+        check_whole(part, out.stdout.len() as u64, size, &out.stdout)?;
+        Ok(out.stdout)
+    }
+
+    /// Stream a partition into `path`. The size is checked against the
+    /// partition's: exec-out mixes errors into the data, so a short file is
+    /// an error message, not an image.
+    pub fn dump_to(&self, part: &str, path: &std::path::Path) -> Result<(), AdbReadError> {
+        let (dev, size) = self.locate(part)?;
+        let file = fs::File::create(path).map_err(|e| AdbReadError::ReadFailed(e.to_string()))?;
+        let cmd = self.as_root(&format!("cat {dev}"));
+        let args = self.args(&["exec-out", &cmd]);
+        let status = std::process::Command::new(args[0])
+            .args(&args[1..])
+            .stdout(file)
+            .status()
+            .map_err(|e| AdbReadError::ReadFailed(e.to_string()))?;
+        let got = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        let head = if got < 512 {
+            fs::read(path).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        if !status.success() {
+            fs::remove_file(path).ok();
+            return Err(AdbReadError::ReadFailed(format!(
+                "{part}: adb exited with {status}"
+            )));
+        }
+        if let Err(e) = check_whole(part, got, size, &head) {
+            fs::remove_file(path).ok();
+            return Err(e);
+        }
+        Ok(())
+    }
+}
+
+/// A read is good only when every byte of the partition arrived.
+fn check_whole(part: &str, got: u64, want: u64, data: &[u8]) -> Result<(), AdbReadError> {
+    if got == want && want > 0 {
+        return Ok(());
+    }
+    let text = String::from_utf8_lossy(&data[..data.len().min(200)])
+        .trim()
+        .to_string();
+    Err(AdbReadError::ReadFailed(if text.is_empty() {
+        format!("{part}: got {got} of {want} bytes")
+    } else {
+        format!("{part}: got {got} of {want} bytes ({text})")
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -538,5 +713,14 @@ mod tests {
         c.battery_ok = true;
         c.unlocked = false;
         assert!(!c.ready());
+    }
+    // exec-out mixes an error message into the data: anything short of the
+    // whole partition must be refused, never taken for an image.
+    #[test]
+    fn a_short_read_is_not_an_image() {
+        let msg = b"/system/bin/sh: su: inaccessible or not found";
+        assert!(check_whole("xbl_config_b", msg.len() as u64, 1 << 20, msg).is_err());
+        assert!(check_whole("boot_a", 0, 0, &[]).is_err());
+        assert!(check_whole("boot_a", 4096, 4096, &[]).is_ok());
     }
 }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
@@ -573,6 +574,76 @@ fn spawn_unpack_counter(tx: mpsc::Sender<WMsg>, dir: PathBuf) -> mpsc::Sender<()
         }
     });
     stop_tx
+}
+
+/// Where the partitions copied from the phone wait for the new slot.
+fn kept_dir() -> PathBuf {
+    get_output_dir().join("_kept")
+}
+
+/// With the modem in fastbootd the phone boots the other slot, so the
+/// partitions the user chose not to flash are copied from its active slot
+/// first, while it is still in Android: the new slot then gets what the
+/// phone had (a rooted init_boot, a custom recovery), not an old copy.
+/// Nothing to copy gives an empty map; anything that cannot be copied stops
+/// the install before the phone is touched.
+fn keep_from_phone(
+    tx: &mpsc::Sender<WMsg>,
+    serial: Option<&str>,
+    mode: lfff_lib::flasher::DeviceMode,
+    dir: &Path,
+    skip_xbl_abl: bool,
+    skip_partitions: &str,
+) -> Result<HashMap<String, PathBuf>, String> {
+    let opts = lfff_lib::flasher::FlashOptions {
+        skip_xbl_abl,
+        skip_partitions: skip_partitions.to_string(),
+        ..Default::default()
+    };
+    let (_, skipped) =
+        lfff_lib::flasher::select_images(lfff_lib::flasher::collect_images(dir), &opts, false);
+    let held = lfff_lib::flasher::held_back(&skipped);
+    if held.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let list = held.join(", ");
+    if held
+        .iter()
+        .any(|n| lfff_lib::flasher::is_super_partition(n))
+    {
+        return Err(format!(
+            "With the modem in fastbootd, dynamic partitions cannot be skipped ({list}): the new slot would have none."
+        ));
+    }
+    if mode != lfff_lib::flasher::DeviceMode::System {
+        return Err(format!(
+            "With the modem in fastbootd, the partitions you keep ({list}) have to be copied from the phone first. Start the install with the phone in Android, root granted to Shell."
+        ));
+    }
+    log(
+        tx,
+        LogLevel::Info,
+        2,
+        format!("Copying from the phone, to keep them on the new slot: {list}"),
+    );
+    let root = lfff_lib::device::AdbRoot::open(serial).map_err(|e| {
+        format!("Could not copy {list} from the phone: {e}. Grant root to Shell (KernelSU / APatch manager, or allow the Magisk prompt).")
+    })?;
+    let out = kept_dir();
+    std::fs::remove_dir_all(&out).ok();
+    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let mut kept = HashMap::new();
+    for name in held {
+        let part = format!("{name}{}", root.slot_suffix);
+        let path = out.join(format!("{name}.img"));
+        if let Err(e) = root.dump_to(&part, &path) {
+            std::fs::remove_dir_all(&out).ok();
+            return Err(format!("Could not copy {part} from the phone: {e}"));
+        }
+        log(tx, LogLevel::Info, 2, format!("Copied {part}"));
+        kept.insert(name.to_string(), path);
+    }
+    Ok(kept)
 }
 
 /// Unpack (unless already unpacked) and check a firmware. Runs on its own
@@ -2183,6 +2254,26 @@ pub fn worker(
                 // 0. Into fastbootd, the way the phone's current mode needs.
                 stage(&tx, 0, 1, "");
                 let mode = lfff_lib::flasher::detect_mode(serial.as_deref());
+                // Before the phone leaves Android: what it should keep.
+                let keep_images = if method == FlashMethod::SnapdragonFastbootd {
+                    match keep_from_phone(
+                        &tx,
+                        serial.as_deref(),
+                        mode,
+                        Path::new(&dir),
+                        skip_xbl_abl,
+                        &skip_partitions,
+                    ) {
+                        Ok(k) => k,
+                        Err(msg) => {
+                            stage(&tx, 0, 3, "");
+                            stop(msg);
+                            continue;
+                        }
+                    }
+                } else {
+                    HashMap::new()
+                };
                 let ser_args: Vec<String> = serial
                     .iter()
                     .flat_map(|s| ["-s".to_string(), s.clone()])
@@ -2310,6 +2401,7 @@ pub fn worker(
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
                     modem_in_fastbootd: method == FlashMethod::SnapdragonFastbootd,
+                    keep_images,
                     skip_partitions,
                     super_layout,
                     ..Default::default()
@@ -2322,6 +2414,7 @@ pub fn worker(
                     opts,
                     flash_cancel.clone(),
                 );
+                std::fs::remove_dir_all(kept_dir()).ok();
             }
 
             Cmd::RepairOta => {

@@ -366,6 +366,17 @@ fn modem_route(wanted: bool, has_modem: bool, has_super: bool) -> ModemRoute {
     }
 }
 
+/// Partitions the firmware has but the user chose to leave as they are on
+/// the phone (`select_images`'s "… excluded" reasons). Names it never flashes
+/// anyway (device-unique data, odd names) are not among them.
+pub fn held_back(skipped: &[(String, String)]) -> Vec<&str> {
+    skipped
+        .iter()
+        .filter(|(_, reason)| reason.ends_with("excluded"))
+        .map(|(name, _)| name.as_str())
+        .collect()
+}
+
 /// Logged when a session stops after the slot switch, so the user knows the
 /// phone would now boot a slot whose system is not fully flashed.
 fn warn_switched_slot(switched_to: Option<&str>, on_log: &dyn Fn(String)) {
@@ -1255,6 +1266,11 @@ pub struct FlashOptions {
     /// writes the modem and the dynamic partitions there; the old slot keeps
     /// its old modem.
     pub modem_in_fastbootd: bool,
+    /// With `modem_in_fastbootd`: images read from the phone's active slot
+    /// for the partitions the user chose not to flash, by name. They are
+    /// written to the new slot, so "don't flash" still means "keep what the
+    /// phone has" (a rooted init_boot, a custom recovery) after the switch.
+    pub keep_images: HashMap<String, PathBuf>,
     /// An empty super layout (super_layout::SuperLayout::to_image) to install
     /// with `fastboot wipe-super` before the dynamic partitions are flashed,
     /// replacing whatever layout the device has. Experimental; `None` keeps
@@ -1500,6 +1516,50 @@ pub fn run_flash_session_with_log(
         on_log("Snapdragon method — modem goes through bootloader mode".into());
     }
 
+    // After the switch the phone boots the other slot, where a partition
+    // that is not flashed holds whatever old copy was there. So everything
+    // the user held back must come from the phone, or nothing is flashed.
+    let held = held_back(&skipped);
+    let kept: Vec<(&str, &PathBuf)> = if modem_fastbootd {
+        let dynamic: Vec<&str> = held
+            .iter()
+            .copied()
+            .filter(|n| is_super_partition(n))
+            .collect();
+        if !dynamic.is_empty() {
+            on_log(format!(
+                "Refusing to flash: with the modem in fastbootd the phone switches to the other slot, which would have no {}. Flash them, or use the bootloader method.",
+                dynamic.join(", ")
+            ));
+            session.aborted = true;
+            session.end_reason = Some("SkippedDynamic".into());
+            return session;
+        }
+        let unsaved: Vec<&str> = held
+            .iter()
+            .copied()
+            .filter(|n| !options.keep_images.contains_key(*n))
+            .collect();
+        if !unsaved.is_empty() {
+            on_log(format!(
+                "Refusing to flash: with the modem in fastbootd the phone switches to the other slot, and {} were not copied from the phone — the new slot would keep its old copies. Start the install from Android with root for Shell, so they can be copied.",
+                unsaved.join(", ")
+            ));
+            session.aborted = true;
+            session.end_reason = Some("SkippedNotSaved".into());
+            return session;
+        }
+        let mut kept: Vec<(&str, &PathBuf)> = held
+            .iter()
+            .filter_map(|n| options.keep_images.get_key_value(*n))
+            .map(|(k, v)| (k.as_str(), v))
+            .collect();
+        kept.sort_by_key(|(k, _)| *k);
+        kept
+    } else {
+        Vec::new()
+    };
+
     let fastbootd_images: HashMap<&str, &PathBuf> = filtered
         .iter()
         .filter(|(k, _)| is_mediatek || modem_fastbootd || !is_bootloader_partition(k))
@@ -1534,6 +1594,12 @@ pub fn run_flash_session_with_log(
         for name in sorted_bl {
             on_log(format!(
                 "[dry-run] would flash: {} (bootloader, both slots)",
+                name
+            ));
+        }
+        for (name, _) in &kept {
+            on_log(format!(
+                "[dry-run] would flash: {} (copied from the phone, other slot, after set_active)",
                 name
             ));
         }
@@ -1615,7 +1681,7 @@ pub fn run_flash_session_with_log(
             .map(|(k, v)| (*k, *v))
             .collect();
 
-        let total_ops = non_super_imgs.len() * 2 + modem_imgs.len() + super_imgs.len();
+        let total_ops = non_super_imgs.len() * 2 + kept.len() + modem_imgs.len() + super_imgs.len();
         let flash_start = std::time::Instant::now();
         let mut done_ops = 0usize;
 
@@ -1635,6 +1701,41 @@ pub fn run_flash_session_with_log(
             match flash_batch_with_log(
                 &sorted_non_super,
                 slot,
+                serial,
+                total_ops,
+                &mut done_ops,
+                &cancel,
+                &mut session,
+                on_log,
+                on_progress,
+                on_failure,
+            ) {
+                BatchOutcome::Done => {}
+                BatchOutcome::Cancelled => {
+                    warn_switched_slot(switched.as_deref(), on_log);
+                    session.aborted = true;
+                    session.end_reason = Some("Cancelled".into());
+                    return session;
+                }
+                BatchOutcome::Aborted => {
+                    warn_switched_slot(switched.as_deref(), on_log);
+                    session.aborted = true;
+                    session.end_reason = Some("UserAborted".into());
+                    return session;
+                }
+            }
+        }
+
+        // What the phone had, for the partitions held back → the new slot
+        if !kept.is_empty() {
+            on_log(format!(
+                "Copying what the phone had to slot {}: {}",
+                system_slot.to_uppercase(),
+                kept.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(", ")
+            ));
+            match flash_batch_with_log(
+                &kept,
+                &system_slot,
                 serial,
                 total_ops,
                 &mut done_ops,
@@ -1926,6 +2027,25 @@ mod tests {
         // Without a modem there is no reason to switch.
         assert_eq!(modem_route(true, false, true), ModemRoute::Bootloader);
         assert_eq!(modem_route(false, true, true), ModemRoute::Bootloader);
+    }
+
+    // Only what the user held back must be carried to the new slot; names
+    // that are never flashed are not the user's choice.
+    #[test]
+    fn held_back_is_only_the_users_choice() {
+        let skipped = vec![
+            ("init_boot".to_string(), "user excluded".to_string()),
+            (
+                "persist".to_string(),
+                "device-unique data, never part of a firmware".to_string(),
+            ),
+            ("xbl".to_string(), "xbl/abl excluded".to_string()),
+            (
+                "odd.name".to_string(),
+                "not a plain partition name".to_string(),
+            ),
+        ];
+        assert_eq!(held_back(&skipped), ["init_boot", "xbl"]);
     }
 
     #[test]

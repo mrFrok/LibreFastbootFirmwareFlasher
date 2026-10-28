@@ -290,91 +290,30 @@ pub struct DeviceArb {
     pub info: ArbInfo,
 }
 
-fn adb_args<'a>(serial: Option<&'a str>, rest: &[&'a str]) -> Vec<&'a str> {
-    let mut args = vec!["adb"];
-    if let Some(s) = serial {
-        args.extend(["-s", s]);
-    }
-    args.extend_from_slice(rest);
-    args
-}
-
-/// How to run a command as root on the phone: as is when the adb shell is
-/// already root (recovery, `adb root` on a userdebug build), through `su`
-/// otherwise. `None` when neither works. Magisk asks on the phone's screen
-/// the first time, hence the long timeout; KernelSU and APatch never ask —
-/// Shell must already be granted in their manager, or `su` is refused.
-fn root_wrapper(serial: Option<&str>) -> Option<bool> {
-    let r = crate::utils::run_cmd(&adb_args(serial, &["shell", "id -u"]), 15);
-    if r.code == 0 && r.stdout.trim() == "0" {
-        return Some(false);
-    }
-    let r = crate::utils::run_cmd(&adb_args(serial, &["shell", "su -c 'id -u'"]), 60);
-    (r.code == 0 && r.stdout.trim() == "0").then_some(true)
-}
-
 /// Read the ARB of the firmware installed on the phone, from the active
 /// slot's xbl_config, over adb as root.
 pub fn device_arb(serial: Option<&str>) -> Result<DeviceArb, DeviceArbError> {
-    let devices = crate::device::list_adb_devices();
-    let present = match serial {
-        Some(s) => devices.iter().any(|d| d == s),
-        None => !devices.is_empty(),
+    use crate::device::{AdbReadError, AdbRoot};
+    let to_arb = |e: AdbReadError| match e {
+        AdbReadError::NoDevice => DeviceArbError::NoDevice,
+        AdbReadError::NoRoot => DeviceArbError::NoRoot,
+        AdbReadError::ReadFailed(e) => DeviceArbError::ReadFailed(e),
     };
-    if !present {
-        return Err(DeviceArbError::NoDevice);
+    let root = AdbRoot::open(serial).map_err(to_arb)?;
+    let part = format!("xbl_config{}", root.slot_suffix);
+    let data = root.read(&part).map_err(to_arb)?;
+    debug!("Read {} bytes of {}", data.len(), part);
+    if !data.starts_with(&ELF_MAGIC) {
+        return Err(DeviceArbError::Unparsed);
     }
-
-    let use_su = root_wrapper(serial).ok_or(DeviceArbError::NoRoot)?;
-
-    let suffix = crate::utils::run_cmd(
-        &adb_args(serial, &["shell", "getprop ro.boot.slot_suffix"]),
-        15,
-    )
-    .stdout
-    .trim()
-    .to_string();
-    let slot = suffix.trim_start_matches('_').to_string();
-    let part = format!("xbl_config{suffix}");
-
-    let mut last_err = String::new();
-    for dir in ["/dev/block/by-name", "/dev/block/bootdevice/by-name"] {
-        let cat = format!("cat {dir}/{part}");
-        let cmd = if use_su {
-            format!("su -c '{cat}'")
-        } else {
-            cat
-        };
-        // exec-out, not shell: the image is binary and must arrive unmangled.
-        let args = adb_args(serial, &["exec-out", &cmd]);
-        let out = match std::process::Command::new(args[0])
-            .args(&args[1..])
-            .output()
-        {
-            Ok(o) => o,
-            Err(e) => return Err(DeviceArbError::ReadFailed(e.to_string())),
-        };
-        if out.status.success() && out.stdout.starts_with(&ELF_MAGIC) {
-            debug!("Read {} bytes of {} from {}", out.stdout.len(), part, dir);
-            let info = extract_arb_from_bytes(&out.stdout, &format!("{part} on the phone"));
-            if info.version.is_none() {
-                return Err(DeviceArbError::Unparsed);
-            }
-            return Ok(DeviceArb { slot, info });
-        }
-        // cat's error ends up on stdout through exec-out.
-        last_err = String::from_utf8_lossy(if out.stderr.is_empty() {
-            &out.stdout
-        } else {
-            &out.stderr
-        })
-        .chars()
-        .take(200)
-        .collect::<String>()
-        .trim()
-        .to_string();
+    let info = extract_arb_from_bytes(&data, &format!("{part} on the phone"));
+    if info.version.is_none() {
+        return Err(DeviceArbError::Unparsed);
     }
-    Err(DeviceArbError::ReadFailed(format!("{part}: {last_err}")))
+    Ok(DeviceArb {
+        slot: root.slot_suffix.trim_start_matches('_').to_string(),
+        info,
+    })
 }
 
 /// What flashing a firmware does to a phone's anti-rollback, from the ARB
