@@ -3,6 +3,63 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.4.0
+
+### Flashing
+
+- Snapdragon phones are flashed entirely in fastbootd: the phone switches
+  to the other slot, and the modem and the system go there. There is no
+  restart into the bootloader any more — some phones cannot reach it, and a
+  flash stopped there could brick them. A flash with a modem but no system
+  is refused instead of being sent to the bootloader.
+- The old way, with the modem through the bootloader, stays as an explicit,
+  not recommended choice: `--method snapdragon-bootloader`, the last card
+  of the method dialog, or Settings → Firmware → Modem via bootloader.
+- Partitions you choose not to flash (a rooted `init_boot`, a custom
+  recovery) are copied from the phone over adb as root before the slot
+  switch and written to the new slot, so root survives. If they cannot be
+  copied, nothing is flashed.
+
+### Anti-rollback
+
+- The ARB installed on the phone is read from its `xbl_config` over adb as
+  root (Magisk: allow the prompt; KernelSU / APatch: grant root to Shell).
+  `lfff arb --device` shows it, and compares it with `--firmware-dir`.
+- The install compares it with the firmware's: the same ARB needs no
+  warning, a higher firmware ARB is warned about with both values, and a
+  phone ARB above the firmware's refuses the install. When the phone's ARB
+  cannot be read, the ARB step says why.
+- `lfff arb` no longer reports a firmware ARB it could not read as 0.
+
+### Interface
+
+- A firmware archive the app downloaded is deleted once unpacked; a .zip
+  you picked yourself too, with Settings → Firmware → Delete picked .zip.
+- A reworked About page, and links to the LFFF Telegram group and to the
+  Realme and OnePlus communities.
+- The "Fastbootd not confirmed" dialog is translated; an empty log says so
+  instead of showing a dash; History uses its icon instead of an emoji.
+
+---
+
+### Коротко по-русски
+
+- Смартфоны на Snapdragon прошиваются целиком в fastbootd: смартфон
+  переключается на другой слот, modem и система ставятся туда. Перезагрузки
+  в bootloader больше нет — на некоторых смартфонах он недоступен, и
+  прошивка через него могла закончиться «кирпичом».
+- Старый способ с modem через bootloader остался как явный выбор с
+  пометкой «не рекомендуется».
+- Разделы, которые вы не прошиваете (пропатченный `init_boot`, свой
+  recovery), копируются со смартфона по adb с root и переносятся на новый
+  слот — root не слетает.
+- ARB смартфона проверяется перед установкой: одинаковый — без
+  предупреждения, у прошивки выше — предупреждение, у смартфона выше —
+  установка запрещена. Нужен root для Shell (KernelSU / APatch) или
+  разрешение в Magisk.
+- Скачанные архивы удаляются после распаковки. Новая вкладка «О
+  программе», ссылки на группу LFFF и сообщества Realme и OnePlus.
+
 ## 3.3.2
 
 ### Fixes
