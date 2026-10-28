@@ -50,6 +50,8 @@ export component ConfirmSheet inherits Rectangle {
     in property <string> wrong-device;
     // Settings → Experimental → Rebuild super is on.
     in property <bool> rebuild-super;
+    // Settings → Experimental → Modem in fastbootd is on, for a Snapdragon.
+    in property <bool> modem-fastbootd;
     in property <string> super-plan;
     // The rebuild was acknowledged; Install waits for it.
     property <bool> rebuild-ok: false;
@@ -263,6 +265,18 @@ export component ConfirmSheet inherits Rectangle {
                         label: Tr.t("Built for", "Собрана для", "适用于", "適用於");
                         Text {
                             text: root.wrong-device + Tr.t(" — not this phone?", " — не этот смартфон?", " —— 不是这台手机？", " —— 不是這台手機？");
+                            font-size: 14px;
+                            font-weight: 500;
+                            color: StatusColors.warning;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if root.modem-fastbootd: FieldRow {
+                        label-width: 150px;
+                        label: "Modem";
+                        Text {
+                            text: Tr.t("in fastbootd, the phone switches to the other slot", "в fastbootd, смартфон переключится на другой слот", "在 fastbootd 中刷写，手机将切换到另一个槽位", "在 fastbootd 中刷寫，手機將切換到另一個槽位");
                             font-size: 14px;
                             font-weight: 500;
                             color: StatusColors.warning;

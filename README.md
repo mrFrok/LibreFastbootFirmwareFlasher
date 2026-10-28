@@ -185,7 +185,7 @@ lfff completion fish > ~/.config/fish/completions/lfff.fish
 [Offer: reboot to system  /  wipe data + reboot]
 ```
 
-**Modem in fastbootd** (`--method snapdragon-fastbootd`, experimental): no bootloader reboot. fastbootd can only write the modem of the slot it is not running from, so the slot is switched first:
+**Modem in fastbootd** (`--method snapdragon-fastbootd`; in the GUI, Settings → Experimental → Modem in fastbootd; experimental): no bootloader reboot. fastbootd can only write the modem of the slot it is not running from, so the slot is switched first:
 
 ```
 [fastbootd]

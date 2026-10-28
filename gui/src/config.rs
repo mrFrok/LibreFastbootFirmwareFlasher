@@ -37,6 +37,10 @@ pub struct Config {
     /// Rebuild super's layout from the firmware before flashing (experimental).
     #[serde(default)]
     pub rebuild_super: bool,
+    /// Snapdragon installs flash the modem from fastbootd after switching to
+    /// the other slot, instead of rebooting to the bootloader (experimental).
+    #[serde(default)]
+    pub modem_in_fastbootd: bool,
     /// Notify with a sound when an install ends.
     #[serde(default = "default_true")]
     pub sound: bool,
@@ -80,6 +84,7 @@ impl Default for Config {
             notice_accepted: false,
             sound: true,
             rebuild_super: false,
+            modem_in_fastbootd: false,
             known_devices: BTreeMap::new(),
         }
     }

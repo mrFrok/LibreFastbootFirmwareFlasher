@@ -426,6 +426,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_show_notice(!config.notice_accepted);
     ui.set_sound(config.sound);
     ui.set_rebuild_super(config.rebuild_super);
+    ui.set_modem_fastbootd(config.modem_in_fastbootd);
     ui_callbacks::apply_pins(&ui, &config.pinned_tools);
     ui.set_chips_summary(ui_callbacks::chips_summary(&config).into());
     ui.set_cache_summary(ui_callbacks::cache_summary().into());
