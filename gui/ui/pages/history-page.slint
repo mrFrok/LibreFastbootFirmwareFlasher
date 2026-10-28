@@ -148,11 +148,14 @@ export component HistoryPage {
                             vertical-stretch: 1;
                         }
 
-                        Text {
-                            text: "🕘";
-                            font-size: 32px;
-                            color: MaterialPalette.on-surface-variant;
-                            horizontal-alignment: center;
+                        HorizontalLayout {
+                            alignment: center;
+                            Image {
+                                source: @image-url("../icons/history.svg");
+                                width: 36px;
+                                height: 36px;
+                                colorize: MaterialPalette.on-surface-variant;
+                            }
                         }
 
                         Text {

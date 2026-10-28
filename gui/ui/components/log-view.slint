@@ -27,6 +27,8 @@ export component LogView inherits Rectangle {
             }
 
             TonalButton {
+                // Nothing to save until something is logged.
+                enabled: root.entries.length > 0;
                 text: Tr.export-log;
                 clicked => { export-log(); }
             }

@@ -50,8 +50,8 @@ export component MainWindow inherits MaterialWindow {
     // The progress in the title too, so it shows in the taskbar while the
     // user waits elsewhere.
     title: !root.classic-ui && root.install-view == 1 && root.stage2 == 1
-        ? Math.round(root.flash-progress * 100) + "% — Libre Fastboot Firmware Flasher"
-        : "Libre Fastboot Firmware Flasher";
+        ? Math.round(root.flash-progress * 100) + "% — LibreFastbootFirmwareFlasher"
+        : "LibreFastbootFirmwareFlasher";
     icon: @image-url("icons/logo_icon.svg");
     preferred-width: 1000px;
     preferred-height: 660px;

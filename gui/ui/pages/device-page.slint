@@ -162,7 +162,7 @@ export component DevicePage {
                 { label: "ADB", n: 2 },
                 { label: "Bootloader", n: 3 },
                 { label: "Fastbootd", n: 4 },
-                { label: "Done", n: 5 },
+                { label: Tr.t("Done", "Готово", "完成", "完成"), n: 5 },
             ]: HorizontalLayout {
                 spacing: 6px;
                 Rectangle {
@@ -292,6 +292,11 @@ export component DevicePage {
                 text: item.label;
                 clicked => { root.reboot-to(item.target); }
             }
+        }
+
+        // Keeps the log off the reboot buttons above.
+        Rectangle {
+            height: 8px;
         }
 
         LogView {
