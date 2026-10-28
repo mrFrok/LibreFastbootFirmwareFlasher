@@ -1,126 +1,227 @@
-import { HorizontalDivider, MaterialPalette } from "@material";
+import { MaterialPalette } from "@material";
 import { Typography } from "../globals/typography.slint";
 import { Tr } from "../globals/tr.slint";
-import { AboutLink } from "../components/nav.slint";
+import { Section } from "../components/wizard.slint";
+import { LinkRow } from "home-dash.slint";
 
+// A small pill under the name: version, licence, author.
+component Pill inherits Rectangle {
+    in property <string> text;
+    border-radius: 13px;
+    height: 26px;
+    background: MaterialPalette.secondary-container;
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        Text {
+            text: root.text;
+            font-size: 13px;
+            font-weight: 500;
+            color: MaterialPalette.on-secondary-container;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One person in the thanks: the name opens their page.
+component CreditRow inherits TouchArea {
+    in property <string> name;
+    in property <string> role;
+    mouse-cursor: pointer;
+    height: 52px;
+    Rectangle {
+        border-radius: 10px;
+        background: root.has-hover ? MaterialPalette.surface-container-high : transparent;
+        animate background { duration: 150ms; }
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 12px;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+                Text {
+                    text: root.name;
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: MaterialPalette.on-surface;
+                }
+
+                Text {
+                    text: root.role;
+                    font-size: 12px;
+                    color: MaterialPalette.on-surface-variant;
+                    overflow: elide;
+                }
+            }
+
+            Text {
+                text: "→";
+                font-size: 14px;
+                color: MaterialPalette.on-surface-variant;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// What the app is, where its people are, and who helped: the header names
+// it, two cards hold the links (community, project), the last one thanks.
 export component AboutPage {
     in property <string> app-version;
 
     callback open-url(string);
 
-    VerticalLayout {
-        spacing: 0px;
-        Rectangle {
-            vertical-stretch: 1;
-        }
-
+    HorizontalLayout {
+        alignment: center;
         VerticalLayout {
-            spacing: 8px;
-            Text {
-                text: "Libre Fastboot Firmware Flasher";
-                font-size: Typography.display-small-size;
-                font-weight: Typography.display-small-weight-em;
-                color: MaterialPalette.primary;
-                horizontal-alignment: center;
-                letter-spacing: 1px;
-            }
+            // Centred at 760px, narrower only when the window is.
+            preferred-width: 760px;
+            max-width: 760px;
+            min-width: 560px;
+            horizontal-stretch: 1;
+            padding-top: 24px;
+            padding-bottom: 24px;
+            spacing: 16px;
+            alignment: center;
 
-            Text {
-                text: root.app-version;
-                font-size: Typography.body-large-size;
-                color: MaterialPalette.on-surface-variant;
-                horizontal-alignment: center;
-            }
-
-            Text {
-                text: Tr.author-lbl;
-                font-size: Typography.body-large-size;
-                color: MaterialPalette.on-surface-variant;
-                horizontal-alignment: center;
-            }
-        }
-
-        Rectangle {
-            height: 24px;
-        }
-
-        HorizontalDivider { }
-
-        Rectangle {
-            height: 20px;
-        }
-
-        HorizontalLayout {
-            Rectangle {
-                horizontal-stretch: 1;
-            }
-
+            // ── Header ───────────────────────────────────────────
             VerticalLayout {
                 spacing: 10px;
-                min-width: 320px;
-                max-width: 520px;
-                horizontal-stretch: 1;
-                AboutLink {
-                    icon: @image-url("../icons/github.svg");
-                    label: "GitHub — LibreFastbootFirmwareFlasher";
-                    url: "https://github.com/mrFrok/LibreFastbootFirmwareFlasher";
-                    open(u) => { root.open-url(u); }
+                HorizontalLayout {
+                    alignment: center;
+                    Image {
+                        source: @image-url("../icons/logo_icon.svg");
+                        width: 72px;
+                        height: 72px;
+                    }
                 }
 
-                AboutLink {
-                    icon: @image-url("../icons/telegram.svg");
-                    label: "Author on Telegram";
-                    url: "https://t.me/mrFrok228";
-                    open(u) => { root.open-url(u); }
+                Text {
+                    text: "LibreFastbootFirmwareFlasher";
+                    font-size: Typography.headline-medium-size;
+                    font-weight: 600;
+                    color: MaterialPalette.on-surface;
+                    horizontal-alignment: center;
                 }
 
-                AboutLink {
-                    icon: @image-url("../icons/telegram.svg");
-                    label: "Telegram Group";
-                    url: "https://t.me/lfffcomunity";
-                    open(u) => { root.open-url(u); }
+                Text {
+                    text: Tr.t("Firmware for Realme, OnePlus and OPPO phones on Snapdragon.", "Прошивка смартфонов Realme, OnePlus и OPPO на Snapdragon.", "为搭载骁龙的 Realme、一加和 OPPO 手机刷机。", "為搭載 Snapdragon 的 Realme、OnePlus 和 OPPO 手機刷機。");
+                    font-size: 14px;
+                    color: MaterialPalette.on-surface-variant;
+                    horizontal-alignment: center;
                 }
 
-                AboutLink {
-                    icon: @image-url("../icons/telegram.svg");
-                    label: "Realme Community in Telegram";
-                    url: "https://t.me/gt3neo5hub";
-                    open(u) => { root.open-url(u); }
-                }
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 8px;
+                    padding-top: 4px;
+                    Pill {
+                        text: Tr.t("Version ", "Версия ", "版本 ", "版本 ") + root.app-version;
+                    }
 
-                AboutLink {
-                    icon: @image-url("../icons/telegram.svg");
-                    label: "OnePlus Community in Telegram";
-                    url: "https://t.me/oneplusmod";
-                    open(u) => { root.open-url(u); }
-                }
+                    Pill {
+                        text: "GPL-3.0";
+                    }
 
-                AboutLink {
-                    icon: @image-url("../icons/boosty.svg");
-                    label: "Donate — Boosty";
-                    url: "https://boosty.to/mrfrok/donate";
-                    open(u) => { root.open-url(u); }
+                    Pill {
+                        text: Tr.author-lbl;
+                    }
                 }
             }
 
-            Rectangle {
-                horizontal-stretch: 1;
+            // ── Links ────────────────────────────────────────────
+            HorizontalLayout {
+                spacing: 16px;
+                Section {
+                    // Equal halves whatever the labels' lengths.
+                    horizontal-stretch: 1;
+                    preferred-width: 100px;
+                    title: Tr.t("Community", "Сообщество", "社区", "社群");
+                    LinkRow {
+                        icon: @image-url("../icons/telegram.svg");
+                        text: Tr.t("Telegram Group", "Группа в Telegram", "Telegram 群组", "Telegram 群組");
+                        clicked => {
+                            root.open-url("https://t.me/lfffcomunity");
+                        }
+                    }
+
+                    LinkRow {
+                        icon: @image-url("../icons/telegram.svg");
+                        text: Tr.t("Realme Community in Telegram", "Сообщество Realme в Telegram", "Telegram 上的 Realme 社区", "Telegram 上的 Realme 社群");
+                        clicked => {
+                            root.open-url("https://t.me/gt3neo5hub");
+                        }
+                    }
+
+                    LinkRow {
+                        icon: @image-url("../icons/telegram.svg");
+                        text: Tr.t("OnePlus Community in Telegram", "Сообщество OnePlus в Telegram", "Telegram 上的 OnePlus 社区", "Telegram 上的 OnePlus 社群");
+                        clicked => {
+                            root.open-url("https://t.me/oneplusmod");
+                        }
+                    }
+                }
+
+                Section {
+                    // Equal halves whatever the labels' lengths.
+                    horizontal-stretch: 1;
+                    preferred-width: 100px;
+                    title: Tr.t("Project", "Проект", "项目", "專案");
+                    LinkRow {
+                        icon: @image-url("../icons/github.svg");
+                        text: Tr.t("Source code on GitHub", "Исходный код на GitHub", "GitHub 上的源代码", "GitHub 上的原始碼");
+                        clicked => {
+                            root.open-url("https://github.com/mrFrok/LibreFastbootFirmwareFlasher");
+                        }
+                    }
+
+                    LinkRow {
+                        icon: @image-url("../icons/telegram.svg");
+                        text: Tr.t("The author on Telegram", "Автор в Telegram", "作者的 Telegram", "作者的 Telegram");
+                        clicked => {
+                            root.open-url("https://t.me/mrFrok228");
+                        }
+                    }
+
+                    LinkRow {
+                        icon: @image-url("../icons/boosty.svg");
+                        text: Tr.t("Support the project on Boosty", "Поддержать проект на Boosty", "在 Boosty 上支持本项目", "在 Boosty 上支持本專案");
+                        clicked => {
+                            root.open-url("https://boosty.to/mrfrok/donate");
+                        }
+                    }
+                }
             }
-        }
 
-        Rectangle {
-            height: 16px;
-        }
+            // ── Thanks ───────────────────────────────────────────
+            Section {
+                title: Tr.t("Special thanks", "Благодарности", "特别感谢", "特別感謝");
+                CreditRow {
+                    name: "NeFeroN";
+                    role: Tr.t("Author of the original Windows program, help with flashing, the Windows version", "Автор оригинальной программы для Windows, помощь с прошивкой, версия для Windows", "原 Windows 程序作者，协助实现刷写，Windows 版本", "原 Windows 程式作者，協助實作刷寫，Windows 版本");
+                    clicked => {
+                        root.open-url("https://t.me/NeFeroN");
+                    }
+                }
 
-        Text {
-            text: Tr.license-lbl;
-            font-size: 13px;
-            color: MaterialPalette.on-surface-variant;
-            horizontal-alignment: center;
-        }
+                CreditRow {
+                    name: "MisterZtr";
+                    role: Tr.t("Partial MediaTek support", "Частичная поддержка MediaTek", "部分 MediaTek 支持", "部分 MediaTek 支援");
+                    clicked => {
+                        root.open-url("https://github.com/MisterZtr");
+                    }
+                }
 
-        Rectangle {
-            vertical-stretch: 1;
+                CreditRow {
+                    name: "Houvven";
+                    role: Tr.t("OplusUpdater, the base of the firmware search", "OplusUpdater — основа поиска прошивок", "OplusUpdater，固件搜索的基础", "OplusUpdater，韌體搜尋的基礎");
+                    clicked => {
+                        root.open-url("https://github.com/Houvven");
+                    }
+                }
+            }
         }
     }
 }

@@ -28,7 +28,7 @@ component Fact inherits VerticalLayout {
     }
 }
 
-component LinkRow inherits TouchArea {
+export component LinkRow inherits TouchArea {
     in property <image> icon;
     in property <string> text;
     height: 40px;
@@ -53,6 +53,8 @@ component LinkRow inherits TouchArea {
                 font-size: 14px;
                 color: MaterialPalette.on-surface;
                 vertical-alignment: center;
+                // Without it the longest label sets its card's minimum width.
+                overflow: elide;
             }
 
             Text {
