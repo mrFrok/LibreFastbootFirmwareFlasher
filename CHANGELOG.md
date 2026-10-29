@@ -3,6 +3,23 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.5.1
+
+### Fixes
+
+- A flash into a slot that keeps the layout after a super rebuild now
+  writes the empty factory images of `my_company` and `my_preload` there
+  too. Before, they stayed empty and the phone did not boot from that slot
+  (seen on a Realme GT Neo 5 on the second flash after a rebuild).
+- "Stop" works again while fastboot waits for a phone that dropped off USB,
+  also on boot, abl and the other critical partitions; mid-write those are
+  still never stopped. Before, the button did nothing for up to 8 minutes.
+- The computer is kept awake through the desktop (xdg-desktop-portal or
+  PowerManagement) where there is no systemd or elogind, and the log says
+  whether sleep is blocked.
+- The update dialog shows the release notes as readable text in a
+  scrolling box of proper size, not one line of raw Markdown.
+
 ## 3.5.0
 
 ### Super partition

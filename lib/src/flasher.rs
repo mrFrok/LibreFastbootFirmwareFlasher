@@ -691,12 +691,9 @@ fn flash_partition_inner(
 ) -> FlashResult {
     // Never kill fastboot mid-write on a critical partition: an interrupted
     // write to abl/xbl/boot can hard-brick the device. Cancellation for these
-    // takes effect between partitions (the batch loop checks the flag).
-    let cancel = if is_critical_partition(partition) {
-        None
-    } else {
-        cancel
-    };
+    // takes effect between partitions (the batch loop checks the flag), or
+    // while fastboot still waits for a phone gone from USB.
+    let critical = is_critical_partition(partition);
 
     // Scale the timeout with the image size so a large image on a slow (but
     // passing) cable is never killed mid-write — killing fastboot mid-flash
@@ -723,7 +720,12 @@ fn flash_partition_inner(
     let mut cmd: Vec<&str> = vec!["fastboot"];
     cmd.extend(&refs);
     let start = Instant::now();
+    // A critical partition is never stopped mid-write: only while fastboot
+    // still waits for the phone (gone from USB), when nothing is written.
     let result = match cancel {
+        Some(c) if critical => {
+            crate::utils::run_cmd_with_cancel_when(&cmd, timeout_secs, c, &fastboot_is_waiting)
+        }
         Some(c) => crate::utils::run_cmd_with_cancel(&cmd, timeout_secs, c),
         None => crate::utils::run_cmd(&cmd, timeout_secs),
     };
@@ -1358,13 +1360,52 @@ fn logical_partitions(getvar_all: &str) -> Vec<String> {
         .collect()
 }
 
+/// Whether fastboot, by what it printed so far, is still waiting for the
+/// phone (`< waiting for SERIAL >`) and has sent nothing since.
+fn fastboot_is_waiting(stderr: &str) -> bool {
+    stderr
+        .rsplit_once("< waiting for")
+        .is_some_and(|(_, after)| after.trim().lines().count() <= 1)
+}
+
 /// The size of super from `fastboot getvar partition-size:super`, 0 when
-/// there is none. The key holds a colon itself, so not parse_fastboot_getvar.
+/// there is none.
 fn parse_super_size(out: &str) -> u64 {
+    parse_partition_size(out, "super").unwrap_or(0)
+}
+
+/// The answer to `fastboot getvar partition-size:<name>`; `None` without
+/// one. The key holds a colon itself, so not parse_fastboot_getvar.
+fn parse_partition_size(out: &str, name: &str) -> Option<u64> {
+    let key = format!("partition-size:{name}:");
     out.lines()
-        .find_map(|l| l.split("partition-size:super:").nth(1))
+        .find_map(|l| l.split(key.as_str()).nth(1))
         .and_then(|v| u64::from_str_radix(v.trim().trim_start_matches("0x"), 16).ok())
-        .unwrap_or(0)
+}
+
+/// The stand-ins ([`crate::super_layout::STUB_IMAGES`]) the firmware lacks
+/// whose partition in `target_slot` is there but empty: a rebuild leaves the
+/// other slot's partitions in their groups with nothing in them, and a later
+/// flash into that slot without a rebuild would leave these empty — Android
+/// then fails to mount them and does not boot. One that is not there at all
+/// is left alone: fastbootd would create it outside its group.
+fn empty_stub_slots(
+    getvar_all: &str,
+    super_names: &[String],
+    target_slot: &str,
+    size_of: &dyn Fn(&str) -> Option<u64>,
+) -> Vec<String> {
+    let device = logical_partitions(getvar_all);
+    crate::super_layout::STUB_IMAGES
+        .iter()
+        .map(|(n, _)| *n)
+        .filter(|n| !super_names.iter().any(|s| s == n))
+        .filter(|n| {
+            let name = format!("{n}_{target_slot}");
+            device.contains(&name) && size_of(&name) == Some(0)
+        })
+        .map(str::to_string)
+        .collect()
 }
 
 /// Whether and how to rebuild super before flashing `super_names` into
@@ -1811,7 +1852,9 @@ pub fn run_flash_session_with_log(
 
         // Rebuild super? Decided before the switch, so that a layout which
         // cannot be built stops nothing: the flash just keeps the phone's.
-        let rebuild: Option<SuperRebuild> = if modem_fastbootd && options.rebuild_super {
+        let (rebuild, fill): (Option<SuperRebuild>, Vec<String>) = if modem_fastbootd
+            && options.rebuild_super
+        {
             let super_names: Vec<String> = fastbootd_images
                 .keys()
                 .filter(|k| is_super_partition(k))
@@ -1819,6 +1862,7 @@ pub fn run_flash_session_with_log(
                 .collect();
             let target = other_slot(&active_slot);
             let (_, out, err) = fastboot_cmd_serial(serial, &["getvar", "all"], 30);
+            let getvar_all = format!("{out}\n{err}");
             // Asked on its own: OnePlus 15 leaves it out of `getvar all`, and
             // for a second or two after coming from Android its fastbootd
             // answers "Could not open partition" — so asked again a while.
@@ -1845,7 +1889,7 @@ pub fn run_flash_session_with_log(
             let json =
                 fs::read_to_string(firmware_dir.join(crate::extractor::PAYLOAD_METADATA_FILE)).ok();
             match super_rebuild_plan(
-                &format!("{out}\n{err}"),
+                &getvar_all,
                 super_size,
                 json.as_deref(),
                 &super_names,
@@ -1868,28 +1912,42 @@ pub fn run_flash_session_with_log(
                             r.dropped.join(", ")
                         ));
                     }
-                    Some(r)
+                    (Some(r), Vec::new())
                 }
                 Ok(None) => {
                     on_log(format!(
                         "Slot {} has its partitions: super is kept, resized in place",
                         target.to_uppercase()
                     ));
-                    None
+                    let size_of = |name: &str| {
+                        let key = format!("partition-size:{name}");
+                        let (_, so, se) = fastboot_cmd_serial(serial, &["getvar", &key], 10);
+                        parse_partition_size(&format!("{so}\n{se}"), name)
+                    };
+                    let fill = empty_stub_slots(&getvar_all, &super_names, target, &size_of);
+                    if !fill.is_empty() {
+                        on_log(format!(
+                            "Empty in slot {} and not in the firmware, written as empty factory images: {}",
+                            target.to_uppercase(),
+                            fill.join(", ")
+                        ));
+                    }
+                    (None, fill)
                 }
                 Err(e) => {
                     on_log(format!("Super is not rebuilt: {e}"));
-                    None
+                    (None, Vec::new())
                 }
             }
         } else {
-            None
+            (None, Vec::new())
         };
         // The stand-ins, as files fastboot can flash; kept until the end.
         let stub_dir = tempfile::tempdir().ok();
         let mut stub_files: Vec<(String, PathBuf)> = Vec::new();
-        if let (Some(r), Some(dir)) = (&rebuild, &stub_dir) {
-            for name in &r.stubs {
+        let stubs: &[String] = rebuild.as_ref().map_or(&fill, |r| &r.stubs);
+        if let Some(dir) = &stub_dir {
+            for name in stubs {
                 let path = dir.path().join(format!("{name}.img"));
                 let img = crate::super_layout::stub_image(name).unwrap_or_default();
                 if fs::write(&path, img).is_ok() {
@@ -1897,10 +1955,7 @@ pub fn run_flash_session_with_log(
                 }
             }
         }
-        if rebuild
-            .as_ref()
-            .is_some_and(|r| r.stubs.len() != stub_files.len())
-        {
+        if stubs.len() != stub_files.len() {
             on_log("Could not write the stand-in images — nothing was flashed".into());
             session.aborted = true;
             session.end_reason = Some("StubWriteFailed".into());
@@ -2075,42 +2130,43 @@ pub fn run_flash_session_with_log(
                     session.end_reason = Some("WipeSuperFailed".into());
                     return session;
                 }
-                // Into the fresh layout, before the firmware's images.
-                let stubs: Vec<(&str, &PathBuf)> =
-                    stub_files.iter().map(|(n, p)| (n.as_str(), p)).collect();
-                if !stubs.is_empty() {
-                    match flash_batch_with_log(
-                        &stubs,
-                        &system_slot,
-                        serial,
-                        total_ops,
-                        &mut done_ops,
-                        &cancel,
-                        &mut session,
-                        on_log,
-                        on_progress,
-                        on_failure,
-                    ) {
-                        BatchOutcome::Done => {}
-                        BatchOutcome::Cancelled => {
-                            warn_switched_slot(switched.as_deref(), on_log);
-                            session.aborted = true;
-                            session.end_reason = Some("Cancelled".into());
-                            return session;
-                        }
-                        BatchOutcome::Aborted => {
-                            warn_switched_slot(switched.as_deref(), on_log);
-                            session.aborted = true;
-                            session.end_reason = Some("UserAborted".into());
-                            return session;
-                        }
-                    }
-                }
             } else {
                 on_log("Preparing super partition...".into());
                 let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
                 session.outside_group =
                     prepare_super_with_log(serial, &super_names, &system_slot, &|msg| on_log(msg));
+            }
+            // Into the fresh layout, or the slot's empty placeholders, before
+            // the firmware's images.
+            let stubs: Vec<(&str, &PathBuf)> =
+                stub_files.iter().map(|(n, p)| (n.as_str(), p)).collect();
+            if !stubs.is_empty() {
+                match flash_batch_with_log(
+                    &stubs,
+                    &system_slot,
+                    serial,
+                    total_ops,
+                    &mut done_ops,
+                    &cancel,
+                    &mut session,
+                    on_log,
+                    on_progress,
+                    on_failure,
+                ) {
+                    BatchOutcome::Done => {}
+                    BatchOutcome::Cancelled => {
+                        warn_switched_slot(switched.as_deref(), on_log);
+                        session.aborted = true;
+                        session.end_reason = Some("Cancelled".into());
+                        return session;
+                    }
+                    BatchOutcome::Aborted => {
+                        warn_switched_slot(switched.as_deref(), on_log);
+                        session.aborted = true;
+                        session.end_reason = Some("UserAborted".into());
+                        return session;
+                    }
+                }
             }
 
             let mut sorted_super: Vec<(&str, &PathBuf)> = super_imgs.into_iter().collect();
@@ -2351,6 +2407,59 @@ mod tests {
         let err = super_rebuild_plan(&getvar_all(&device), 0, Some(PAYLOAD), &firmware(), "b")
             .unwrap_err();
         assert!(err.contains("size of super"), "{err}");
+    }
+
+    // After a rebuild into B, slot A holds empty placeholders. The next
+    // flash into A keeps the layout, and must fill the two the firmware
+    // lacks — empty, Neo 5 did not boot.
+    #[test]
+    fn empty_placeholders_get_stubs_and_nothing_else_does() {
+        let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
+        device.extend(slot(&["my_company", "my_preload"], "_a"));
+        let size_of = |name: &str| match name {
+            "my_company_a" => Some(0),
+            "my_preload_a" => Some(0x55000),
+            _ => None,
+        };
+        let fill = empty_stub_slots(&getvar_all(&device), &firmware(), "a", &size_of);
+        assert_eq!(fill, ["my_company"]);
+
+        // Not there at all: not created, fastbootd would put it in `default`.
+        let device = slot(&FIRMWARE_DYNAMIC, "_a");
+        assert!(empty_stub_slots(&getvar_all(&device), &firmware(), "a", &|_| Some(0)).is_empty());
+
+        // In the firmware: its own image goes there, never a stand-in.
+        let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
+        device.push("my_company_a".into());
+        let mut names = firmware();
+        names.push("my_company".into());
+        assert!(empty_stub_slots(&getvar_all(&device), &names, "a", &|_| Some(0)).is_empty());
+    }
+
+    // A cancel stops a critical partition only before anything is sent.
+    #[test]
+    fn fastboot_waiting_is_told_from_writing() {
+        assert!(fastboot_is_waiting("< waiting for 7caf1fc8 >\n"));
+        assert!(!fastboot_is_waiting(""));
+        assert!(!fastboot_is_waiting("Sending 'boot_a' (196608 KB)"));
+        assert!(!fastboot_is_waiting(
+            "< waiting for 7caf1fc8 >\nSending 'boot_a' (196608 KB)"
+        ));
+    }
+
+    #[test]
+    fn partition_size_tells_zero_from_no_answer() {
+        assert_eq!(
+            parse_partition_size("partition-size:my_company_a: 0x0", "my_company_a"),
+            Some(0)
+        );
+        assert_eq!(
+            parse_partition_size(
+                "getvar:partition-size:my_company_a FAILED (remote: 'Unknown partition')",
+                "my_company_a"
+            ),
+            None
+        );
     }
 
     #[test]

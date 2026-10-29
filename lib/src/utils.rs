@@ -160,6 +160,17 @@ pub fn run_cmd_owned(cmd: &[String], timeout_secs: u64) -> CmdResult {
 /// Like [`run_cmd`] but monitors a cancel flag.  When the flag becomes true
 /// the child process is killed immediately and a "cancelled" result is returned.
 pub fn run_cmd_with_cancel(cmd: &[&str], timeout_secs: u64, cancel: &AtomicBool) -> CmdResult {
+    run_cmd_with_cancel_when(cmd, timeout_secs, cancel, &|_| true)
+}
+
+/// Like [`run_cmd_with_cancel`], but a cancel only kills the child once
+/// `may_stop` agrees, asked with its stderr so far — until then it runs on.
+pub fn run_cmd_with_cancel_when(
+    cmd: &[&str],
+    timeout_secs: u64,
+    cancel: &AtomicBool,
+    may_stop: &dyn Fn(&str) -> bool,
+) -> CmdResult {
     if cmd.is_empty() {
         return CmdResult {
             code: -1,
@@ -195,13 +206,23 @@ pub fn run_cmd_with_cancel(cmd: &[&str], timeout_secs: u64, cancel: &AtomicBool)
             buf
         })
     });
+    // Read as it comes, so that `may_stop` sees what the child said so far.
+    let stderr_so_far = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let stderr_handle = child.stderr.take().map(|mut err| {
+        let sink = stderr_so_far.clone();
         std::thread::spawn(move || {
-            let mut buf = String::new();
-            let _ = err.read_to_string(&mut buf);
-            buf
+            let mut chunk = [0u8; 4096];
+            while let Ok(n) = err.read(&mut chunk) {
+                if n == 0 {
+                    break;
+                }
+                if let Ok(mut s) = sink.lock() {
+                    s.push_str(&String::from_utf8_lossy(&chunk[..n]));
+                }
+            }
         })
     });
+    let stderr_now = || stderr_so_far.lock().map(|s| s.clone()).unwrap_or_default();
 
     let poll = Duration::from_millis(500);
     let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
@@ -211,9 +232,10 @@ pub fn run_cmd_with_cancel(cmd: &[&str], timeout_secs: u64, cancel: &AtomicBool)
                 let stdout = stdout_handle
                     .map(|h| h.join().unwrap_or_default())
                     .unwrap_or_default();
-                let stderr = stderr_handle
-                    .map(|h| h.join().unwrap_or_default())
-                    .unwrap_or_default();
+                if let Some(h) = stderr_handle {
+                    let _ = h.join();
+                }
+                let stderr = stderr_now();
                 return CmdResult {
                     code: status.code().unwrap_or(-1),
                     stdout: stdout.trim().to_string(),
@@ -221,7 +243,7 @@ pub fn run_cmd_with_cancel(cmd: &[&str], timeout_secs: u64, cancel: &AtomicBool)
                 };
             }
             Ok(None) => {
-                if cancel.load(Ordering::Relaxed) {
+                if cancel.load(Ordering::Relaxed) && may_stop(&stderr_now()) {
                     warn!("Cancel requested — killing '{}'", cmd[0]);
                     let _ = child.kill();
                     let _ = child.wait();

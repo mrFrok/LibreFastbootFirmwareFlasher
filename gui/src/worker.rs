@@ -437,50 +437,123 @@ pub fn cancel_unpack() {
     UNPACK_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
+const NO_SLEEP_WHY: &str = "Flashing a phone; sleeping now would leave it half-flashed";
+
 /// Keeps the computer awake while it lives: sleeping halfway through
-/// writing super leaves the phone half-flashed. Best effort: without
-/// an inhibitor tool the flash goes on as before.
-struct NoSleep(Option<std::process::Child>);
+/// writing super leaves the phone half-flashed. Best effort: without any
+/// way to block sleep the flash goes on as before, and the log says so.
+enum NoSleep {
+    /// An inhibitor tool holding the lock until killed.
+    Tool(std::process::Child),
+    /// A D-Bus inhibition, held while the connection is open.
+    #[cfg(target_os = "linux")]
+    Bus {
+        _conn: zbus::blocking::Connection,
+    },
+    None,
+}
 
 impl NoSleep {
-    fn new() -> Self {
-        let why = "Flashing a phone; sleeping now would leave it half-flashed";
+    fn new(tx: &mpsc::Sender<WMsg>, tab: u8) -> Self {
+        let (held, how) = Self::take();
+        match how {
+            Some(how) => log(tx, LogLevel::Info, tab, format!("Sleep is blocked ({how})")),
+            None => log(
+                tx,
+                LogLevel::Warn,
+                tab,
+                "Could not block sleep: keep the computer awake until the flash ends",
+            ),
+        }
+        held
+    }
+
+    fn take() -> (Self, Option<&'static str>) {
         #[cfg(target_os = "macos")]
-        let tries: Vec<Vec<String>> = vec![vec!["caffeinate".into(), "-i".into()]];
+        let tools: [(&str, Vec<String>); 1] = [("caffeinate", vec!["-i".into()])];
         #[cfg(not(target_os = "macos"))]
-        let tries: Vec<Vec<String>> = ["systemd-inhibit", "elogind-inhibit"]
-            .iter()
-            .map(|t| {
+        let tools = ["systemd-inhibit", "elogind-inhibit"].map(|t| {
+            (
+                t,
                 vec![
-                    t.to_string(),
                     "--what=sleep:idle".into(),
                     "--who=LibreFastbootFirmwareFlasher".into(),
-                    format!("--why={why}"),
+                    format!("--why={NO_SLEEP_WHY}"),
                     "--mode=block".into(),
                     "sleep".into(),
                     "infinity".into(),
-                ]
-            })
-            .collect();
-        let _ = why;
-        for t in tries {
-            if let Ok(child) = std::process::Command::new(&t[0])
-                .args(&t[1..])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-            {
-                return NoSleep(Some(child));
+                ],
+            )
+        });
+        for (tool, args) in tools {
+            if let Some(child) = spawn_holding(tool, &args) {
+                return (NoSleep::Tool(child), Some(tool));
             }
         }
-        NoSleep(None)
+        #[cfg(target_os = "linux")]
+        if let Some((conn, how)) = bus_inhibit() {
+            return (NoSleep::Bus { _conn: conn }, Some(how));
+        }
+        (NoSleep::None, None)
     }
+}
+
+/// Starts an inhibitor that is meant to run until killed. One that exits at
+/// once (systemd-inhibit installed, but no logind running) holds nothing.
+fn spawn_holding(tool: &str, args: &[String]) -> Option<std::process::Child> {
+    let mut child = std::process::Command::new(tool)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    thread::sleep(Duration::from_millis(300));
+    match child.try_wait() {
+        Ok(None) => Some(child),
+        _ => {
+            let _ = child.wait();
+            None
+        }
+    }
+}
+
+/// Without logind: the desktop's own power management, through the
+/// session bus. The inhibition ends when the connection closes.
+#[cfg(target_os = "linux")]
+fn bus_inhibit() -> Option<(zbus::blocking::Connection, &'static str)> {
+    use std::collections::HashMap;
+    use zbus::zvariant::Value;
+
+    let conn = zbus::blocking::Connection::session().ok()?;
+    // xdg-desktop-portal: 4 = suspend, 8 = idle.
+    let options: HashMap<&str, Value> = HashMap::from([("reason", Value::from(NO_SLEEP_WHY))]);
+    if conn
+        .call_method(
+            Some("org.freedesktop.portal.Desktop"),
+            "/org/freedesktop/portal/desktop",
+            Some("org.freedesktop.portal.Inhibit"),
+            "Inhibit",
+            &("", 4u32 | 8u32, options),
+        )
+        .is_ok()
+    {
+        return Some((conn, "desktop portal"));
+    }
+    conn.call_method(
+        Some("org.freedesktop.PowerManagement"),
+        "/org/freedesktop/PowerManagement/Inhibit",
+        Some("org.freedesktop.PowerManagement.Inhibit"),
+        "Inhibit",
+        &("LibreFastbootFirmwareFlasher", NO_SLEEP_WHY),
+    )
+    .ok()?;
+    Some((conn, "desktop power management"))
 }
 
 impl Drop for NoSleep {
     fn drop(&mut self) {
-        if let Some(c) = self.0.as_mut() {
+        if let NoSleep::Tool(c) = self {
             let _ = c.kill();
             let _ = c.wait();
         }
@@ -1209,7 +1282,7 @@ pub fn worker(
                 skip_preloader,
                 skip_partitions,
             } => {
-                let _awake = NoSleep::new();
+                let _awake = NoSleep::new(&tx, 2);
                 flash_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
                 tx.send(WMsg::Flashing(true)).ok();
 
@@ -2146,7 +2219,7 @@ pub fn worker(
             } => {
                 use lfff_lib::flasher::FastbootdStatus;
                 use std::sync::atomic::Ordering;
-                let _awake = NoSleep::new();
+                let _awake = NoSleep::new(&tx, 2);
                 flash_cancel.store(false, Ordering::Relaxed);
                 tx.send(WMsg::Flashing(true)).ok();
                 let stop = |reason: String| {
@@ -2305,7 +2378,7 @@ pub fn worker(
 
             Cmd::RepairOta => {
                 use lfff_lib::flasher::{DeviceMode, FastbootdStatus};
-                let _awake = NoSleep::new();
+                let _awake = NoSleep::new(&tx, 0);
                 let reboot = |via: Via| {
                     if let Err(e) =
                         lfff_lib::device::reboot(serial.as_deref(), via, RebootTarget::Fastbootd)
@@ -2390,7 +2463,7 @@ pub fn worker(
                         // Strictly newer only — a local dev build ahead of the
                         // latest release must not trigger the update dialog.
                         if version_tuple(latest) > version_tuple(current) {
-                            let body = json.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let body = plain_release_notes(json.get("body").and_then(|v| v.as_str()).unwrap_or(""));
                             let url = json.get("html_url").and_then(|v| v.as_str()).unwrap_or("https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases/latest").to_string();
                             tx.send(WMsg::UpdateAvailable {
                                 version: latest.to_string(),
@@ -2403,5 +2476,49 @@ pub fn worker(
                     }
             }
         }
+    }
+}
+
+/// The release notes (Markdown, from CHANGELOG.md) as plain text the update
+/// dialog can show: headings on a line of their own, list items as "• ", the
+/// lines an item is wrapped over joined, and code and emphasis marks gone.
+fn plain_release_notes(md: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut open = false; // the last entry still takes wrapped lines
+    for line in md.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            open = false;
+        } else if let Some(h) = t.strip_prefix('#') {
+            if !out.is_empty() {
+                out.push(String::new());
+            }
+            out.push(h.trim_start_matches('#').trim().to_string());
+            open = false;
+        } else if let Some(item) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
+            out.push(format!("• {item}"));
+            open = true;
+        } else if open && let Some(last) = out.last_mut() {
+            last.push(' ');
+            last.push_str(t);
+        } else {
+            out.push(t.to_string());
+            open = true;
+        }
+    }
+    out.join("\n").replace("**", "").replace('`', "")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::plain_release_notes;
+
+    #[test]
+    fn release_notes_read_as_plain_text() {
+        let md = "### Super partition\n\n- When the slot is\n  empty, `super` is\n  rebuilt.\n- **Two**\n\n### Fixes\n\nSome text\nwrapped.";
+        assert_eq!(
+            plain_release_notes(md),
+            "Super partition\n• When the slot is empty, super is rebuilt.\n• Two\n\nFixes\nSome text wrapped."
+        );
     }
 }
