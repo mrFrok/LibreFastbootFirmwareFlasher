@@ -3121,7 +3121,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-cli"
-version = "3.5.0"
+version = "3.5.1"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -3139,7 +3139,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-gui"
-version = "3.5.0"
+version = "3.5.1"
 dependencies = [
  "arboard",
  "chrono",
@@ -3154,11 +3154,12 @@ dependencies = [
  "serde_json",
  "slint",
  "slint-build",
+ "zbus",
 ]
 
 [[package]]
 name = "lfff-lib"
-version = "3.5.0"
+version = "3.5.1"
 dependencies = [
  "anyhow",
  "dirs",
@@ -3177,7 +3178,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-ota"
-version = "3.5.0"
+version = "3.5.1"
 dependencies = [
  "aes",
  "anyhow",
