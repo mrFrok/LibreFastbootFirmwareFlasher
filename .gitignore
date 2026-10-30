@@ -34,3 +34,7 @@ _staging/
 
 # Python bytecode from scripts/
 __pycache__/
+
+# Local tooling and scratch
+.serena/
+tmp/
