@@ -18,12 +18,14 @@ export component LogView inherits Rectangle {
         padding: 8px;
         HorizontalLayout {
             horizontal-stretch: 1;
+            padding-left: 8px;
             Text {
                 text: Tr.log-title;
                 font-size: 14px;
-                font-weight: 600;
+                font-weight: 500;
                 color: MaterialPalette.on-surface;
                 horizontal-stretch: 1;
+                vertical-alignment: center;
             }
 
             TonalButton {
@@ -39,10 +41,13 @@ export component LogView inherits Rectangle {
             font-size: 12px;
             color: StatusColors.success;
         }
-        if entries.length == 0: Text {
-            text: Tr.log-empty;
-            color: MaterialPalette.on-surface-variant;
-            font-size: 14px;
+        if entries.length == 0: HorizontalLayout {
+            padding-left: 8px;
+            Text {
+                text: Tr.log-empty;
+                color: MaterialPalette.on-surface-variant;
+                font-size: 14px;
+            }
         }
         sv := ScrollView {
             VerticalLayout {
@@ -76,7 +81,7 @@ export component LogView inherits Rectangle {
                             Text {
                                 text: e.level == "error" ? "ERR" : e.level == "success" ? " OK" : e.level == "warn" ? "WRN" : "INF";
                                 font-size: 10px;
-                                font-weight: 700;
+                                font-weight: 500;
                                 font-family: "monospace";
                                 horizontal-alignment: center;
                                 vertical-alignment: center;

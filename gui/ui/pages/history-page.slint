@@ -26,9 +26,9 @@ export component HistoryPage {
             text: root.lang == "ru" ? "История прошивок"
                 : root.lang == "zh-CN" ? "刷写历史"
                 : root.lang == "zh-TW" ? "刷寫歷史"
-                : "Flash History";
-            font-size: 20px;
-            font-weight: 700;
+                : "Flash history";
+            font-size: 26px;
+            font-weight: 500;
             color: MaterialPalette.on-surface;
         }
 
@@ -66,7 +66,7 @@ export component HistoryPage {
                                     ? "日期" : root.lang == "zh-TW"
                                     ? "日期" : "Date";
                                 font-size: 12px;
-                                font-weight: 700;
+                                font-weight: 500;
                                 color: MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
                                 overflow: elide;
@@ -81,7 +81,7 @@ export component HistoryPage {
                                     ? "固件" : root.lang == "zh-TW"
                                     ? "韌體" : "Firmware";
                                 font-size: 12px;
-                                font-weight: 700;
+                                font-weight: 500;
                                 color: MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
                                 overflow: elide;
@@ -96,7 +96,7 @@ export component HistoryPage {
                                     ? "设备" : root.lang == "zh-TW"
                                     ? "裝置" : "Device";
                                 font-size: 12px;
-                                font-weight: 700;
+                                font-weight: 500;
                                 color: MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
                                 overflow: elide;
@@ -111,7 +111,7 @@ export component HistoryPage {
                                     ? "结果" : root.lang == "zh-TW"
                                     ? "結果" : "Result";
                                 font-size: 12px;
-                                font-weight: 700;
+                                font-weight: 500;
                                 color: MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
                                 horizontal-alignment: center;
@@ -127,7 +127,7 @@ export component HistoryPage {
                                     ? "耗时" : root.lang == "zh-TW"
                                     ? "耗時" : "Duration";
                                 font-size: 12px;
-                                font-weight: 700;
+                                font-weight: 500;
                                 color: MaterialPalette.on-surface-variant;
                                 vertical-alignment: center;
                                 horizontal-alignment: right;
@@ -260,7 +260,7 @@ export component HistoryPage {
                                                     ? root.status-aborted
                                                     : root.status-failed;
                                                 font-size: 10px;
-                                                font-weight: 700;
+                                                font-weight: 500;
                                                 horizontal-alignment: center;
                                                 vertical-alignment: center;
                                                 color: item.result == "OK" ? StatusColors.on-success-container

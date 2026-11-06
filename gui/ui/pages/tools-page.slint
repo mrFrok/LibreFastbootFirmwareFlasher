@@ -11,35 +11,31 @@ component ToolCard inherits TouchArea {
     in property <int> id;
     in property <bool> pinned;
     callback toggle-pin();
-    min-height: 84px;
+    min-height: 80px;
+    // A plain raised surface: the icon sits in a muted column, no tinted tile,
+    // so nine cards do not read as nine accents.
     Rectangle {
-        border-radius: 16px;
+        border-radius: 12px;
         background: root.has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container;
-        border-width: 1px;
-        border-color: MaterialPalette.outline-variant;
-        Rectangle {
-            x: 14px;
-            y: 14px;
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            background: MaterialPalette.secondary-container;
-            Image {
-                source: Tools.icon(root.id);
-                width: 22px;
-                height: 22px;
-                colorize: MaterialPalette.on-secondary-container;
-            }
+        animate background { duration: 150ms; }
+        Image {
+            // Level with the title's line, whatever the card's height.
+            x: 16px;
+            y: 16px;
+            source: Tools.icon(root.id);
+            width: 20px;
+            height: 20px;
+            colorize: MaterialPalette.on-surface-variant;
         }
 
         // Icon placed by hand: a wrapping Text in a HorizontalLayout reports
         // a one-line height.
         VerticalLayout {
-            padding: 14px;
-            padding-left: 68px;
+            padding: 16px;
+            padding-left: 52px;
             padding-right: 48px;
-            alignment: center;
-            spacing: 3px;
+            alignment: start;
+            spacing: 4px;
             Text {
                 text: Tools.title(root.id);
                 font-size: 15px;
@@ -91,7 +87,7 @@ export component ToolsGrid inherits VerticalLayout {
         Text {
             text: Tr.t("Tools", "Инструменты", "工具", "工具");
             font-size: 26px;
-            font-weight: 600;
+            font-weight: 500;
             color: MaterialPalette.on-surface;
         }
 
@@ -233,7 +229,7 @@ export component LogsPage inherits VerticalLayout {
     Text {
         text: Tools.title(8);
         font-size: 26px;
-        font-weight: 600;
+        font-weight: 500;
         color: MaterialPalette.on-surface;
     }
 
@@ -275,7 +271,7 @@ export component RepairPage inherits VerticalLayout {
     Text {
         text: Tools.title(9);
         font-size: 26px;
-        font-weight: 600;
+        font-weight: 500;
         color: MaterialPalette.on-surface;
     }
 

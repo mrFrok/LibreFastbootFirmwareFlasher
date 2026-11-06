@@ -14,20 +14,36 @@ component SkipChip inherits TouchArea {
     in property <string> text;
     in-out property <bool> checked;
     height: 32px;
-    width: label.preferred-width + 28px;
+    // Partition names are set in mono; a check icon, not a ✓ glyph, marks
+    // the chosen ones.
+    width: label.preferred-width + (root.checked ? 44px : 28px);
     clicked => {
         root.checked = !root.checked;
     }
     Rectangle {
         border-radius: 8px;
-        background: root.checked ? MaterialPalette.secondary-container : transparent;
+        background: root.checked ? MaterialPalette.secondary-container
+            : root.has-hover ? MaterialPalette.on-surface.with-alpha(0.06) : transparent;
         border-width: root.checked ? 0px : 1px;
         border-color: MaterialPalette.outline;
-        label := Text {
-            text: (root.checked ? "✓ " : "") + root.text;
-            font-size: 13px;
-            font-weight: 500;
-            color: root.checked ? MaterialPalette.on-secondary-container : MaterialPalette.on-surface;
+        HorizontalLayout {
+            padding-left: root.checked ? 10px : 14px;
+            padding-right: 14px;
+            spacing: 4px;
+            if root.checked: Image {
+                source: @image-url("../icons/check.svg");
+                width: 16px;
+                height: 16px;
+                y: (parent.height - self.height) / 2;
+                colorize: MaterialPalette.on-secondary-container;
+            }
+            label := Text {
+                text: root.text;
+                font-size: 13px;
+                font-family: "monospace";
+                color: root.checked ? MaterialPalette.on-secondary-container : MaterialPalette.on-surface;
+                vertical-alignment: center;
+            }
         }
     }
 }
@@ -105,7 +121,7 @@ export component ConfirmSheet inherits Rectangle {
                 if root.kind != 4: Text {
                     text: root.kind == 3 ? Tr.t("Step 2 of 2", "Шаг 2 из 2", "第 2 步，共 2 步", "第 2 步，共 2 步") : Tr.t("Step 1 of 2", "Шаг 1 из 2", "第 1 步，共 2 步", "第 1 步，共 2 步");
                     font-size: 12px;
-                    font-weight: 600;
+                    font-weight: 500;
                     color: MaterialPalette.on-surface-variant;
                 }
 
@@ -129,7 +145,7 @@ export component ConfirmSheet inherits Rectangle {
                             + Tr.t(", the firmware only ", ", а в прошивке только ", "，而固件只有 ", "，而韌體只有 ") + root.arb
                             : Tr.t("This firmware contains a preloader", "В прошивке есть preloader", "此固件包含 preloader", "此韌體包含 preloader");
                         font-size: 19px;
-                        font-weight: 600;
+                        font-weight: 500;
                         color: root.accent;
                         wrap: word-wrap;
                         vertical-alignment: center;
@@ -164,7 +180,7 @@ export component ConfirmSheet inherits Rectangle {
                 if root.kind == 1 && root.phone-arb >= 0: Text {
                     text: Tr.t("The phone has ARB ", "На смартфоне ARB ", "手机的 ARB 为 ", "手機的 ARB 為 ") + root.phone-arb + ".";
                     font-size: 14px;
-                    font-weight: 600;
+                    font-weight: 500;
                     color: root.accent;
                     wrap: word-wrap;
                 }
@@ -173,7 +189,7 @@ export component ConfirmSheet inherits Rectangle {
                     text: Tr.t("The phone has ARB ", "Сейчас на смартфоне ARB ", "手机当前的 ARB 为 ", "手機目前的 ARB 為 ") + root.phone-arb
                         + Tr.t("; after installing it becomes ", "; после установки станет ", "；安装后将变为 ", "；安裝後將變為 ") + root.arb + ".";
                     font-size: 14px;
-                    font-weight: 600;
+                    font-weight: 500;
                     color: root.accent;
                     wrap: word-wrap;
                 }
@@ -254,7 +270,7 @@ export component ConfirmSheet inherits Rectangle {
                         if root.kind == 3: Text {
                     text: Tr.t("Ready to install", "Всё готово к установке", "一切就绪，可以安装", "一切就緒，可以安裝");
                     font-size: 22px;
-                    font-weight: 600;
+                    font-weight: 500;
                     color: MaterialPalette.on-surface;
                 }
 

@@ -138,12 +138,12 @@ export component InstallPage inherits VerticalLayout {
             Text {
                 text: Tr.t("Install firmware", "Установка прошивки", "安装固件", "安裝韌體");
                 font-size: 26px;
-                font-weight: 600;
+                font-weight: 500;
                 color: MaterialPalette.on-surface;
             }
 
             Text {
-                text: Tr.t("Each step completes on its own.", "Шаги отмечаются сами.", "每一步会自动完成。", "每一步會自動完成。");
+                text: Tr.t("Each step completes on its own", "Шаги отмечаются сами", "每一步会自动完成", "每一步會自動完成");
                 font-size: 14px;
                 color: MaterialPalette.on-surface-variant;
             }
@@ -587,12 +587,12 @@ export component InstallPage inherits VerticalLayout {
             Text {
                 text: Tr.t("Installing the firmware", "Устанавливаю прошивку", "正在安装固件", "正在安裝韌體");
                 font-size: 26px;
-                font-weight: 600;
+                font-weight: 500;
                 color: MaterialPalette.on-surface;
             }
 
             Text {
-                text: Tr.t("Don't unplug the phone and don't close the app.", "Не отключайте смартфон и не закрывайте программу.", "请勿断开手机，也不要关闭程序。", "請勿中斷手機連接，也不要關閉程式。");
+                text: Tr.t("Don't unplug the phone and don't close the app", "Не отключайте смартфон и не закрывайте программу", "请勿断开手机，也不要关闭程序", "請勿中斷手機連接，也不要關閉程式");
                 font-size: 14px;
                 color: StatusColors.warning;
             }
@@ -664,7 +664,7 @@ export component InstallPage inherits VerticalLayout {
                     Text {
                         text: Math.round(root.flash-progress * 100) + " %";
                         font-size: 14px;
-                        font-weight: 600;
+                        font-weight: 500;
                         color: MaterialPalette.on-surface;
                     }
                 }
@@ -714,7 +714,7 @@ export component InstallPage inherits VerticalLayout {
         Text {
             text: Tr.t("Firmware installed", "Прошивка установлена", "固件已安装", "韌體已安裝");
             font-size: 26px;
-            font-weight: 600;
+            font-weight: 500;
             color: MaterialPalette.on-surface;
             horizontal-alignment: center;
         }
@@ -743,7 +743,7 @@ export component InstallPage inherits VerticalLayout {
                     Text {
                         text: Tr.t("Restart the phone", "Перезагрузить смартфон", "重启手机", "重新啟動手機");
                         font-size: 16px;
-                        font-weight: 600;
+                        font-weight: 500;
                         color: MaterialPalette.on-surface;
                     }
 
@@ -778,7 +778,7 @@ export component InstallPage inherits VerticalLayout {
                     Text {
                         text: Tr.t("Erase everything and restart", "Стереть всё и перезагрузить", "清除全部数据并重启", "清除所有資料並重新啟動");
                         font-size: 16px;
-                        font-weight: 600;
+                        font-weight: 500;
                         color: MaterialPalette.on-surface;
                     }
 
@@ -838,7 +838,7 @@ export component InstallPage inherits VerticalLayout {
             text: root.untouched ? Tr.t("The installation stopped", "Установка остановлена", "安装已停止", "安裝已停止")
                 : Tr.t("The installation did not finish", "Установка не завершилась", "安装未完成", "安裝未完成");
             font-size: 26px;
-            font-weight: 600;
+            font-weight: 500;
             color: MaterialPalette.on-surface;
             horizontal-alignment: center;
         }
@@ -861,7 +861,7 @@ export component InstallPage inherits VerticalLayout {
                 Text {
                     text: Tr.t("What happened", "Что случилось", "发生了什么", "發生了什麼");
                     font-size: 13px;
-                    font-weight: 600;
+                    font-weight: 500;
                     color: MaterialPalette.on-surface-variant;
                 }
 
@@ -925,7 +925,7 @@ export component InstallPage inherits VerticalLayout {
         Text {
             text: Tr.t("Flashed successfully", "Успешно прошито", "刷写成功", "刷寫成功");
             font-size: 30px;
-            font-weight: 600;
+            font-weight: 500;
             color: StatusColors.success;
             horizontal-alignment: center;
         }

@@ -323,7 +323,7 @@ export component MainWindow inherits MaterialWindow {
 
     changed page => {
         page-opacity = 1.0;
-        page-x = 30px;
+        page-x = 8px;
         anim-timer.running = true;
     }
 
@@ -337,13 +337,14 @@ export component MainWindow inherits MaterialWindow {
         }
     }
 
+    // A short fade and a few pixels of travel, one ease-out curve, no spring.
     animate page-opacity {
-        duration: 250ms;
-        easing: cubic-bezier(0.4, 0.0, 0.2, 1.0);
+        duration: 200ms;
+        easing: cubic-bezier(0.2, 0.0, 0, 1.0);
     }
     animate page-x {
-        duration: 350ms;
-        easing: spring;
+        duration: 200ms;
+        easing: cubic-bezier(0.2, 0.0, 0, 1.0);
     }
 
     // State
@@ -902,10 +903,6 @@ export component MainWindow inherits MaterialWindow {
                         ? MaterialPalette.surface-container-low
                         : #fafafa;
                     opacity: root.page-opacity;
-                    animate opacity {
-                        duration: 300ms;
-                        easing: ease-in-out;
-                    }
                 }
             }
         }

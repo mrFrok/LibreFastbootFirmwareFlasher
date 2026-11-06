@@ -51,13 +51,17 @@ export component StepRow inherits Rectangle {
                     height: 22px;
                     indeterminate: true;
                 }
-                if root.state == 0 || root.state == 1 || root.state == 3: Text {
-                    text: root.state == 3 ? "!" : root.number;
+                if root.state == 3: Image {
+                    source: @image-url("../icons/error.svg");
+                    width: 18px;
+                    height: 18px;
+                    colorize: MaterialPalette.on-error-container;
+                }
+                if root.state == 0 || root.state == 1: Text {
+                    text: root.number;
                     font-size: 14px;
                     font-weight: 500;
-                    color: root.state == 3 ? MaterialPalette.on-error-container
-                        : root.state == 1 ? MaterialPalette.on-primary-container
-                        : MaterialPalette.on-surface-variant;
+                    color: root.state == 1 ? MaterialPalette.on-primary-container : MaterialPalette.on-surface-variant;
                 }
             }
 
@@ -215,7 +219,7 @@ export component Segmented inherits Rectangle {
             Text {
                 text: item;
                 font-size: 13px;
-                font-weight: i == root.current ? 600 : 500;
+                font-weight: 500;
                 color: i == root.current ? MaterialPalette.on-secondary-container : MaterialPalette.on-surface;
             }
 
@@ -263,7 +267,7 @@ export component Section inherits Rectangle {
             text: root.title;
             font-size: 13px;
             font-weight: 500;
-            color: MaterialPalette.primary;
+            color: MaterialPalette.on-surface-variant;
             height: 28px;
             vertical-alignment: center;
         }
@@ -292,24 +296,25 @@ export component AppNav inherits Rectangle {
         // Same header as the current sidebar: logo and the name on two lines.
         Rectangle {
             height: 72px;
+            // The logo's centre lines up with the nav icons below it.
             HorizontalLayout {
-                padding-left: 16px;
-                spacing: 8px;
+                padding-left: 8px;
+                spacing: 12px;
                 Image {
                     source: @image-url("../icons/logo_icon.svg");
-                    width: 32px;
-                    height: 32px;
-                    y: (parent.height - 32px) / 2;
+                    width: 28px;
+                    height: 28px;
+                    y: (parent.height - 28px) / 2;
                 }
 
                 VerticalLayout {
-                    spacing: 1px;
+                    spacing: 0px;
                     horizontal-stretch: 1;
                     alignment: center;
                     Text {
                         text: "Libre Fastboot";
                         font-size: 13px;
-                        font-weight: 600;
+                        font-weight: 500;
                         color: MaterialPalette.on-surface;
                         overflow: elide;
                     }
@@ -317,7 +322,7 @@ export component AppNav inherits Rectangle {
                     Text {
                         text: "Firmware Flasher";
                         font-size: 13px;
-                        font-weight: 600;
+                        font-weight: 500;
                         color: MaterialPalette.on-surface;
                         overflow: elide;
                     }
@@ -341,15 +346,16 @@ export component AppNav inherits Rectangle {
             clicked => { root.navigate(0); }
         }
 
-        if root.pinned.length > 0: HorizontalLayout {
-            padding-left: 16px;
-            height: 32px;
+        // Closer to its own items than to the rows above.
+        if root.pinned.length > 0: VerticalLayout {
+            padding-left: 12px;
+            padding-top: 20px;
+            padding-bottom: 6px;
             Text {
                 text: Tr.t("Pinned", "Закреплённые", "已固定", "已釘選");
                 font-size: 12px;
-                font-weight: 600;
+                font-weight: 500;
                 color: MaterialPalette.on-surface-variant;
-                vertical-alignment: bottom;
             }
         }
         for id in root.pinned: NavItem {
@@ -376,7 +382,7 @@ export component AppNav inherits Rectangle {
         NavItem {
             label: Tr.t("Tools", "Инструменты", "工具", "工具");
             icon: @image-url("../icons/build.svg");
-            icon-active: @image-url("../icons/build.svg");
+            icon-active: @image-url("../icons/build-filled.svg");
             selected: root.page == 1 && root.tool == 0;
             clicked => { root.navigate(1); }
         }
@@ -392,7 +398,7 @@ export component AppNav inherits Rectangle {
         NavItem {
             label: Tr.t("Settings", "Настройки", "设置", "設定");
             icon: @image-url("../icons/settings.svg");
-            icon-active: @image-url("../icons/settings.svg");
+            icon-active: @image-url("../icons/settings-filled.svg");
             selected: root.page == 3;
             clicked => { root.navigate(3); }
         }
@@ -405,11 +411,15 @@ export component AppNav inherits Rectangle {
             clicked => { root.navigate(4); }
         }
 
-        Text {
-            text: "v" + root.version;
-            font-size: 12px;
-            color: MaterialPalette.on-surface-variant;
-            horizontal-alignment: center;
+        HorizontalLayout {
+            padding-left: 12px;
+            padding-top: 8px;
+            Text {
+                text: "v" + root.version;
+                font-size: 12px;
+                font-family: "monospace";
+                color: MaterialPalette.on-surface-variant;
+            }
         }
     }
 }
@@ -443,17 +453,18 @@ export component StageRow inherits HorizontalLayout {
             height: 26px;
             indeterminate: true;
         }
-        if root.state == 3: Text {
-            text: "!";
-            font-weight: 600;
-            color: MaterialPalette.on-error-container;
+        if root.state == 3: Image {
+            source: @image-url("../icons/error.svg");
+            width: 16px;
+            height: 16px;
+            colorize: MaterialPalette.on-error-container;
         }
     }
 
     Text {
         text: root.title;
         font-size: 15px;
-        font-weight: root.state == 1 ? 700 : 500;
+        font-weight: 500;
         color: root.state == 0 ? MaterialPalette.on-surface-variant : MaterialPalette.on-surface;
         vertical-alignment: center;
     }
