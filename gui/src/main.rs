@@ -42,14 +42,17 @@ mod confirm_action {
 /// Flash method — always an explicit user choice, never auto-detected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FlashMethod {
-    /// Everything from fastbootd: the phone switches to the other slot and
-    /// the modem goes there with the system. No bootloader, which some
-    /// phones cannot reach.
+    /// By the firmware's Android: up to 16 the modem through the bootloader,
+    /// from 17 everything from fastbootd, the phone switching to the other
+    /// slot ([`lfff_lib::flasher::modem_in_fastbootd_for`]). Refused when the
+    /// version is unknown: then the user picks one of the two below.
     Snapdragon,
     Mtk,
-    /// The legacy Snapdragon way: the modem through the bootloader. Not
-    /// recommended; kept as an explicit choice.
+    /// The modem through the bootloader for any firmware (Settings → Modem
+    /// via bootloader); refused for Android 17: flashing ColorOS 17 that way can brick the phone.
     SnapdragonBootloader,
+    /// Everything from fastbootd with a slot switch, for any firmware.
+    SnapdragonFastbootd,
 }
 
 impl FlashMethod {
@@ -60,6 +63,7 @@ impl FlashMethod {
             1 => Some(Self::Snapdragon),
             2 => Some(Self::Mtk),
             3 => Some(Self::SnapdragonBootloader),
+            4 => Some(Self::SnapdragonFastbootd),
             _ => None,
         }
     }
@@ -160,6 +164,9 @@ enum WMsg {
         /// about it depends on the chip, which the UI knows.
         arb: lfff_lib::arb::ArbVerdict,
         has_preloader: bool,
+        /// The firmware's Android version, when it says; picks the
+        /// Snapdragon route.
+        android: Option<u32>,
         cached: bool,
         /// Device codenames the OTA is built for; empty when it does not say.
         devices: Vec<String>,

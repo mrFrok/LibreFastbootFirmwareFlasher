@@ -620,6 +620,7 @@ pub fn extract_firmware_cancellable(
     fs::remove_file(output_dir.join(COMPLETE_MARKER)).ok();
     // A layout left by another firmware must not be rebuilt from.
     fs::remove_file(output_dir.join(PAYLOAD_METADATA_FILE)).ok();
+    fs::remove_file(output_dir.join(ANDROID_VERSION_FILE)).ok();
     info!(
         "Extracting {} → {}",
         zip_path.file_name().unwrap_or_default().to_string_lossy(),
@@ -783,6 +784,7 @@ pub fn extract_firmware_cancellable(
                 }
             }
         }
+        save_android_version(&zip_path, output_dir);
         // Only some partitions: the folder is not this archive unpacked, and
         // must not be reused as if it were.
         if partitions.is_none() {
@@ -855,6 +857,7 @@ pub fn extract_firmware_cancellable(
         };
         let _ = fs::remove_dir(&staging);
         let arb = find_xbl_config(output_dir).map(|p| extract_arb_from_xbl(&p));
+        save_android_version(&zip_path, output_dir);
         mark_complete(&zip_path, output_dir);
         return ExtractionResult {
             success: true,
@@ -918,21 +921,7 @@ fn safe_dir_name(raw: &str) -> Option<String> {
 /// META-INF/com/android/metadata, comma-separated when several). Empty when
 /// the archive does not say — custom and repacked builds often don't.
 pub fn firmware_devices(zip_path: &Path) -> Vec<String> {
-    let Ok(f) = fs::File::open(zip_path) else {
-        return Vec::new();
-    };
-    let Ok(mut z) = zip::ZipArchive::new(f) else {
-        return Vec::new();
-    };
-    let Some(props) = z
-        .by_name("META-INF/com/android/metadata")
-        .ok()
-        .and_then(|mut e| {
-            let mut buf = String::new();
-            io::Read::read_to_string(&mut e, &mut buf).ok()?;
-            Some(parse_payload_properties(&buf))
-        })
-    else {
+    let Some(props) = ota_metadata(zip_path) else {
         return Vec::new();
     };
     props
@@ -944,6 +933,70 @@ pub fn firmware_devices(zip_path: &Path) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// `META-INF/com/android/metadata` of an OTA archive, as key/value pairs.
+fn ota_metadata(zip_path: &Path) -> Option<HashMap<String, String>> {
+    let f = fs::File::open(zip_path).ok()?;
+    let mut z = zip::ZipArchive::new(f).ok()?;
+    let mut e = z.by_name("META-INF/com/android/metadata").ok()?;
+    let mut buf = String::new();
+    io::Read::read_to_string(&mut e, &mut buf).ok()?;
+    Some(parse_payload_properties(&buf))
+}
+
+/// Beside the images: the Android version the firmware installs, read from
+/// the archive at extraction ([`firmware_android_version`]).
+pub const ANDROID_VERSION_FILE: &str = ".lfff-android-version";
+
+/// The major version in `16.0.2.400` or `16`; only plausible Android
+/// versions, so a stray number in a name is not taken for one.
+fn leading_android_version(s: &str) -> Option<u32> {
+    let major: u32 = s.trim().split('.').next()?.parse().ok()?;
+    (5..=99).contains(&major).then_some(major)
+}
+
+/// The Android version an OTA installs, from the same metadata the folder
+/// name comes from: the version in `post-build`
+/// (`oplus/RMX3709/RE5C3B:16/BP2A…`), else the major of `version_name`
+/// (`RMX3709_16.0.2.400(EX01)` — ColorOS, OxygenOS and realme UI number
+/// their versions after Android). `None` when the archive does not say.
+pub fn firmware_android_version(zip_path: &Path) -> Option<u32> {
+    let props = ota_metadata(zip_path)?;
+    let from_build = props
+        .get("post-build")
+        .and_then(|b| b.split(':').nth(1))
+        .and_then(|v| v.split('/').next())
+        .and_then(leading_android_version);
+    from_build.or_else(|| {
+        props
+            .get("version_name")
+            .and_then(|v| v.rsplit('_').next())
+            .and_then(|v| v.split('(').next())
+            .and_then(leading_android_version)
+    })
+}
+
+fn save_android_version(zip_path: &Path, output_dir: &Path) {
+    if let Some(v) = firmware_android_version(zip_path) {
+        fs::write(output_dir.join(ANDROID_VERSION_FILE), v.to_string()).ok();
+    }
+}
+
+/// The Android version of an extracted firmware: saved at extraction, else
+/// read from a folder named by [`get_firmware_name`]
+/// (`RMX3709TR_16.0.2.400`), for folders unpacked by older versions.
+pub fn extracted_android_version(dir: &Path) -> Option<u32> {
+    if let Ok(s) = fs::read_to_string(dir.join(ANDROID_VERSION_FILE)) {
+        return leading_android_version(&s);
+    }
+    let name = dir.file_name()?.to_string_lossy();
+    let (_, version) = name.rsplit_once('_')?;
+    // A version, not any number: "16.0.2.400", never "14".
+    if !version.contains('.') {
+        return None;
+    }
+    leading_android_version(version)
 }
 
 /// The payload's metadata as JSON (`payload_dumper --metadata`), read from
@@ -1298,5 +1351,46 @@ mod tests {
         // Nothing usable inside: the zip's own stem.
         let plain = zip_with(dir.path(), "my-fw.zip", &[("readme.txt", "hi")]);
         assert_eq!(get_firmware_name(&plain), "my-fw");
+    }
+
+    #[test]
+    fn android_version_comes_from_the_ota_metadata() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let build = zip_with(
+            dir.path(),
+            "a.zip",
+            &[(
+                "META-INF/com/android/metadata",
+                "post-build=oplus/RMX3709/RE5C3B:17/CP1A.260305.018/1:user/release-keys\nversion_name=RMX3709_16.0.2.400(EX01)\n",
+            )],
+        );
+        assert_eq!(firmware_android_version(&build), Some(17));
+        let name_only = zip_with(
+            dir.path(),
+            "b.zip",
+            &[(
+                "META-INF/com/android/metadata",
+                "product_name=RMX3709TR\nversion_name=RMX3709_16.0.2.400(EX01)\n",
+            )],
+        );
+        assert_eq!(firmware_android_version(&name_only), Some(16));
+        let none = zip_with(dir.path(), "c.zip", &[("payload.bin", "x")]);
+        assert_eq!(firmware_android_version(&none), None);
+    }
+
+    #[test]
+    fn extracted_android_version_reads_the_file_then_the_folder_name() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let named = root.path().join("RMX3709TR_15.0.2.400");
+        fs::create_dir(&named).unwrap();
+        assert_eq!(extracted_android_version(&named), Some(15));
+        fs::write(named.join(ANDROID_VERSION_FILE), "17").unwrap();
+        assert_eq!(extracted_android_version(&named), Some(17));
+
+        for odd in ["RMX_14_ok", "my-fw", "fw_2024.1"] {
+            let d = root.path().join(odd);
+            fs::create_dir(&d).unwrap();
+            assert_eq!(extracted_android_version(&d), None, "{odd}");
+        }
     }
 }

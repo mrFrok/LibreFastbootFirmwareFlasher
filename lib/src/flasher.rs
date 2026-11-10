@@ -366,6 +366,18 @@ enum ModemRoute {
     NeedsSystem,
 }
 
+/// The first Android version whose firmware goes entirely through fastbootd
+/// by default. Flashing ColorOS 17 through the bootloader can brick the phone; up to 16
+/// it is the proven way and stays the default.
+pub const FASTBOOTD_FROM_ANDROID: u32 = 17;
+
+/// The Snapdragon route for firmware of a known Android version: the modem
+/// through the bootloader up to Android 16, everything in fastbootd from 17.
+/// With the version unknown there is no default — the user picks the route.
+pub fn modem_in_fastbootd_for(android: u32) -> bool {
+    android >= FASTBOOTD_FROM_ANDROID
+}
+
 /// The fastbootd route boots the phone from the other slot, so it needs that
 /// slot's dynamic partitions in the same session; without them the phone
 /// would come up with an old or empty system. Without a modem there is
@@ -1314,13 +1326,13 @@ pub struct FlashOptions {
     pub as_mediatek: Option<bool>,
     /// Comma-separated partition names the user explicitly wants to skip.
     pub skip_partitions: String,
-    /// Snapdragon only, and the default the frontends pass: flash the modem
-    /// from fastbootd instead of rebooting to the bootloader, which some
-    /// phones cannot reach (a flash stuck halfway, up to a brick). false is
-    /// the legacy bootloader route, kept as an explicit, not recommended
-    /// choice. The session switches to the other slot first, then
-    /// writes the modem and the dynamic partitions there; the old slot keeps
-    /// its old modem.
+    /// Snapdragon only: flash the modem from fastbootd instead of rebooting
+    /// to the bootloader. The frontends pick it by the firmware's Android
+    /// version ([`modem_in_fastbootd_for`]), or ask the user when it is
+    /// unknown: flashing ColorOS 17 through the bootloader can brick the phone, up to 16
+    /// it is the default. The
+    /// session switches to the other slot first, then writes the modem and
+    /// the dynamic partitions there; the old slot keeps its old modem.
     pub modem_in_fastbootd: bool,
     /// With `modem_in_fastbootd`: images read from the phone's active slot
     /// for the partitions the user chose not to flash, by name. They are
@@ -1726,7 +1738,7 @@ pub fn run_flash_session_with_log(
     } else if options.modem_in_fastbootd {
         on_log("Snapdragon method — no modem in this flash, nothing goes to the bootloader".into());
     } else {
-        on_log("Snapdragon method, bootloader route (not recommended) — modem goes through bootloader mode".into());
+        on_log("Snapdragon method, bootloader route — modem goes through bootloader mode".into());
     }
 
     // After the switch the phone boots the other slot, where a partition
@@ -2571,6 +2583,14 @@ mod tests {
         // Without a modem there is no reason to switch.
         assert_eq!(modem_route(true, false, true), ModemRoute::Bootloader);
         assert_eq!(modem_route(false, true, true), ModemRoute::Bootloader);
+    }
+
+    #[test]
+    fn bootloader_route_by_default_only_up_to_android_16() {
+        assert!(!modem_in_fastbootd_for(14));
+        assert!(!modem_in_fastbootd_for(16));
+        assert!(modem_in_fastbootd_for(17));
+        assert!(modem_in_fastbootd_for(18));
     }
 
     // Only what the user held back must be carried to the new slot; names

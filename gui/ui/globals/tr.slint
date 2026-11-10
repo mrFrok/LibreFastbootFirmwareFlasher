@@ -212,19 +212,28 @@ export global Tr {
         ? "骁龙（高通）" : lang == "zh-TW"
         ? "Snapdragon（Qualcomm）" : "Snapdragon (Qualcomm)";
     out property <string> flash-method-snapdragon-desc: lang == "ru"
-        ? "всё в fastbootd, смартфон переключится на другой слот; проверка ARB"
-        : lang == "zh-CN" ? "全部在 fastbootd 中刷写，手机将切换到另一个槽位；进行 ARB 检查"
-        : lang == "zh-TW" ? "全部在 fastbootd 中刷寫，手機將切換到另一個槽位；進行 ARB 檢查"
-        : "everything in fastbootd, the phone switches to the other slot; ARB check";
+        ? "по версии Android: до 16 через bootloader, 17 в fastbootd; неизвестна — выберите ниже"
+        : lang == "zh-CN" ? "按 Android 版本：16 及更早经由 bootloader，17 在 fastbootd；版本未知请在下方选择"
+        : lang == "zh-TW" ? "依 Android 版本：16 及更早經由 bootloader，17 在 fastbootd；版本未知請在下方選擇"
+        : "by the Android version: up to 16 via bootloader, 17 in fastbootd; unknown — pick below";
     out property <string> flash-method-snapdragon-bootloader: lang == "ru"
         ? "Snapdragon через bootloader" : lang == "zh-CN"
         ? "骁龙，经由 bootloader" : lang == "zh-TW"
         ? "Snapdragon，經由 bootloader" : "Snapdragon via bootloader";
     out property <string> flash-method-snapdragon-bootloader-desc: lang == "ru"
-        ? "старый способ: modem через bootloader — не рекомендуется"
-        : lang == "zh-CN" ? "旧方式：modem 经由 bootloader 刷写——不推荐"
-        : lang == "zh-TW" ? "舊方式：modem 經由 bootloader 刷寫——不建議"
-        : "the old way: modem through the bootloader — not recommended";
+        ? "modem через bootloader для любой прошивки, кроме Android 17"
+        : lang == "zh-CN" ? "除 Android 17 外，任何固件的 modem 都经由 bootloader 刷写"
+        : lang == "zh-TW" ? "除 Android 17 外，任何韌體的 modem 都經由 bootloader 刷寫"
+        : "modem via bootloader for any firmware but Android 17";
+    out property <string> flash-method-snapdragon-fastbootd: lang == "ru"
+        ? "Snapdragon через fastbootd" : lang == "zh-CN"
+        ? "骁龙，全部在 fastbootd" : lang == "zh-TW"
+        ? "Snapdragon，全部在 fastbootd" : "Snapdragon via fastbootd";
+    out property <string> flash-method-snapdragon-fastbootd-desc: lang == "ru"
+        ? "всё в fastbootd со сменой слота для любой прошивки; нужно для Android 17"
+        : lang == "zh-CN" ? "任何固件都全部在 fastbootd 中刷写并切换槽位；Android 17 必须如此"
+        : lang == "zh-TW" ? "任何韌體都全部在 fastbootd 中刷寫並切換槽位；Android 17 必須如此"
+        : "everything in fastbootd with a slot switch, for any firmware; needed for Android 17";
     out property <string> flash-method-mtk: lang == "ru"
         ? "MediaTek" : lang == "zh-CN"
         ? "MediaTek" : lang == "zh-TW"

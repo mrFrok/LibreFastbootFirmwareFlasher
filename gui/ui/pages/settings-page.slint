@@ -211,7 +211,7 @@ export component SettingsPage inherits VerticalLayout {
                     }
 
                     Text {
-                        text: Tr.t("not recommended", "не рекомендуется", "不推荐", "不建議");
+                        text: Tr.t("for any Android but 17", "для любого Android, кроме 17", "适用于除 17 以外的任何 Android", "適用於除 17 以外的任何 Android");
                         font-size: 13px;
                         color: StatusColors.warning;
                         vertical-alignment: center;
@@ -220,10 +220,10 @@ export component SettingsPage inherits VerticalLayout {
 
                 Text {
                     text: Tr.t(
-                        "Snapdragon only. By default everything is flashed in fastbootd: the phone switches to the other slot, and the modem and the system go there. This switch brings back the old way, with a restart into the bootloader for the modem — some phones cannot reach it, and the install stops halfway, up to a brick.",
-                        "Только для Snapdragon. По умолчанию всё прошивается в fastbootd: смартфон переключается на другой слот, и modem с системой ставятся туда. Этот переключатель возвращает старый способ с перезагрузкой в bootloader ради modem — на некоторых смартфонах он недоступен, и установка обрывается на полпути, вплоть до «кирпича».",
-                        "仅限骁龙。默认全部在 fastbootd 中刷写：手机切换到另一个槽位，modem 和系统都安装到那里。此开关恢复旧方式，为刷写 modem 重启到 bootloader——部分手机无法进入，安装会中途停止，甚至变砖。",
-                        "僅限 Snapdragon。預設全部在 fastbootd 中刷寫：手機切換到另一個槽位，modem 和系統都安裝到那裡。此開關恢復舊方式，為刷寫 modem 重新啟動到 bootloader——部分手機無法進入，安裝會中途停止，甚至變磚。");
+                        "Snapdragon only. Firmware up to Android 16 is flashed the old way, with a restart into the bootloader for the modem. Android 17 goes entirely through fastbootd: the phone switches to the other slot, and the modem and the system go there — flashing ColorOS 17 the old way can brick the phone. When the firmware does not say its version, you choose before installing. This switch uses the bootloader for every firmware but Android 17.",
+                        "Только для Snapdragon. Прошивки до Android 16 включительно ставятся старым способом, с перезагрузкой в bootloader ради modem. Android 17 идёт целиком через fastbootd: смартфон переключается на другой слот, и modem с системой ставятся туда — прошивка ColorOS 17 старым способом может вызвать «кирпич». Если прошивка не указывает версию, способ выбираете вы перед установкой. Этот переключатель включает bootloader для любой прошивки, кроме Android 17.",
+                        "仅限骁龙。Android 16 及更早的固件按旧方式刷写，为刷写 modem 重启到 bootloader。Android 17 全部在 fastbootd 中刷写：手机切换到另一个槽位，modem 和系统都安装到那里——用旧方式刷写 ColorOS 17 可能导致变砖。固件未标明版本时，由您在安装前选择。此开关对除 Android 17 以外的所有固件使用 bootloader。",
+                        "僅限 Snapdragon。Android 16 及更早的韌體按舊方式刷寫，為刷寫 modem 重新啟動到 bootloader。Android 17 全部在 fastbootd 中刷寫：手機切換到另一個槽位，modem 和系統都安裝到那裡——用舊方式刷寫 ColorOS 17 可能導致變磚。韌體未標明版本時，由您在安裝前選擇。此開關對除 Android 17 以外的所有韌體使用 bootloader。");
                     font-size: 12px;
                     color: MaterialPalette.on-surface-variant;
                     wrap: word-wrap;

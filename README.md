@@ -183,7 +183,7 @@ lfff completion zsh  > ~/.zfunc/_lfff            # with ~/.zfunc on $fpath
 lfff completion fish > ~/.config/fish/completions/lfff.fish
 ```
 
-**Flash flow** (Snapdragon): everything happens in fastbootd, with no restart into the bootloader — some phones cannot reach it, and a flash stopped there could brick them. fastbootd can only write the modem of the slot it is not running from, so the slot is switched first:
+**Flash flow** (Snapdragon) follows the firmware's Android version, read from the OTA's metadata (the same place the folder name comes from). Up to Android 16 the modem goes through the bootloader (below). Android 17 goes entirely through fastbootd — flashing ColorOS 17 the old way can brick the phone. When the firmware does not say its version, LibreFastbootFirmwareFlasher asks which route to take. fastbootd can only write the modem of the slot it is not running from, so the slot is switched first:
 
 ```
 [fastbootd]
@@ -199,7 +199,7 @@ If the new slot has no partitions (usual on Virtual A/B), super is rebuilt from 
 
 The old slot keeps its old modem. A flash with a modem but no system images is refused rather than sent to the bootloader. Partitions you choose not to flash (e.g. a rooted `init_boot`) are copied from the phone's active slot over adb as root before the switch and written to the new slot; if they cannot be copied, nothing is flashed.
 
-**The old way** (`--method snapdragon-bootloader`; in the GUI, Settings → Firmware → Modem via bootloader; not recommended): the dynamic partitions go to the active slot, then the phone restarts into the bootloader and the modem goes to both slots.
+**Through the bootloader** (the default up to Android 16; for any firmware with `--method snapdragon-bootloader`, in the GUI Settings → Firmware → Modem via bootloader; refused for Android 17): the dynamic partitions go to the active slot, then the phone restarts into the bootloader and the modem goes to both slots. `--method snapdragon-fastbootd` uses fastbootd for any firmware.
 
 On error: **retry** / **reboot** / **skip partition** / **abort**
 

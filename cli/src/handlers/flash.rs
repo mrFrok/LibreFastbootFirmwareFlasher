@@ -25,11 +25,14 @@ fn prompt_flash_method() -> Option<&'static str> {
     eprintln!("  Select the flash method for your device:");
     eprintln!();
     eprintln!(
-        "  [1] Snapdragon (Qualcomm) — everything in fastbootd, the phone switches slots; ARB check"
+        "  [1] Snapdragon (Qualcomm) — by the firmware's Android: up to 16 the modem through the bootloader, 17 everything in fastbootd, unknown asks; ARB check"
     );
     eprintln!("  [2] MediaTek              — everything flashed in fastbootd, xbl/abl skipped");
     eprintln!(
-        "  [3] Snapdragon via bootloader — the old way, modem through the bootloader (not recommended)"
+        "  [3] Snapdragon via bootloader — modem through the bootloader for any firmware (refused for Android 17)"
+    );
+    eprintln!(
+        "  [4] Snapdragon in fastbootd   — everything in fastbootd for any firmware, the phone switches slots"
     );
     eprintln!("  [q] Abort");
 
@@ -39,8 +42,33 @@ fn prompt_flash_method() -> Option<&'static str> {
             "1" => return Some("snapdragon"),
             "2" => return Some("mtk"),
             "3" => return Some("snapdragon-bootloader"),
+            "4" => return Some("snapdragon-fastbootd"),
             "q" | "Q" => return None,
-            _ => eprintln!("  Enter 1, 2, 3 or q"),
+            _ => eprintln!("  Enter 1, 2, 3, 4 or q"),
+        }
+    }
+}
+
+/// The firmware does not say its Android version, so the Snapdragon route
+/// has no default: ask. `Some(true)` is everything in fastbootd.
+fn prompt_route_unknown_android() -> Option<bool> {
+    eprintln!(
+        "\n{}",
+        "── Modem route ──────────────────────────────────────────".dimmed()
+    );
+    eprintln!("  The firmware's Android version is unknown. How should the modem be flashed?");
+    eprintln!();
+    eprintln!("  [1] Through the bootloader — for Android 16 and older");
+    eprintln!(
+        "  [2] Everything in fastbootd — needed for Android 17 (ColorOS 17 through the bootloader can brick the phone); the phone switches slots"
+    );
+    eprintln!("  [q] Abort");
+    loop {
+        match prompt("\n  Choice", "").as_str() {
+            "1" => return Some(false),
+            "2" => return Some(true),
+            "q" | "Q" => return None,
+            _ => eprintln!("  Enter 1, 2 or q"),
         }
     }
 }
@@ -222,9 +250,58 @@ pub fn run(
         },
     };
     let as_mediatek = method == "mtk";
-    // The bootloader route only when asked for by name: some phones cannot
-    // reach the bootloader, and a flash stopped there can brick them.
-    let modem_in_fastbootd = method != "snapdragon-bootloader";
+    // Snapdragon: the route follows the firmware's Android unless forced.
+    // Flashing ColorOS 17 through the bootloader can brick the phone, so it is refused
+    // there even when asked for.
+    let android = if source.is_source() {
+        None
+    } else {
+        lfff_lib::extractor::extracted_android_version(dir)
+    };
+    let modem_in_fastbootd = match method {
+        "snapdragon-bootloader" => {
+            if let Some(v) = android.filter(|v| *v >= lfff_lib::flasher::FASTBOOTD_FROM_ANDROID) {
+                eprintln!(
+                    "{} {}",
+                    "✗".red().bold(),
+                    format!("This firmware is Android {v}: flashing ColorOS {v} through the bootloader can brick the phone. Use --method snapdragon.").red()
+                );
+                return 1;
+            }
+            false
+        }
+        "snapdragon-fastbootd" => true,
+        _ if as_mediatek => false,
+        _ => match android {
+            Some(v) => lfff_lib::flasher::modem_in_fastbootd_for(v),
+            // No default without the version: the user picks the route.
+            None if !interactive() => {
+                eprintln!(
+                    "{} {}",
+                    "✗".red().bold(),
+                    "The firmware's Android version is unknown: pass --method snapdragon-bootloader (Android 16 and older) or snapdragon-fastbootd (Android 17)."
+                        .red()
+                );
+                return 2;
+            }
+            None => match prompt_route_unknown_android() {
+                Some(f) => f,
+                None => {
+                    eprintln!("{}", "Aborted by user.".yellow());
+                    return 1;
+                }
+            },
+        },
+    };
+    if !as_mediatek {
+        let version = android.map_or("unknown".to_string(), |v| v.to_string());
+        let route = if modem_in_fastbootd {
+            "everything in fastbootd, the phone switches to the other slot"
+        } else {
+            "the modem through the bootloader"
+        };
+        eprintln!("  Firmware Android: {version} → {route}");
+    }
 
     // Warn on an apparent method/firmware mismatch, but respect the user's choice.
     let has_preloader = images.keys().any(|k| is_preloader(k));

@@ -634,10 +634,13 @@ pub fn poll(
                 parts,
                 arb,
                 has_preloader,
+                android,
                 cached,
                 devices,
                 super_plan,
             } => {
+                ui.set_fw_android(android.map_or(-1, |v| v as i32));
+                ui.set_route_choice(0);
                 ui.set_super_plan(super_plan.into());
                 FW_DEVICES.with(|d| *d.borrow_mut() = devices);
                 update_wrong_device(&ui);
@@ -1572,6 +1575,12 @@ fn register_install_callbacks(
             // The sheet only opens with a chip chosen; never start without one.
             let method = match ui.get_chip() {
                 1 if ui.get_modem_bootloader() => FlashMethod::SnapdragonBootloader,
+                // Android unknown: the route the user picked on the sheet.
+                1 if ui.get_fw_android() < 0 => match ui.get_route_choice() {
+                    1 => FlashMethod::SnapdragonBootloader,
+                    2 => FlashMethod::SnapdragonFastbootd,
+                    _ => return,
+                },
                 1 => FlashMethod::Snapdragon,
                 2 => FlashMethod::Mtk,
                 _ => return,

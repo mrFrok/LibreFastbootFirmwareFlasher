@@ -180,12 +180,13 @@ pub enum Commands {
         #[arg(short, long, value_name = "SERIAL")]
         serial: Option<String>,
 
-        /// Flash method: 'snapdragon' (Qualcomm: everything in fastbootd, the
-        /// modem into the other slot after switching to it), 'mtk' (MediaTek),
-        /// or 'snapdragon-bootloader' (Qualcomm, the old way: the modem through
-        /// the bootloader; not recommended, some phones cannot reach it).
-        /// 'snapdragon-fastbootd' is the same as 'snapdragon'.
-        /// Prompted interactively if omitted.
+        /// Flash method: 'snapdragon' (Qualcomm, by the firmware's Android: up
+        /// to 16 the modem through the bootloader, 17 and newer everything in
+        /// fastbootd, the modem into the other slot after switching to it;
+        /// asks when the firmware does not say its version), 'mtk' (MediaTek), 'snapdragon-bootloader' (the
+        /// modem through the bootloader for any firmware; refused for Android
+        /// 17: flashing ColorOS 17 that way can brick the phone) or 'snapdragon-fastbootd' (everything in
+        /// fastbootd for any firmware). Prompted interactively if omitted.
         #[arg(
             long,
             value_name = "METHOD",

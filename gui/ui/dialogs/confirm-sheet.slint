@@ -48,6 +48,31 @@ component SkipChip inherits TouchArea {
     }
 }
 
+// One of the two modem routes, when the firmware's Android is unknown.
+component RouteChip inherits TouchArea {
+    in property <string> text;
+    in property <bool> checked;
+    // As tall as the row, so the chip sits level with its label.
+    height: 44px;
+    width: label.preferred-width + 28px;
+    Rectangle {
+        height: 32px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 8px;
+        background: root.checked ? MaterialPalette.secondary-container
+            : root.has-hover ? MaterialPalette.on-surface.with-alpha(0.06) : transparent;
+        border-width: root.checked ? 0px : 1px;
+        border-color: MaterialPalette.outline;
+        label := Text {
+            text: root.text;
+            font-size: 13px;
+            color: root.checked ? MaterialPalette.on-secondary-container : MaterialPalette.on-surface;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
 // The one sheet between "Install" and the hands-off run. Its warning step
 // always comes before the summary: the order ARB, then final confirmation, is
 // fixed.
@@ -69,9 +94,18 @@ export component ConfirmSheet inherits Rectangle {
     in property <string> wrong-device;
     // Settings → Firmware → Rebuild super when needed is on.
     in property <bool> rebuild-super;
-    // Settings → Firmware → the legacy bootloader route is on, for a
-    // Snapdragon: worth a warning before Install.
+    // A Snapdragon flash with the modem through the bootloader: by default
+    // for firmware up to Android 16, or forced in Settings → Firmware.
     in property <bool> modem-bootloader;
+    in property <bool> modem-bootloader-forced;
+    // The firmware's Android version, -1 unknown. Forced bootloader on 17
+    // and newer is refused by the install.
+    in property <int> fw-android: -1;
+    // Snapdragon with the Android version unknown and no forced route: the
+    // user picks it here, Install waits for the choice.
+    in property <bool> route-needed;
+    // 0 not chosen, 1 the modem through the bootloader, 2 all in fastbootd.
+    in-out property <int> route-choice;
     // The firmware's super layout, one line per group; empty without one.
     in property <string> super-plan;
     // xbl/abl for kinds 0 and 1, preloader for kind 2
@@ -334,12 +368,48 @@ export component ConfirmSheet inherits Rectangle {
                         label-width: 150px;
                         label: "Modem";
                         Text {
-                            text: Tr.t("through the bootloader — not recommended", "через bootloader — не рекомендуется", "经由 bootloader——不推荐", "經由 bootloader——不建議");
+                            text: root.modem-bootloader-forced && root.fw-android >= 17
+                                ? Tr.t("through the bootloader — refused for Android 17, turn it off in Settings", "через bootloader — для Android 17 запрещено, выключите в настройках", "经由 bootloader——Android 17 禁止，请在设置中关闭", "經由 bootloader——Android 17 禁止，請在設定中關閉")
+                                : root.modem-bootloader-forced
+                                ? Tr.t("through the bootloader — forced in Settings", "через bootloader — включено в настройках", "经由 bootloader——已在设置中强制", "經由 bootloader——已在設定中強制")
+                                : Tr.t("through the bootloader, as for Android 16 and older", "через bootloader, как для Android 16 и ниже", "经由 bootloader，适用于 Android 16 及更早版本", "經由 bootloader，適用於 Android 16 及更早版本");
                             font-size: 14px;
                             font-weight: 500;
-                            color: StatusColors.warning;
+                            color: root.modem-bootloader-forced && root.fw-android >= 17 ? MaterialPalette.error : root.modem-bootloader-forced ? StatusColors.warning : MaterialPalette.on-surface-variant;
                             vertical-alignment: center;
                         }
+                    }
+
+                    if root.route-needed: FieldRow {
+                        label-width: 150px;
+                        label: "Modem";
+                        RouteChip {
+                            text: Tr.t("through the bootloader", "через bootloader", "经由 bootloader", "經由 bootloader");
+                            checked: root.route-choice == 1;
+                            clicked => {
+                                root.route-choice = 1;
+                            }
+                        }
+
+                        RouteChip {
+                            text: Tr.t("everything in fastbootd", "всё в fastbootd", "全部在 fastbootd", "全部在 fastbootd");
+                            checked: root.route-choice == 2;
+                            clicked => {
+                                root.route-choice = 2;
+                            }
+                        }
+                    }
+
+                    if root.route-needed: Text {
+                        width: 532px;
+                        text: Tr.t(
+                            "The firmware does not say its Android version. Through the bootloader is the usual way for Android 16 and older; flashing ColorOS 17 this way can brick the phone, so Android 17 goes entirely in fastbootd, with a switch to the other slot.",
+                            "Прошивка не указывает версию Android. Через bootloader — обычный способ для Android 16 и ниже; прошивка ColorOS 17 этим способом может вызвать «кирпич», поэтому Android 17 ставится целиком в fastbootd со сменой слота.",
+                            "固件未标明 Android 版本。经由 bootloader 是 Android 16 及更早版本的常规方式；用此方式刷写 ColorOS 17 可能导致变砖，因此 Android 17 全部在 fastbootd 中刷写并切换槽位。",
+                            "韌體未標明 Android 版本。經由 bootloader 是 Android 16 及更早版本的常規方式；用此方式刷寫 ColorOS 17 可能導致變磚，因此 Android 17 全部在 fastbootd 中刷寫並切換槽位。");
+                        font-size: 12px;
+                        color: StatusColors.warning;
+                        wrap: word-wrap;
                     }
 
                     if root.arb > 0: FieldRow {
@@ -491,6 +561,7 @@ export component ConfirmSheet inherits Rectangle {
                     }
 
                     if root.kind != 4: FilledButton {
+                        enabled: root.kind != 3 || !root.route-needed || root.route-choice > 0;
                         text: root.kind == 3 ? Tr.t("Install", "Установить", "安装", "安裝") : Tr.t("I understand, next", "Понятно, дальше", "我明白，下一步", "我明白，下一步");
                         clicked => {
                             if root.kind == 3 {

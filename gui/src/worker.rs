@@ -786,6 +786,7 @@ fn prepare_firmware(path: &str, downloaded: bool, tx: &mpsc::Sender<WMsg>) {
         parts: images.len(),
         arb: lfff_lib::arb::firmware_arb(&dir),
         has_preloader: images.keys().any(|k| lfff_lib::flasher::is_preloader(k)),
+        android: lfff_lib::extractor::extracted_android_version(&dir),
         cached,
         devices,
         super_plan: std::fs::read_to_string(dir.join(lfff_lib::extractor::PAYLOAD_METADATA_FILE))
@@ -794,6 +795,59 @@ fn prepare_firmware(path: &str, downloaded: bool, tx: &mpsc::Sender<WMsg>) {
             .unwrap_or_default(),
     })
     .ok();
+}
+
+/// Whether a Snapdragon flash puts the modem in fastbootd: by the firmware's
+/// Android, or the route the user chose. `Err` when the version is unknown
+/// and no route was chosen, or when the bootloader route would meet Android
+/// 17: flashing ColorOS 17 that way can brick the phone.
+fn snapdragon_route(
+    tx: &mpsc::Sender<WMsg>,
+    method: FlashMethod,
+    dir: &Path,
+    is_source: bool,
+) -> Result<bool, String> {
+    use lfff_lib::flasher::{FASTBOOTD_FROM_ANDROID, modem_in_fastbootd_for};
+    let android = if is_source {
+        None
+    } else {
+        lfff_lib::extractor::extracted_android_version(dir)
+    };
+    let fastbootd = match method {
+        FlashMethod::Mtk => return Ok(false),
+        FlashMethod::SnapdragonBootloader => {
+            if let Some(v) = android.filter(|v| *v >= FASTBOOTD_FROM_ANDROID) {
+                return Err(format!(
+                    "This firmware is Android {v}: flashing ColorOS {v} through the bootloader can brick the phone. Turn off Settings → Firmware → Modem via bootloader."
+                ));
+            }
+            false
+        }
+        FlashMethod::SnapdragonFastbootd => true,
+        FlashMethod::Snapdragon => match android {
+            Some(v) => modem_in_fastbootd_for(v),
+            None => {
+                return Err(
+                    "The firmware's Android version is unknown: choose how to flash the modem — through the bootloader (Android 16 and older) or everything in fastbootd (Android 17).".into(),
+                );
+            }
+        },
+    };
+    log(
+        tx,
+        LogLevel::Info,
+        2,
+        format!(
+            "Firmware Android: {} → {}",
+            android.map_or("unknown".to_string(), |v| v.to_string()),
+            if fastbootd {
+                "everything in fastbootd, the phone switches to the other slot"
+            } else {
+                "the modem through the bootloader"
+            }
+        ),
+    );
+    Ok(fastbootd)
 }
 
 fn stage(tx: &mpsc::Sender<WMsg>, stage: u8, state: u8, detail: impl Into<String>) {
@@ -1159,9 +1213,8 @@ pub fn worker(
                 let method_name = match method {
                     FlashMethod::Snapdragon => "Snapdragon",
                     FlashMethod::Mtk => "MediaTek",
-                    FlashMethod::SnapdragonBootloader => {
-                        "Snapdragon, via bootloader (not recommended)"
-                    }
+                    FlashMethod::SnapdragonBootloader => "Snapdragon, via bootloader",
+                    FlashMethod::SnapdragonFastbootd => "Snapdragon, everything in fastbootd",
                 };
                 log(
                     &tx,
@@ -1194,6 +1247,20 @@ pub fn worker(
                         success: false,
                         message: "No flashable images found".into(),
                         log_summary: "No images found".into(),
+                        failed_partitions: vec![],
+                    })
+                    .ok();
+                    tx.send(WMsg::Flashing(false)).ok();
+                    continue;
+                }
+                // Before any warning: an unknown Android with no route
+                // chosen, or the bootloader on Android 17, stops here.
+                if let Err(msg) = snapdragon_route(&tx, method, &dir, is_source) {
+                    log(&tx, LogLevel::Error, 2, &msg);
+                    tx.send(WMsg::FlashComplete {
+                        success: false,
+                        message: msg,
+                        log_summary: "No modem route for this firmware".into(),
                         failed_partitions: vec![],
                     })
                     .ok();
@@ -1306,12 +1373,28 @@ pub fn worker(
                 };
                 current_source = Some(src.clone());
 
+                let modem_in_fastbootd =
+                    match snapdragon_route(&tx, method, Path::new(&dir), is_source) {
+                        Ok(f) => f,
+                        Err(msg) => {
+                            log(&tx, LogLevel::Error, 2, &msg);
+                            tx.send(WMsg::FlashComplete {
+                                success: false,
+                                message: msg,
+                                log_summary: "No modem route for this firmware".into(),
+                                failed_partitions: vec![],
+                            })
+                            .ok();
+                            tx.send(WMsg::Flashing(false)).ok();
+                            continue;
+                        }
+                    };
                 let opts = lfff_lib::flasher::FlashOptions {
                     // On MediaTek devices xbl/abl partitions do not exist.
                     skip_xbl_abl: skip_xbl_abl || method == FlashMethod::Mtk,
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
-                    modem_in_fastbootd: method != FlashMethod::SnapdragonBootloader,
+                    modem_in_fastbootd,
                     skip_partitions,
                     ..Default::default()
                 };
@@ -2232,7 +2315,16 @@ pub fn worker(
                 stage(&tx, 0, 1, "");
                 let mode = lfff_lib::flasher::detect_mode(serial.as_deref());
                 // Before the phone leaves Android: what it should keep.
-                let keep_images = if method == FlashMethod::Snapdragon {
+                let modem_in_fastbootd = match snapdragon_route(&tx, method, Path::new(&dir), false)
+                {
+                    Ok(f) => f,
+                    Err(msg) => {
+                        stage(&tx, 0, 3, "");
+                        stop(msg);
+                        continue;
+                    }
+                };
+                let keep_images = if modem_in_fastbootd {
                     match keep_from_phone(
                         &tx,
                         serial.as_deref(),
@@ -2359,7 +2451,7 @@ pub fn worker(
                     skip_xbl_abl: skip_xbl_abl || method == FlashMethod::Mtk,
                     skip_preloader,
                     as_mediatek: Some(method == FlashMethod::Mtk),
-                    modem_in_fastbootd: method != FlashMethod::SnapdragonBootloader,
+                    modem_in_fastbootd,
                     keep_images,
                     skip_partitions,
                     rebuild_super: crate::config::load_config().auto_rebuild_super,
