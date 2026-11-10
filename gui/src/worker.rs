@@ -437,6 +437,8 @@ pub fn cancel_unpack() {
     UNPACK_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
+// macOS keeps awake with caffeinate, which takes no reason.
+#[cfg(not(target_os = "macos"))]
 const NO_SLEEP_WHY: &str = "Flashing a phone; sleeping now would leave it half-flashed";
 
 /// Keeps the computer awake while it lives: sleeping halfway through
