@@ -3,6 +3,33 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.6.0
+
+### Flashing
+
+- The Snapdragon method follows the firmware's Android version. Up to
+  Android 16 the modem goes through the bootloader again, as before 3.4.0.
+  Android 17 is flashed entirely in fastbootd with a slot switch: flashing
+  ColorOS 17 through the bootloader can brick the phone, so that route is
+  refused there even when chosen on purpose.
+- The realme GT Neo 5 family (RMX3706, RMX3708, RMX3709, and the Neo 5 SE
+  RMX3700, RMX3701) always flashes the modem through the bootloader, on
+  any Android, custom Android 17 builds included. It is recognised by the
+  firmware or by the phone.
+- The version and the model are read from the firmware's own metadata
+  when it is unpacked. Folders unpacked by older versions are recognised
+  by their name.
+- When the firmware does not say its version, you choose the route: the
+  CLI asks, and the app shows the choice before Install.
+- New method `--method snapdragon-fastbootd` (in the app, the card
+  "Snapdragon via fastbootd") flashes everything in fastbootd for any
+  firmware.
+
+### Interface
+
+- A quieter look for the new interface: no springy animations, tighter
+  navigation, icons instead of arrows and check marks.
+
 ## 3.5.1
 
 ### Fixes
