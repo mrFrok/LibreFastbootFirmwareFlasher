@@ -5,7 +5,7 @@ use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use lfff_lib::arb::ArbVerdict;
 use lfff_lib::flasher::{
-    FastbootdStatus, FirmwareSource, FlashOptions, FlashProgress, collect_images,
+    FastbootdStatus, FirmwareSource, FlashOptions, FlashProgress, SnapdragonRoute, collect_images,
     collect_images_from_source, fastbootd_status, is_preloader, is_xbl_abl,
     run_flash_session_with_log,
 };
@@ -29,7 +29,7 @@ fn prompt_flash_method() -> Option<&'static str> {
     );
     eprintln!("  [2] MediaTek              — everything flashed in fastbootd, xbl/abl skipped");
     eprintln!(
-        "  [3] Snapdragon via bootloader — modem through the bootloader for any firmware (refused for Android 17)"
+        "  [3] Snapdragon via bootloader — modem through the bootloader for any firmware (refused for Android 17, except realme GT Neo 5)"
     );
     eprintln!(
         "  [4] Snapdragon in fastbootd   — everything in fastbootd for any firmware, the phone switches slots"
@@ -250,17 +250,38 @@ pub fn run(
         },
     };
     let as_mediatek = method == "mtk";
-    // Snapdragon: the route follows the firmware's Android unless forced.
-    // Flashing ColorOS 17 through the bootloader can brick the phone, so it is refused
-    // there even when asked for.
+    // Snapdragon: the route follows the firmware's Android and the model
+    // unless forced. Flashing ColorOS 17 through the bootloader can brick
+    // the phone, so it is refused there even when asked for — except on the
+    // realme GT Neo 5 family, which always takes the bootloader.
     let android = if source.is_source() {
         None
     } else {
         lfff_lib::extractor::extracted_android_version(dir)
     };
-    let modem_in_fastbootd = match method {
-        "snapdragon-bootloader" => {
-            if let Some(v) = android.filter(|v| *v >= lfff_lib::flasher::FASTBOOTD_FROM_ANDROID) {
+    let modem_in_fastbootd = if as_mediatek {
+        false
+    } else {
+        let fw_model = if source.is_source() {
+            None
+        } else {
+            lfff_lib::extractor::extracted_firmware_model(dir)
+        };
+        let phone_model = lfff_lib::device::adb_model(serial);
+        let bootloader_model = [&fw_model, &phone_model]
+            .into_iter()
+            .flatten()
+            .any(|m| lfff_lib::flasher::bootloader_route_model(m));
+        let forced = match method {
+            "snapdragon-bootloader" => Some(false),
+            "snapdragon-fastbootd" => Some(true),
+            _ => None,
+        };
+        let fastbootd = match lfff_lib::flasher::snapdragon_route(forced, android, bootloader_model)
+        {
+            SnapdragonRoute::Fastbootd => true,
+            SnapdragonRoute::Bootloader => false,
+            SnapdragonRoute::Refused(v) => {
                 eprintln!(
                     "{} {}",
                     "✗".red().bold(),
@@ -268,14 +289,8 @@ pub fn run(
                 );
                 return 1;
             }
-            false
-        }
-        "snapdragon-fastbootd" => true,
-        _ if as_mediatek => false,
-        _ => match android {
-            Some(v) => lfff_lib::flasher::modem_in_fastbootd_for(v),
             // No default without the version: the user picks the route.
-            None if !interactive() => {
+            SnapdragonRoute::Ask if !interactive() => {
                 eprintln!(
                     "{} {}",
                     "✗".red().bold(),
@@ -284,24 +299,25 @@ pub fn run(
                 );
                 return 2;
             }
-            None => match prompt_route_unknown_android() {
+            SnapdragonRoute::Ask => match prompt_route_unknown_android() {
                 Some(f) => f,
                 None => {
                     eprintln!("{}", "Aborted by user.".yellow());
                     return 1;
                 }
             },
-        },
-    };
-    if !as_mediatek {
+        };
         let version = android.map_or("unknown".to_string(), |v| v.to_string());
-        let route = if modem_in_fastbootd {
+        let route = if fastbootd {
             "everything in fastbootd, the phone switches to the other slot"
+        } else if bootloader_model && forced.is_none() {
+            "the modem through the bootloader (always on realme GT Neo 5)"
         } else {
             "the modem through the bootloader"
         };
         eprintln!("  Firmware Android: {version} → {route}");
-    }
+        fastbootd
+    };
 
     // Warn on an apparent method/firmware mismatch, but respect the user's choice.
     let has_preloader = images.keys().any(|k| is_preloader(k));

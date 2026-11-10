@@ -128,6 +128,9 @@ export component MainWindow inherits MaterialWindow {
     // With fw-android unknown, the Snapdragon route picked on the sheet:
     // 0 not yet, 1 the modem through the bootloader, 2 all in fastbootd.
     in-out property <int> route-choice: 0;
+    // The firmware or the phone is a realme GT Neo 5 model (RMX3700/3701/
+    // 3706/3708/3709): the modem always goes through the bootloader.
+    in-out property <bool> bootloader-model: false;
     // ARB installed on the phone, read over adb with root right before the
     // sheet opens: -1 when it could not be read.
     in-out property <int> phone-arb: -1;
@@ -1063,10 +1066,11 @@ export component MainWindow inherits MaterialWindow {
         wrong-device: root.fw-wrong-device;
         rebuild-super: root.rebuild-super;
         // Forced in Settings, or by default for firmware up to Android 16.
-        modem-bootloader: root.chip == 1 && (root.modem-bootloader || (root.fw-android > 0 && root.fw-android < 17));
+        modem-bootloader: root.chip == 1 && (root.modem-bootloader || root.bootloader-model || (root.fw-android > 0 && root.fw-android < 17));
+        bootloader-model: root.bootloader-model;
         modem-bootloader-forced: root.modem-bootloader;
         fw-android: root.fw-android;
-        route-needed: root.chip == 1 && !root.modem-bootloader && root.fw-android < 0;
+        route-needed: root.chip == 1 && !root.modem-bootloader && !root.bootloader-model && root.fw-android < 0;
         route-choice <=> root.route-choice;
         super-plan: root.super-plan;
         firmware: root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區");

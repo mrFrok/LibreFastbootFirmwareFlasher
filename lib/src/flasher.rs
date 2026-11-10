@@ -367,15 +367,61 @@ enum ModemRoute {
 }
 
 /// The first Android version whose firmware goes entirely through fastbootd
-/// by default. Flashing ColorOS 17 through the bootloader can brick the phone; up to 16
-/// it is the proven way and stays the default.
+/// by default. Flashing ColorOS 17 through the bootloader can brick the
+/// phone; up to 16 it is the proven way and stays the default.
 pub const FASTBOOTD_FROM_ANDROID: u32 = 17;
 
-/// The Snapdragon route for firmware of a known Android version: the modem
-/// through the bootloader up to Android 16, everything in fastbootd from 17.
-/// With the version unknown there is no default — the user picks the route.
-pub fn modem_in_fastbootd_for(android: u32) -> bool {
-    android >= FASTBOOTD_FROM_ANDROID
+/// realme GT Neo 5 / GT3 (RMX3706, RMX3708, RMX3709) and GT Neo 5 SE
+/// (RMX3700, RMX3701): the modem always goes through the bootloader, on
+/// any Android — custom Android 17 builds too fare better that way there.
+const BOOTLOADER_ROUTE_MODELS: [&str; 5] = ["RMX3700", "RMX3701", "RMX3706", "RMX3708", "RMX3709"];
+
+/// Whether a phone or firmware model (`RMX3709`, `RMX3709TR`) is one that
+/// always takes the bootloader route.
+pub fn bootloader_route_model(model: &str) -> bool {
+    let m = model.trim().to_ascii_uppercase();
+    BOOTLOADER_ROUTE_MODELS.iter().any(|p| m.starts_with(p))
+}
+
+/// What a Snapdragon flash does with the modem.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapdragonRoute {
+    /// Switch slots, everything from fastbootd.
+    Fastbootd,
+    /// The modem through the bootloader.
+    Bootloader,
+    /// The firmware does not say its Android and nothing decides for it:
+    /// the user picks.
+    Ask,
+    /// The bootloader route was forced on firmware of this Android, where
+    /// it can brick the phone.
+    Refused(u32),
+}
+
+/// The Snapdragon route. `forced`: the user's explicit route (`true`
+/// fastbootd), `None` to go by the firmware. `android`: the firmware's
+/// version. `bootloader_model`: the phone or the firmware is one of
+/// [`bootloader_route_model`]'s, which always take the bootloader.
+pub fn snapdragon_route(
+    forced: Option<bool>,
+    android: Option<u32>,
+    bootloader_model: bool,
+) -> SnapdragonRoute {
+    match forced {
+        Some(true) => SnapdragonRoute::Fastbootd,
+        Some(false) => match android {
+            Some(v) if v >= FASTBOOTD_FROM_ANDROID && !bootloader_model => {
+                SnapdragonRoute::Refused(v)
+            }
+            _ => SnapdragonRoute::Bootloader,
+        },
+        None if bootloader_model => SnapdragonRoute::Bootloader,
+        None => match android {
+            Some(v) if v >= FASTBOOTD_FROM_ANDROID => SnapdragonRoute::Fastbootd,
+            Some(_) => SnapdragonRoute::Bootloader,
+            None => SnapdragonRoute::Ask,
+        },
+    }
 }
 
 /// The fastbootd route boots the phone from the other slot, so it needs that
@@ -1327,9 +1373,9 @@ pub struct FlashOptions {
     /// Comma-separated partition names the user explicitly wants to skip.
     pub skip_partitions: String,
     /// Snapdragon only: flash the modem from fastbootd instead of rebooting
-    /// to the bootloader. The frontends pick it by the firmware's Android
-    /// version ([`modem_in_fastbootd_for`]), or ask the user when it is
-    /// unknown: flashing ColorOS 17 through the bootloader can brick the phone, up to 16
+    /// to the bootloader. The frontends pick it with [`snapdragon_route`]
+    /// (by the firmware's Android and the phone model), or ask the user when
+    /// it is unknown: flashing ColorOS 17 through the bootloader can brick the phone, up to 16
     /// it is the default. The
     /// session switches to the other slot first, then writes the modem and
     /// the dynamic partitions there; the old slot keeps its old modem.
@@ -2587,10 +2633,29 @@ mod tests {
 
     #[test]
     fn bootloader_route_by_default_only_up_to_android_16() {
-        assert!(!modem_in_fastbootd_for(14));
-        assert!(!modem_in_fastbootd_for(16));
-        assert!(modem_in_fastbootd_for(17));
-        assert!(modem_in_fastbootd_for(18));
+        use SnapdragonRoute::*;
+        assert_eq!(snapdragon_route(None, Some(16), false), Bootloader);
+        assert_eq!(snapdragon_route(None, Some(17), false), Fastbootd);
+        assert_eq!(snapdragon_route(None, None, false), Ask);
+        assert_eq!(snapdragon_route(Some(true), Some(14), false), Fastbootd);
+        assert_eq!(snapdragon_route(Some(false), Some(16), false), Bootloader);
+        assert_eq!(snapdragon_route(Some(false), Some(17), false), Refused(17));
+        assert_eq!(snapdragon_route(Some(false), None, false), Bootloader);
+    }
+
+    #[test]
+    fn gt_neo_5_always_takes_the_bootloader() {
+        use SnapdragonRoute::*;
+        for m in ["RMX3706", "rmx3709TR", "RMX3700", "RMX3701", "RMX3708"] {
+            assert!(bootloader_route_model(m), "{m}");
+        }
+        assert!(!bootloader_route_model("CPH2745"));
+        assert!(!bootloader_route_model("taro"));
+        assert_eq!(snapdragon_route(None, Some(17), true), Bootloader);
+        assert_eq!(snapdragon_route(None, None, true), Bootloader);
+        assert_eq!(snapdragon_route(Some(false), Some(17), true), Bootloader);
+        // An explicit fastbootd choice still stands.
+        assert_eq!(snapdragon_route(Some(true), Some(16), true), Fastbootd);
     }
 
     // Only what the user held back must be carried to the new slot; names

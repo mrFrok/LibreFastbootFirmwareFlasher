@@ -167,6 +167,9 @@ enum WMsg {
         /// The firmware's Android version, when it says; picks the
         /// Snapdragon route.
         android: Option<u32>,
+        /// Built for a realme GT Neo 5 model: the modem always goes
+        /// through the bootloader.
+        bootloader_model: bool,
         cached: bool,
         /// Device codenames the OTA is built for; empty when it does not say.
         devices: Vec<String>,

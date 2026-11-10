@@ -199,7 +199,7 @@ If the new slot has no partitions (usual on Virtual A/B), super is rebuilt from 
 
 The old slot keeps its old modem. A flash with a modem but no system images is refused rather than sent to the bootloader. Partitions you choose not to flash (e.g. a rooted `init_boot`) are copied from the phone's active slot over adb as root before the switch and written to the new slot; if they cannot be copied, nothing is flashed.
 
-**Through the bootloader** (the default up to Android 16; for any firmware with `--method snapdragon-bootloader`, in the GUI Settings → Firmware → Modem via bootloader; refused for Android 17): the dynamic partitions go to the active slot, then the phone restarts into the bootloader and the modem goes to both slots. `--method snapdragon-fastbootd` uses fastbootd for any firmware.
+**Through the bootloader** (the default up to Android 16, and on any Android for the realme GT Neo 5 family — RMX3706, RMX3708, RMX3709, and the Neo 5 SE RMX3700, RMX3701 — recognised by the firmware or the phone; for any firmware with `--method snapdragon-bootloader`, in the GUI Settings → Firmware → Modem via bootloader; refused for Android 17 on other phones): the dynamic partitions go to the active slot, then the phone restarts into the bootloader and the modem goes to both slots. `--method snapdragon-fastbootd` uses fastbootd for any firmware.
 
 On error: **retry** / **reboot** / **skip partition** / **abort**
 

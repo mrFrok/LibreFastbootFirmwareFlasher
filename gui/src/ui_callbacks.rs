@@ -17,6 +17,26 @@ thread_local! {
     static FW_DEVICES: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
     /// The connected phone's codename, when Android reported it.
     static PHONE_CODENAME: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    /// The chosen firmware / the connected phone is a realme GT Neo 5 model,
+    /// whose modem always goes through the bootloader.
+    static FW_BOOTLOADER_MODEL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static PHONE_BOOTLOADER_MODEL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn update_bootloader_model(ui: &MainWindow) {
+    ui.set_bootloader_model(
+        FW_BOOTLOADER_MODEL.with(|c| c.get()) || PHONE_BOOTLOADER_MODEL.with(|c| c.get()),
+    );
+}
+
+/// The phone's model as adb gave it, or as remembered for its serial: in
+/// fastbootd the phone only says its platform.
+fn phone_is_bootloader_model(name: &str, serial: &str) -> bool {
+    lfff_lib::flasher::bootloader_route_model(name)
+        || load_config()
+            .known_devices
+            .get(serial)
+            .is_some_and(|d| lfff_lib::flasher::bootloader_route_model(&d.name))
 }
 
 /// Warn when the firmware names the devices it is for and the phone's
@@ -281,6 +301,9 @@ pub fn poll(
             WMsg::DeviceDetected(d) => {
                 crate::ota::on_device(&ui, &d);
                 ui.set_chip(chip_for(&d.product));
+                PHONE_BOOTLOADER_MODEL
+                    .with(|c| c.set(phone_is_bootloader_model(&d.name, &d.serial)));
+                update_bootloader_model(&ui);
                 ui.set_device_unauthorized(false);
                 PHONE_CODENAME
                     .with(|p| *p.borrow_mut() = d.codename_known.then(|| d.product.clone()));
@@ -309,6 +332,8 @@ pub fn poll(
                 ui.set_device_unauthorized(matches!(m, WMsg::DeviceUnauthorized));
                 PHONE_CODENAME.with(|p| *p.borrow_mut() = None);
                 update_wrong_device(&ui);
+                PHONE_BOOTLOADER_MODEL.with(|c| c.set(false));
+                update_bootloader_model(&ui);
                 ui.set_device(DeviceInfo {
                     connected: false,
                     name: "\u{2014}".into(),
@@ -635,10 +660,13 @@ pub fn poll(
                 arb,
                 has_preloader,
                 android,
+                bootloader_model,
                 cached,
                 devices,
                 super_plan,
             } => {
+                FW_BOOTLOADER_MODEL.with(|c| c.set(bootloader_model));
+                update_bootloader_model(&ui);
                 ui.set_fw_android(android.map_or(-1, |v| v as i32));
                 ui.set_route_choice(0);
                 ui.set_super_plan(super_plan.into());
@@ -1576,11 +1604,13 @@ fn register_install_callbacks(
             let method = match ui.get_chip() {
                 1 if ui.get_modem_bootloader() => FlashMethod::SnapdragonBootloader,
                 // Android unknown: the route the user picked on the sheet.
-                1 if ui.get_fw_android() < 0 => match ui.get_route_choice() {
-                    1 => FlashMethod::SnapdragonBootloader,
-                    2 => FlashMethod::SnapdragonFastbootd,
-                    _ => return,
-                },
+                1 if ui.get_fw_android() < 0 && !ui.get_bootloader_model() => {
+                    match ui.get_route_choice() {
+                        1 => FlashMethod::SnapdragonBootloader,
+                        2 => FlashMethod::SnapdragonFastbootd,
+                        _ => return,
+                    }
+                }
                 1 => FlashMethod::Snapdragon,
                 2 => FlashMethod::Mtk,
                 _ => return,

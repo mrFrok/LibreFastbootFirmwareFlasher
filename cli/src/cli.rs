@@ -186,7 +186,10 @@ pub enum Commands {
         /// asks when the firmware does not say its version), 'mtk' (MediaTek), 'snapdragon-bootloader' (the
         /// modem through the bootloader for any firmware; refused for Android
         /// 17: flashing ColorOS 17 that way can brick the phone) or 'snapdragon-fastbootd' (everything in
-        /// fastbootd for any firmware). Prompted interactively if omitted.
+        /// fastbootd for any firmware). realme GT Neo 5 / GT3 / Neo 5 SE
+        /// (RMX3700, RMX3701, RMX3706, RMX3708, RMX3709) always take the
+        /// bootloader unless 'snapdragon-fastbootd' is given. Prompted
+        /// interactively if omitted.
         #[arg(
             long,
             value_name = "METHOD",

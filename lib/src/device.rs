@@ -143,6 +143,19 @@ pub fn list_fastbootd_devices() -> Vec<String> {
 }
 
 /// Return serial numbers of devices reachable via adb.
+/// The phone's model (`ro.product.model`, e.g. `RMX3709`) over adb; `None`
+/// when no phone answers there (fastboot, fastbootd, no USB debugging).
+pub fn adb_model(serial: Option<&str>) -> Option<String> {
+    let mut cmd = vec!["adb"];
+    if let Some(s) = serial {
+        cmd.extend(["-s", s]);
+    }
+    cmd.extend(["shell", "getprop", "ro.product.model"]);
+    let r = run_cmd(&cmd, 5);
+    let model = r.stdout.trim();
+    (r.code == 0 && !model.is_empty()).then(|| model.to_string())
+}
+
 pub fn list_adb_devices() -> Vec<String> {
     let r = run_cmd(&["adb", "devices"], 5);
     if r.code != 0 {

@@ -787,6 +787,8 @@ fn prepare_firmware(path: &str, downloaded: bool, tx: &mpsc::Sender<WMsg>) {
         arb: lfff_lib::arb::firmware_arb(&dir),
         has_preloader: images.keys().any(|k| lfff_lib::flasher::is_preloader(k)),
         android: lfff_lib::extractor::extracted_android_version(&dir),
+        bootloader_model: lfff_lib::extractor::extracted_firmware_model(&dir)
+            .is_some_and(|m| lfff_lib::flasher::bootloader_route_model(&m)),
         cached,
         devices,
         super_plan: std::fs::read_to_string(dir.join(lfff_lib::extractor::PAYLOAD_METADATA_FILE))
@@ -798,40 +800,59 @@ fn prepare_firmware(path: &str, downloaded: bool, tx: &mpsc::Sender<WMsg>) {
 }
 
 /// Whether a Snapdragon flash puts the modem in fastbootd: by the firmware's
-/// Android, or the route the user chose. `Err` when the version is unknown
-/// and no route was chosen, or when the bootloader route would meet Android
-/// 17: flashing ColorOS 17 that way can brick the phone.
+/// Android and the model (the realme GT Neo 5 family always takes the
+/// bootloader), or the route the user chose. `Err` when the version is
+/// unknown and no route was chosen, or when the bootloader route would meet
+/// Android 17: flashing ColorOS 17 that way can brick the phone.
 fn snapdragon_route(
     tx: &mpsc::Sender<WMsg>,
     method: FlashMethod,
     dir: &Path,
     is_source: bool,
+    phone: Option<&DeviceSnapshot>,
 ) -> Result<bool, String> {
-    use lfff_lib::flasher::{FASTBOOTD_FROM_ANDROID, modem_in_fastbootd_for};
-    let android = if is_source {
-        None
+    use lfff_lib::flasher::{SnapdragonRoute, bootloader_route_model};
+    if method == FlashMethod::Mtk {
+        return Ok(false);
+    }
+    let (android, fw_model) = if is_source {
+        (None, None)
     } else {
-        lfff_lib::extractor::extracted_android_version(dir)
+        (
+            lfff_lib::extractor::extracted_android_version(dir),
+            lfff_lib::extractor::extracted_firmware_model(dir),
+        )
     };
-    let fastbootd = match method {
-        FlashMethod::Mtk => return Ok(false),
-        FlashMethod::SnapdragonBootloader => {
-            if let Some(v) = android.filter(|v| *v >= FASTBOOTD_FROM_ANDROID) {
-                return Err(format!(
-                    "This firmware is Android {v}: flashing ColorOS {v} through the bootloader can brick the phone. Turn off Settings → Firmware → Modem via bootloader."
-                ));
-            }
-            false
+    // The model as adb gave it, or as remembered for this serial: in
+    // fastbootd the phone only says its platform.
+    let remembered = phone.and_then(|p| {
+        crate::config::load_config()
+            .known_devices
+            .get(&p.serial)
+            .map(|d| d.name.clone())
+    });
+    let bootloader_model = [fw_model, phone.map(|p| p.name.clone()), remembered]
+        .into_iter()
+        .flatten()
+        .any(|m| bootloader_route_model(&m));
+    let forced = match method {
+        FlashMethod::SnapdragonBootloader => Some(false),
+        FlashMethod::SnapdragonFastbootd => Some(true),
+        _ => None,
+    };
+    let fastbootd = match lfff_lib::flasher::snapdragon_route(forced, android, bootloader_model) {
+        SnapdragonRoute::Fastbootd => true,
+        SnapdragonRoute::Bootloader => false,
+        SnapdragonRoute::Refused(v) => {
+            return Err(format!(
+                "This firmware is Android {v}: flashing ColorOS {v} through the bootloader can brick the phone. Turn off Settings → Firmware → Modem via bootloader."
+            ));
         }
-        FlashMethod::SnapdragonFastbootd => true,
-        FlashMethod::Snapdragon => match android {
-            Some(v) => modem_in_fastbootd_for(v),
-            None => {
-                return Err(
-                    "The firmware's Android version is unknown: choose how to flash the modem — through the bootloader (Android 16 and older) or everything in fastbootd (Android 17).".into(),
-                );
-            }
-        },
+        SnapdragonRoute::Ask => {
+            return Err(
+                "The firmware's Android version is unknown: choose how to flash the modem — through the bootloader (Android 16 and older) or everything in fastbootd (Android 17).".into(),
+            );
+        }
     };
     log(
         tx,
@@ -842,6 +863,8 @@ fn snapdragon_route(
             android.map_or("unknown".to_string(), |v| v.to_string()),
             if fastbootd {
                 "everything in fastbootd, the phone switches to the other slot"
+            } else if bootloader_model && forced.is_none() {
+                "the modem through the bootloader (always on realme GT Neo 5)"
             } else {
                 "the modem through the bootloader"
             }
@@ -1098,7 +1121,8 @@ pub fn worker(
         device_poll::wait_for_poll();
         // A phone the poller saw leave is gone for the worker too; keeping
         // its serial would send the next command to nothing.
-        let (mut serial, current_device_product) = match current_device.lock().unwrap().clone() {
+        let phone = current_device.lock().unwrap().clone();
+        let (mut serial, current_device_product) = match phone.clone() {
             Some(d) => (Some(d.serial), d.product),
             None => (None, String::new()),
         };
@@ -1255,7 +1279,7 @@ pub fn worker(
                 }
                 // Before any warning: an unknown Android with no route
                 // chosen, or the bootloader on Android 17, stops here.
-                if let Err(msg) = snapdragon_route(&tx, method, &dir, is_source) {
+                if let Err(msg) = snapdragon_route(&tx, method, &dir, is_source, phone.as_ref()) {
                     log(&tx, LogLevel::Error, 2, &msg);
                     tx.send(WMsg::FlashComplete {
                         success: false,
@@ -1374,7 +1398,8 @@ pub fn worker(
                 current_source = Some(src.clone());
 
                 let modem_in_fastbootd =
-                    match snapdragon_route(&tx, method, Path::new(&dir), is_source) {
+                    match snapdragon_route(&tx, method, Path::new(&dir), is_source, phone.as_ref())
+                    {
                         Ok(f) => f,
                         Err(msg) => {
                             log(&tx, LogLevel::Error, 2, &msg);
@@ -2315,15 +2340,15 @@ pub fn worker(
                 stage(&tx, 0, 1, "");
                 let mode = lfff_lib::flasher::detect_mode(serial.as_deref());
                 // Before the phone leaves Android: what it should keep.
-                let modem_in_fastbootd = match snapdragon_route(&tx, method, Path::new(&dir), false)
-                {
-                    Ok(f) => f,
-                    Err(msg) => {
-                        stage(&tx, 0, 3, "");
-                        stop(msg);
-                        continue;
-                    }
-                };
+                let modem_in_fastbootd =
+                    match snapdragon_route(&tx, method, Path::new(&dir), false, phone.as_ref()) {
+                        Ok(f) => f,
+                        Err(msg) => {
+                            stage(&tx, 0, 3, "");
+                            stop(msg);
+                            continue;
+                        }
+                    };
                 let keep_images = if modem_in_fastbootd {
                     match keep_from_phone(
                         &tx,

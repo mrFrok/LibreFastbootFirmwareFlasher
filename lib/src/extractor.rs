@@ -620,7 +620,7 @@ pub fn extract_firmware_cancellable(
     fs::remove_file(output_dir.join(COMPLETE_MARKER)).ok();
     // A layout left by another firmware must not be rebuilt from.
     fs::remove_file(output_dir.join(PAYLOAD_METADATA_FILE)).ok();
-    fs::remove_file(output_dir.join(ANDROID_VERSION_FILE)).ok();
+    fs::remove_file(output_dir.join(FIRMWARE_INFO_FILE)).ok();
     info!(
         "Extracting {} → {}",
         zip_path.file_name().unwrap_or_default().to_string_lossy(),
@@ -784,7 +784,7 @@ pub fn extract_firmware_cancellable(
                 }
             }
         }
-        save_android_version(&zip_path, output_dir);
+        save_firmware_info(&zip_path, output_dir);
         // Only some partitions: the folder is not this archive unpacked, and
         // must not be reused as if it were.
         if partitions.is_none() {
@@ -857,7 +857,7 @@ pub fn extract_firmware_cancellable(
         };
         let _ = fs::remove_dir(&staging);
         let arb = find_xbl_config(output_dir).map(|p| extract_arb_from_xbl(&p));
-        save_android_version(&zip_path, output_dir);
+        save_firmware_info(&zip_path, output_dir);
         mark_complete(&zip_path, output_dir);
         return ExtractionResult {
             success: true,
@@ -945,9 +945,10 @@ fn ota_metadata(zip_path: &Path) -> Option<HashMap<String, String>> {
     Some(parse_payload_properties(&buf))
 }
 
-/// Beside the images: the Android version the firmware installs, read from
-/// the archive at extraction ([`firmware_android_version`]).
-pub const ANDROID_VERSION_FILE: &str = ".lfff-android-version";
+/// Beside the images: what the archive's metadata said about the firmware,
+/// as `key=value` lines — `android` ([`firmware_android_version`]) and
+/// `model` ([`firmware_model`]). Written at extraction.
+pub const FIRMWARE_INFO_FILE: &str = ".lfff-firmware-info";
 
 /// The major version in `16.0.2.400` or `16`; only plausible Android
 /// versions, so a stray number in a name is not taken for one.
@@ -962,7 +963,10 @@ fn leading_android_version(s: &str) -> Option<u32> {
 /// (`RMX3709_16.0.2.400(EX01)` — ColorOS, OxygenOS and realme UI number
 /// their versions after Android). `None` when the archive does not say.
 pub fn firmware_android_version(zip_path: &Path) -> Option<u32> {
-    let props = ota_metadata(zip_path)?;
+    android_version_from(&ota_metadata(zip_path)?)
+}
+
+fn android_version_from(props: &HashMap<String, String>) -> Option<u32> {
     let from_build = props
         .get("post-build")
         .and_then(|b| b.split(':').nth(1))
@@ -977,18 +981,54 @@ pub fn firmware_android_version(zip_path: &Path) -> Option<u32> {
     })
 }
 
-fn save_android_version(zip_path: &Path, output_dir: &Path) {
-    if let Some(v) = firmware_android_version(zip_path) {
-        fs::write(output_dir.join(ANDROID_VERSION_FILE), v.to_string()).ok();
+/// The model an OTA is built for (`RMX3709TR`): `product_name`, else what
+/// precedes the version in `version_name` (`RMX3709_16.0.2.400`). `None`
+/// when the archive does not say — custom builds often don't.
+pub fn firmware_model(zip_path: &Path) -> Option<String> {
+    model_from(&ota_metadata(zip_path)?)
+}
+
+fn model_from(props: &HashMap<String, String>) -> Option<String> {
+    props
+        .get("product_name")
+        .map(|p| p.trim().to_string())
+        .or_else(|| {
+            props
+                .get("version_name")
+                .and_then(|v| v.trim().rsplit_once('_'))
+                .map(|(m, _)| m.to_string())
+        })
+        .filter(|m| !m.is_empty())
+}
+
+fn save_firmware_info(zip_path: &Path, output_dir: &Path) {
+    let Some(props) = ota_metadata(zip_path) else {
+        return;
+    };
+    let mut info = String::new();
+    if let Some(v) = android_version_from(&props) {
+        info.push_str(&format!("android={v}\n"));
     }
+    // One line per key: a model with a newline in it would forge another.
+    if let Some(m) = model_from(&props).filter(|m| !m.contains(['\n', '\r'])) {
+        info.push_str(&format!("model={m}\n"));
+    }
+    if !info.is_empty() {
+        fs::write(output_dir.join(FIRMWARE_INFO_FILE), info).ok();
+    }
+}
+
+fn saved_info(dir: &Path, key: &str) -> Option<String> {
+    let props = parse_payload_properties(&fs::read_to_string(dir.join(FIRMWARE_INFO_FILE)).ok()?);
+    props.get(key).map(|v| v.trim().to_string())
 }
 
 /// The Android version of an extracted firmware: saved at extraction, else
 /// read from a folder named by [`get_firmware_name`]
 /// (`RMX3709TR_16.0.2.400`), for folders unpacked by older versions.
 pub fn extracted_android_version(dir: &Path) -> Option<u32> {
-    if let Ok(s) = fs::read_to_string(dir.join(ANDROID_VERSION_FILE)) {
-        return leading_android_version(&s);
+    if dir.join(FIRMWARE_INFO_FILE).is_file() {
+        return saved_info(dir, "android").and_then(|v| leading_android_version(&v));
     }
     let name = dir.file_name()?.to_string_lossy();
     let (_, version) = name.rsplit_once('_')?;
@@ -997,6 +1037,17 @@ pub fn extracted_android_version(dir: &Path) -> Option<u32> {
         return None;
     }
     leading_android_version(version)
+}
+
+/// The model an extracted firmware is built for: saved at extraction, else
+/// the start of a folder named by [`get_firmware_name`] (`RMX3709TR_…`).
+pub fn extracted_firmware_model(dir: &Path) -> Option<String> {
+    if dir.join(FIRMWARE_INFO_FILE).is_file() {
+        return saved_info(dir, "model");
+    }
+    let name = dir.file_name()?.to_string_lossy();
+    let (model, _) = name.split_once('_')?;
+    (!model.is_empty()).then(|| model.to_string())
 }
 
 /// The payload's metadata as JSON (`payload_dumper --metadata`), read from
@@ -1374,6 +1425,8 @@ mod tests {
             )],
         );
         assert_eq!(firmware_android_version(&name_only), Some(16));
+        assert_eq!(firmware_model(&name_only).as_deref(), Some("RMX3709TR"));
+        assert_eq!(firmware_model(&build).as_deref(), Some("RMX3709"));
         let none = zip_with(dir.path(), "c.zip", &[("payload.bin", "x")]);
         assert_eq!(firmware_android_version(&none), None);
     }
@@ -1384,8 +1437,17 @@ mod tests {
         let named = root.path().join("RMX3709TR_15.0.2.400");
         fs::create_dir(&named).unwrap();
         assert_eq!(extracted_android_version(&named), Some(15));
-        fs::write(named.join(ANDROID_VERSION_FILE), "17").unwrap();
+        assert_eq!(
+            extracted_firmware_model(&named).as_deref(),
+            Some("RMX3709TR")
+        );
+        fs::write(
+            named.join(FIRMWARE_INFO_FILE),
+            "android=17\nmodel=RMX3706\n",
+        )
+        .unwrap();
         assert_eq!(extracted_android_version(&named), Some(17));
+        assert_eq!(extracted_firmware_model(&named).as_deref(), Some("RMX3706"));
 
         for odd in ["RMX_14_ok", "my-fw", "fw_2024.1"] {
             let d = root.path().join(odd);
