@@ -1,6 +1,6 @@
 <div align="center">
 
-![LFFF](logo.svg)
+![LibreFastbootFirmwareFlasher](logo.svg)
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-orange.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Rust](https://img.shields.io/badge/Rust-1.95%2B-orange)](https://www.rust-lang.org)
@@ -8,13 +8,13 @@
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-orange)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher)
 [![Releases](https://img.shields.io/github/v/release/mrFrok/LibreFastbootFirmwareFlasher)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases)
 
-**Free, open-source firmware flasher for Android A/B devices via fastboot.**  
-CLI + GUI — no Python, no bloat. The CLI is a single static binary that runs on any Linux,
-Termux included. Built with [Slint](https://slint.dev).
+**Free, open-source firmware flasher for Android A/B phones, over fastboot.**  
+A desktop app and a command-line tool, written in Rust, no bloat. The CLI is one static binary that runs on any Linux,
+Termux included.
 
-[Installation](#installation) · [Quick Start](#quick-start) · [CLI Commands](#cli-commands) · [Tested Devices](#tested-devices) · [Development](#development)
+[Installation](#installation) · [Quick start](#quick-start) · [How flashing works](#how-flashing-works) · [CLI commands](#cli-commands) · [Tested devices](#tested-devices) · [Development](#development)
 
-![Screenshot](screenshot.png)
+![The install page of LibreFastbootFirmwareFlasher, with a phone connected and a firmware chosen](screenshot.png)
 
 </div>
 
@@ -22,127 +22,160 @@ Termux included. Built with [Slint](https://slint.dev).
 
 ## About
 
-LFFF flashes full firmware on **OnePlus / OPPO / Realme** devices with Qualcomm SoC and A/B partition layout. Handles the entire pipeline — extraction, pre-flash checks, Anti-Rollback protection, dynamic super partitions, A/B slot management, modem flashing.
+LibreFastbootFirmwareFlasher flashes full firmware on **OnePlus, OPPO and
+realme** phones with an A/B layout: Snapdragon, and MediaTek in part. It
+handles the whole job — finding and downloading the official build,
+unpacking it, checking the phone, Anti-Rollback, the super partition and its
+layout, the slots and the modem.
 
-**CLI** (`lfff`) — scriptable, headless.  
-**GUI** (`lfff-gui`) — native desktop app built with [Slint](https://slint.dev).
+- **GUI** (`lfff-gui`) — a desktop app built with [Slint](https://slint.dev)
+- **CLI** (`lfff`) — the same, scriptable, for a terminal or Termux
 
-`full flash` · `A/B slots` · `ARB protection` · `source build flash` · `official firmware search` · `OTA extraction` · `download` · `single-partition flash` · `error recovery` · `dependency installer`
+What it does:
 
-✈️ [Author](https://t.me/mrFrok228) · 💬 [Telegram Group](https://t.me/lfffcomunity) · 👥 [Realme Community in Telegram](https://t.me/gt3neo5hub) · 👥 [OnePlus Community in Telegram](https://t.me/oneplusmod) · ☕ [Donate](https://boosty.to/mrfrok/donate)
+- Full firmware flash across both slots, or a single partition
+- Official firmware search on the OPPO / OnePlus / realme servers, every region at once
+- Multi-connection download and OTA unpacking
+- Anti-Rollback check: the phone against the firmware
+- Super rebuilt from the firmware's layout, so system updates keep installing
+- Flashing a source build's output folder
+- Retry, skip or abort a failed partition
+- Installs its own tools (`fastboot`, `adb`, `aria2c`, `payload_dumper`)
+
+Links: [Author](https://t.me/mrFrok228) · [Telegram group](https://t.me/lfffcomunity) · [realme community](https://t.me/gt3neo5hub) · [OnePlus community](https://t.me/oneplusmod) · [Donate](https://boosty.to/mrfrok/donate)
 
 ---
 
 ## Installation
 
-**Any Linux / macOS (one-liner)**
+| System | Command |
+|---|---|
+| Any Linux, macOS | `curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh \| bash` |
+| Arch Linux (AUR) | `yay -S lfff` (from source) or `yay -S lfff-bin` (prebuilt) |
+| macOS (Homebrew) | `brew install --cask librefastbootfirmwareflasher` (after the tap, below) |
+| Linux (Homebrew) | `brew install lfff` (after the tap, below) |
+| Linux x86_64 | Flatpak or AppImage from the [release page](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases) |
+| Nix / NixOS | `nix profile install github:mrFrok/LibreFastbootFirmwareFlasher` |
+| Termux (Android) | the one-liner with `--cli-only` |
+
+Except for Flatpak, install the external tools afterwards with `lfff deps`.
+
+### One-liner (any Linux, macOS)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
 
 # Flags: --cli-only | --gui-only | --uninstall
 ```
 
-Installs to `~/.local/bin` — works on **all** Linux distros including atomic/immutable (Fedora Silverblue, Bazzite, NixOS, SteamOS), musl-based ones (Void, Alpine) and macOS.
+Installs to `~/.local/bin`, so it works on every distribution, atomic and
+immutable ones too (Fedora Silverblue, Bazzite, NixOS, SteamOS), and on macOS.
+On musl distributions (Void, Alpine) it picks the matching GUI build
+(`lfff-gui-linux-<arch>-musl.tar.gz`); the CLI is static and the same
+everywhere.
 
-**musl distributions (Void, Alpine)** — the installer detects musl and picks the
-matching GUI build (`lfff-gui-linux-<arch>-musl.tar.gz`). The CLI is static and
-the same everywhere.
+### Termux (Android)
 
-**Termux (Android)** — the CLI only; there is no display server for the GUI.
+The CLI only: there is no display server for the GUI.
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --cli-only
 pkg install android-tools    # fastboot and adb
 ```
 
-**Arch Linux (AUR)**
+### Arch Linux (AUR)
+
 ```bash
 yay -S lfff         # build from source
 yay -S lfff-bin     # prebuilt binary
 ```
 
-**Homebrew (macOS)** — the app in /Applications, plus the command-line tool
+### Homebrew
+
+On macOS, the app goes to /Applications together with the command-line tool:
+
 ```bash
 brew tap mrFrok/lfff
 brew trust mrfrok/lfff   # current Homebrew asks this of third-party taps
 brew install --cask librefastbootfirmwareflasher
 ```
 
-**Homebrew (Linux)**, or just the command-line tool on macOS
+On Linux, or for just the command-line tool on macOS:
+
 ```bash
 brew tap mrFrok/lfff
 brew trust mrfrok/lfff
 brew install lfff
 ```
 
-If `brew trust` is an unknown command, your Homebrew predates it — skip that line.
+If `brew trust` is an unknown command, your Homebrew predates it — skip that
+line. On macOS, `brew tap` needs git from Apple's Command Line Tools. If it
+fails with *"No developer tools installed"* or *"Git is unavailable"*, run
+`xcode-select --install`, then the commands above again.
 
-On macOS, `brew tap` needs git, which comes with Apple's Command Line Tools.
-If it fails with *"No developer tools installed"* or *"Git is unavailable"*,
-install them first, then run the commands above again:
-```bash
-xcode-select --install
-```
+### Flatpak (Linux x86_64)
 
-**Flatpak (Linux x86_64)**
 ```bash
 flatpak install lfff-gui-linux-x86_64.flatpak   # from the release page
 ```
 
 Bundles fastboot, adb, aria2 and payload-dumper, so `lfff deps` is not needed.
-It still needs the usual udev rules on the host for the device to show up.
+The host still needs the usual udev rules for the phone to show up.
 
-**AppImage (Linux)**
+### AppImage (Linux)
+
 ```bash
 chmod +x LibreFastbootFirmwareFlasher-*-x86_64.AppImage
 ./LibreFastbootFirmwareFlasher-*-x86_64.AppImage
 ```
 
-Ships the GUI and the CLI; external tools come from the host, via `lfff deps`.
+Ships the GUI and the CLI; the external tools come from the host, via `lfff deps`.
 
-**Nix / NixOS**
+### Nix / NixOS
+
 ```bash
-# Install GUI (default)
-nix profile install github:mrFrok/LibreFastbootFirmwareFlasher
+nix profile install github:mrFrok/LibreFastbootFirmwareFlasher          # GUI
+nix profile install github:mrFrok/LibreFastbootFirmwareFlasher#lfff-cli # CLI only
 
-# Or install CLI only
-nix profile install github:mrFrok/LibreFastbootFirmwareFlasher#lfff-cli
+nix run github:mrFrok/LibreFastbootFirmwareFlasher        # run the GUI without installing
+nix run github:mrFrok/LibreFastbootFirmwareFlasher#cli    # run the CLI without installing
 
-# Run directly without installing
-nix run github:mrFrok/LibreFastbootFirmwareFlasher        # GUI
-nix run github:mrFrok/LibreFastbootFirmwareFlasher#cli    # CLI
-
-# Development shell
-nix develop github:mrFrok/LibreFastbootFirmwareFlasher
+nix develop github:mrFrok/LibreFastbootFirmwareFlasher    # development shell
 ```
 
-Then install external tools:
+### Uninstall
+
 ```bash
-lfff deps
+curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --uninstall
 ```
 
 ---
 
-## Quick Start
+## Quick start
+
+**GUI:** run `lfff-gui`, connect the phone, pick or search for a firmware,
+then press Install. The app walks through the warnings and restarts the
+phone into the right mode itself.
+
+**CLI:**
 
 ```bash
-lfff-gui                                   # Launch GUI
-
-lfff deps                                  # Install fastboot, adb, aria2c, payload_dumper
-lfff find-ota CPH2747                      # Find official firmware, every region
-lfff find-ota CPH2747 --latest | lfff download -   # Download the newest
-lfff download https://.../firmware.zip     # Download OTA
-lfff extract firmware.zip                  # Extract OTA
-lfff flash ./firmwares/RMX3709             # Flash full firmware
+lfff deps                                  # install fastboot, adb, aria2c, payload_dumper
+lfff find-ota CPH2747                      # official firmware, every region
+lfff find-ota CPH2747 --latest | lfff download -   # download the newest
+lfff download https://.../firmware.zip     # download an OTA by link
+lfff extract firmware.zip                  # unpack it
+lfff flash ./firmwares/RMX3709             # flash it
+lfff flash --source /out/target/product/   # flash a source build
 
 # Each step prints only its result on stdout, so they chain:
 lfff extract "$(lfff find-ota CPH2747 --latest | lfff download -)"
-lfff flash --source /out/target/product/   # Flash from source build
 ```
 
-LFFF extracts OTAs with [payload-dumper-rust](https://github.com/rhythmcache/payload-dumper-rust).
-Some distributions (NixOS among them) ship an unrelated Python script under the
-same `payload_dumper` name; LFFF detects that and ignores it. If your copy lives
-somewhere unusual, point LFFF at it directly:
+OTAs are unpacked with [payload-dumper-rust](https://github.com/rhythmcache/payload-dumper-rust).
+Some distributions (NixOS among them) ship an unrelated Python script under
+the same `payload_dumper` name; LibreFastbootFirmwareFlasher detects it and
+ignores it. If your copy lives somewhere unusual, point to it:
 
 ```bash
 export LFFF_PAYLOAD_DUMPER=/path/to/payload_dumper
@@ -150,40 +183,30 @@ export LFFF_PAYLOAD_DUMPER=/path/to/payload_dumper
 
 ---
 
-## CLI Commands
+## How flashing works
 
-| Command | What it does | Example |
-|---|---|---|
-| `flash <dir>` | Full firmware flash, A/B slots | `lfff flash ./fw --dry-run` |
-| `flash-partition` | Flash a single partition | `lfff flash-partition boot --firmware-dir ./fw` |
-| `extract <zip>` | Extract OTA via payload_dumper | `lfff extract fw.zip -o ./out` |
-| `find-ota <model>` | Official builds from the OPPO / OnePlus / realme servers | `lfff find-ota CPH2747 -r EU --changes` |
-| `download <url>` | Multi-connection OTA download; `-` reads the link from stdin; `--md5` checks the archive | `lfff download <url> -c 8` |
-| `devices` | List fastboot/adb devices | `lfff devices --check` |
-| `reboot [to]` | Reboot to system, recovery, bootloader or fastbootd | `lfff reboot bootloader` |
-| `set-slot <a\|b>` | Make a slot the active one (fastboot/fastbootd) | `lfff set-slot b` |
-| `arb` | Compare ARB: firmware vs device (`--device` reads the phone over adb, needs root) | `lfff arb --device --firmware-dir ./fw` |
-| `deps [tool..]` | Install missing dependencies | `lfff deps` / `lfff deps --check` |
-| `completion <shell>` | Emit a shell completion script | `lfff completion zsh` |
+You choose the method — Snapdragon or MediaTek — it is never guessed.
+Before anything is written, the Anti-Rollback warning comes first (Snapdragon),
+then the final confirmation.
 
-Full flag reference: `lfff <command> --help`.
+### Snapdragon: the route follows the firmware's Android
 
-stdout carries only a command's result — a link, a path, `MODE<TAB>SERIAL`
-lines from `devices` — and everything else (progress, reports, prompts,
-errors) goes to stderr. Exit codes: `0` success, `1` failure, `2` usage
-error. `flash` asks for confirmation and needs a terminal; without one only
-`--dry-run --method …` runs.
+The version is read from the OTA's metadata when it is unpacked.
 
-**Shell completions** — the script goes to stdout, so install it wherever your
-shell looks for one. Supported: bash, zsh, fish, powershell, elvish, nushell.
+| Firmware | Route |
+|---|---|
+| Android 16 and older | Dynamic partitions to the active slot in fastbootd, then the bootloader for the modem, both slots |
+| Android 17 | Everything in fastbootd, with a switch to the other slot |
+| Version unknown | You choose the route; there is no default |
+| realme GT Neo 5 family (RMX3700, RMX3701, RMX3706, RMX3708, RMX3709) | Always through the bootloader, any Android; recognised by the firmware or the phone |
 
-```bash
-lfff completion bash > ~/.local/share/bash-completion/completions/lfff
-lfff completion zsh  > ~/.zfunc/_lfff            # with ~/.zfunc on $fpath
-lfff completion fish > ~/.config/fish/completions/lfff.fish
-```
+Flashing ColorOS 17 through the bootloader can brick the phone, so outside the
+GT Neo 5 family that route is refused for Android 17 even when forced. Force
+a route with `--method snapdragon-bootloader` or `--method snapdragon-fastbootd`
+(GUI: Settings → Firmware → Modem via bootloader).
 
-**Flash flow** (Snapdragon) follows the firmware's Android version, read from the OTA's metadata (the same place the folder name comes from). Up to Android 16 the modem goes through the bootloader (below). Android 17 goes entirely through fastbootd — flashing ColorOS 17 the old way can brick the phone. When the firmware does not say its version, LibreFastbootFirmwareFlasher asks which route to take. fastbootd can only write the modem of the slot it is not running from, so the slot is switched first:
+The Android 17 route, step by step — fastbootd can only write the modem of the
+slot it is not running from, so the slot is switched first:
 
 ```
 [fastbootd]
@@ -195,28 +218,81 @@ lfff completion fish > ~/.config/fish/completions/lfff.fish
 [Offer: reboot to system  /  wipe data + reboot]
 ```
 
-If the new slot has no partitions (usual on Virtual A/B), super is rebuilt from the firmware's layout with `fastboot wipe-super` — groups and read-only partitions as from the factory — so system updates keep working; `my_company` and `my_preload`, which some firmware leaves out, get empty factory images. Turn it off with `--no-rebuild-super` (GUI: Settings → Super partition).
+The old slot keeps its old modem. A flash with a modem but no system images is
+refused rather than sent to the bootloader. Partitions you choose not to flash
+(a rooted `init_boot`, say) are copied from the phone's active slot over adb
+as root before the switch and written to the new slot; if they cannot be
+copied, nothing is flashed.
 
-The old slot keeps its old modem. A flash with a modem but no system images is refused rather than sent to the bootloader. Partitions you choose not to flash (e.g. a rooted `init_boot`) are copied from the phone's active slot over adb as root before the switch and written to the new slot; if they cannot be copied, nothing is flashed.
+### The super partition
 
-**Through the bootloader** (the default up to Android 16, and on any Android for the realme GT Neo 5 family — RMX3706, RMX3708, RMX3709, and the Neo 5 SE RMX3700, RMX3701 — recognised by the firmware or the phone; for any firmware with `--method snapdragon-bootloader`, in the GUI Settings → Firmware → Modem via bootloader; refused for Android 17 on other phones): the dynamic partitions go to the active slot, then the phone restarts into the bootloader and the modem goes to both slots. `--method snapdragon-fastbootd` uses fastbootd for any firmware.
+When the slot being flashed has no partitions (usual on Virtual A/B), super is
+rebuilt from the firmware's layout with `fastboot wipe-super` — groups and
+read-only partitions as from the factory — so system updates keep working.
+`my_company` and `my_preload`, which some firmware leaves out, get empty
+factory images. Turn it off with `--no-rebuild-super` (GUI: Settings → Super
+partition).
 
-On error: **retry** / **reboot** / **skip partition** / **abort**
+### MediaTek
 
-**MediaTek vs Qualcomm:** MediaTek devices flash entirely through fastbootd without preloader partition, and have no Anti-Rollback protection (ARB is Qualcomm-specific).
+MediaTek phones are flashed entirely in fastbootd. If the firmware has a
+preloader, you are warned first and can leave it out. They have no
+Anti-Rollback: it is Qualcomm-specific.
+
+### When a partition fails
+
+Retry it, restart the phone, skip the partition, or abort.
 
 ---
 
-## Tested Devices
+## CLI commands
+
+| Command | What it does | Example |
+|---|---|---|
+| `flash <dir>` | Full firmware flash, A/B slots | `lfff flash ./fw --dry-run` |
+| `flash-partition` | Flash a single partition | `lfff flash-partition boot --firmware-dir ./fw` |
+| `extract <zip>` | Unpack an OTA with payload_dumper | `lfff extract fw.zip -o ./out` |
+| `find-ota <model>` | Official builds from the OPPO / OnePlus / realme servers | `lfff find-ota CPH2747 -r EU --changes` |
+| `download <url>` | Multi-connection download; `-` reads the link from stdin; `--md5` checks the archive | `lfff download <url> -c 8` |
+| `devices` | List fastboot/adb devices | `lfff devices --check` |
+| `reboot [to]` | Restart to system, recovery, bootloader or fastbootd | `lfff reboot bootloader` |
+| `set-slot <a\|b>` | Make a slot the active one (fastboot/fastbootd) | `lfff set-slot b` |
+| `arb` | Compare ARB, firmware against phone (`--device` reads the phone over adb, needs root) | `lfff arb --device --firmware-dir ./fw` |
+| `deps [tool..]` | Install missing tools | `lfff deps` / `lfff deps --check` |
+| `completion <shell>` | Print a shell completion script | `lfff completion zsh` |
+
+Every flag: `lfff <command> --help`.
+
+stdout carries only a command's result — a link, a path, `MODE<TAB>SERIAL`
+lines from `devices` — and everything else (progress, reports, prompts,
+errors) goes to stderr. Exit codes: `0` success, `1` failure, `2` usage
+error. `flash` asks for confirmation and needs a terminal; without one only
+`--dry-run --method …` runs.
+
+### Shell completions
+
+The script goes to stdout; put it wherever your shell looks for one.
+Supported: bash, zsh, fish, powershell, elvish, nushell.
+
+```bash
+lfff completion bash > ~/.local/share/bash-completion/completions/lfff
+lfff completion zsh  > ~/.zfunc/_lfff            # with ~/.zfunc on $fpath
+lfff completion fish > ~/.config/fish/completions/lfff.fish
+```
+
+---
+
+## Tested devices
 
 | Device | Model | Status |
 |--------|-------|--------|
-| Realme GT Neo 5 | RMX3709 | ✅ Working |
-| Realme GT Neo 5 SE | RMX3700 | ✅ Working |
-| OnePlus 15 | CPH274X | ✅ Working |
-| OnePlus 13R / Ace 5 | CPH2645 / PJZ110 | ✅ Working |
+| realme GT Neo 5 | RMX3709 | Works |
+| realme GT Neo 5 SE | RMX3700 | Works |
+| OnePlus 15 | CPH274X | Works |
+| OnePlus 13R / Ace 5 | CPH2645 / PJZ110 | Works |
 
-Other OnePlus / OPPO / Realme devices with Qualcomm SoC and A/B layout should work. May work on MediaTek devices.
+Other OnePlus / OPPO / realme phones with a Snapdragon SoC and an A/B layout
+should work. MediaTek phones may.
 
 ---
 
@@ -292,6 +368,8 @@ LibreFastbootFirmwareFlasher/
         └── icons/
 ```
 
+### Material 3 components
+
 The GUI is built with the official [Material 3 component set for
 Slint](https://material.slint.dev). It ships no crate, so a copy lives in
 `gui/material-1.18.1/`, taken from `ui-libraries/material/src` of
@@ -306,32 +384,24 @@ upstream's 600, which made buttons and labels too heavy.
 
 ---
 
-## Special Thanks
+## Special thanks
 
-- [NeFeroN](https://t.me/NeFeroN) — original Windows program author, help with flash implementation, Windows version
+- [NeFeroN](https://t.me/NeFeroN) — author of the original Windows program, help with the flash implementation, Windows version
 - [MisterZtr](https://github.com/MisterZtr) — partial MediaTek support
 - [Houvven](https://github.com/Houvven) — OplusUpdater, whose update-server protocol (as kept current in the [RealmeOS/OplusUpdater-android](https://github.com/RealmeOS/OplusUpdater-android) fork, GPL-3.0) the firmware search is ported from
 - NeFeroN's LinkResolverDownloader — how the search combines regions and reads answers, and how expiring OPPO links are handled
 
 ---
 
-## Uninstall
+## Star history
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --uninstall
-```
-
----
-
-## Star History
-
-If LFFF saved you time or a bricked device — a ⭐ goes a long way!
+If LibreFastbootFirmwareFlasher saved you time or a phone, a star helps others find it.
 
 <a href="https://www.star-history.com/#mrFrok/LibreFastbootFirmwareFlasher&Date">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=mrFrok/LibreFastbootFirmwareFlasher&type=Date&theme=dark" />
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=mrFrok/LibreFastbootFirmwareFlasher&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=mrFrok/LibreFastbootFirmwareFlasher&type=Date" />
+   <img alt="Star history of LibreFastbootFirmwareFlasher" src="https://api.star-history.com/svg?repos=mrFrok/LibreFastbootFirmwareFlasher&type=Date" />
  </picture>
 </a>
 
