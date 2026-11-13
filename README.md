@@ -214,6 +214,7 @@ On error: **retry** / **reboot** / **skip partition** / **abort**
 | Realme GT Neo 5 | RMX3709 | ✅ Working |
 | Realme GT Neo 5 SE | RMX3700 | ✅ Working |
 | OnePlus 15 | CPH274X | ✅ Working |
+| OnePlus 13R / Ace 5 | CPH2645 / PJZ110 | ✅ Working |
 
 Other OnePlus / OPPO / Realme devices with Qualcomm SoC and A/B layout should work. May work on MediaTek devices.
 
