@@ -38,6 +38,7 @@ What it does:
 - Multi-connection download and OTA unpacking
 - Anti-Rollback check: the phone against the firmware
 - Super rebuilt from the firmware's layout, so system updates keep installing
+- Custom ROMs, with super rebuilt from the ROM (at your own risk)
 - Flashing a source build's output folder
 - Retry, skip or abort a failed partition
 - Installs its own tools (`fastboot`, `adb`, `aria2c`, `payload_dumper`)
@@ -232,6 +233,17 @@ read-only partitions as from the factory — so system updates keep working.
 `my_company` and `my_preload`, which some firmware leaves out, get empty
 factory images. Turn it off with `--no-rebuild-super` (GUI: Settings → Super
 partition).
+
+### Custom ROMs (at your own risk)
+
+Custom ROMs carry only their own partitions, without the factory `my_*` ones.
+Tick **Custom ROM** on the install's last step (`lfff flash --custom-rom`):
+super is wiped and rebuilt from the ROM's layout, whatever the phone had.
+
+- Both slots lose everything in super; partitions the ROM lacks are deleted.
+- The ROM must be unpacked from its .zip with `payload.bin`: that is where the layout comes from.
+- Nothing is flashed if the layout cannot be built, or does not match the ROM's images.
+- If the install stops halfway, the phone does not start until it is flashed again; fastboot stays available.
 
 ### MediaTek
 

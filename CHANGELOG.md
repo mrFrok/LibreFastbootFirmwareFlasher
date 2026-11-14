@@ -3,6 +3,18 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.7.0
+
+### Flashing
+
+- Custom ROMs, at your own risk: a "Custom ROM" checkbox on the install's
+  last step (`lfff flash --custom-rom` in the terminal) wipes super and
+  rebuilds it from the ROM's own partition layout, whatever the phone had.
+  Both slots lose everything in super, and partitions the ROM does not
+  carry are deleted. It needs the ROM unpacked from its .zip with
+  payload.bin, and refuses before flashing anything if the layout cannot
+  be built or does not match the ROM's images. Snapdragon and MediaTek.
+
 ## 3.6.0
 
 ### Flashing

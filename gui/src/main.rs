@@ -286,6 +286,9 @@ enum Cmd {
         skip_preloader: bool,
         /// Comma-separated partitions to leave as they are.
         skip_partitions: String,
+        /// Custom ROM: wipe super and rebuild it from the ROM's layout
+        /// (`FlashOptions::custom_rom`).
+        custom_rom: bool,
     },
 }
 

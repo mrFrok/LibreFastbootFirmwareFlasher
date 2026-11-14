@@ -112,6 +112,9 @@ export component ConfirmSheet inherits Rectangle {
     in-out property <int> route-choice;
     // The firmware's super layout, one line per group; empty without one.
     in property <string> super-plan;
+    // Custom ROM, at the user's own risk: super is always wiped and rebuilt
+    // from the ROM's layout. Needs super-plan; Install waits without it.
+    in-out property <bool> custom-rom;
     // xbl/abl for kinds 0 and 1, preloader for kind 2
     in-out property <bool> skip-checked;
     // Partitions to leave as they are on the phone; joined into the
@@ -496,7 +499,7 @@ export component ConfirmSheet inherits Rectangle {
 
                 // Informational: the install's own confirmation covers it;
                 // the session rebuilds only when the new slot is empty.
-                if root.kind == 3 && root.rebuild-super && root.super-plan != "": Rectangle {
+                if root.kind == 3 && root.rebuild-super && !root.custom-rom && root.super-plan != "": Rectangle {
                     border-radius: 12px;
                     background: StatusColors.warning-container.with-alpha(0.6);
                     VerticalLayout {
@@ -518,6 +521,50 @@ export component ConfirmSheet inherits Rectangle {
                             font-size: 10px;
                             overflow: elide;
                             color: StatusColors.on-warning-container;
+                        }
+                    }
+                }
+
+                if root.kind == 3: Rectangle {
+                    border-radius: 12px;
+                    // Outlined, not filled: the red warning right below is the
+                    // filled one, two red cards in a row compete.
+                    border-width: 1px;
+                    border-color: root.custom-rom ? MaterialPalette.error : MaterialPalette.outline-variant;
+                    HorizontalLayout {
+                        padding: 8px;
+                        padding-right: 14px;
+                        spacing: 4px;
+                        CheckBox {
+                            check-state: root.custom-rom ? CheckState.checked : CheckState.unchecked;
+                            checked-state-changed(s) => {
+                                root.custom-rom = s == CheckState.checked;
+                            }
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                width: 446px;
+                                text: Tr.t("Custom ROM: wipe super and rebuild it from the ROM", "Кастомная прошивка: стереть super и пересоздать по прошивке", "第三方 ROM：清除 super 并按 ROM 重建", "第三方 ROM：清除 super 並按 ROM 重建");
+                                font-size: 14px;
+                                font-weight: 500;
+                                color: MaterialPalette.on-surface;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                width: 446px;
+                                text: !root.custom-rom
+                                    ? Tr.t("For custom ROMs whose partitions differ from the phone's. Everything in super is deleted, on both slots.", "Для кастомных прошивок, у которых разделы не совпадают с телефонными. Всё в super удаляется, в обоих слотах.", "适用于分区与手机不一致的第三方 ROM。super 中的所有内容都会被删除，两个槽位都是。", "適用於分割區與手機不一致的第三方 ROM。super 中的所有內容都會被刪除，兩個槽位都是。")
+                                    : root.super-plan == ""
+                                    ? Tr.t("This firmware has no saved partition layout: unpack the ROM's .zip (with payload.bin) in LibreFastbootFirmwareFlasher.", "У этой прошивки нет сохранённой разметки: распакуйте .zip прошивки (с payload.bin) в LibreFastbootFirmwareFlasher.", "此固件没有保存的分区布局：请在 LibreFastbootFirmwareFlasher 中解压 ROM 的 .zip（含 payload.bin）。", "此韌體沒有儲存的分割區配置：請在 LibreFastbootFirmwareFlasher 中解壓 ROM 的 .zip（含 payload.bin）。")
+                                    : Tr.t("Super is wiped: both slots lose their system, partitions the ROM lacks are deleted. If the install stops halfway, the phone won't start until it is flashed again; fastboot stays available. At your own risk.", "Super будет стёрт: оба слота теряют систему, разделы, которых нет в прошивке, удаляются. Если установка оборвётся на середине, смартфон не запустится до повторной прошивки; fastboot останется доступен. Только на свой страх и риск.", "super 将被清除：两个槽位的系统都会丢失，ROM 中没有的分区会被删除。若安装中途中断，手机在重新刷写前无法启动；fastboot 仍可使用。风险自负。", "super 將被清除：兩個槽位的系統都會遺失，ROM 中沒有的分割區會被刪除。若安裝中途中斷，手機在重新刷寫前無法啟動；fastboot 仍可使用。風險自負。");
+                                font-size: 12px;
+                                color: root.custom-rom ? MaterialPalette.error : MaterialPalette.on-surface-variant;
+                                wrap: word-wrap;
+                            }
                         }
                     }
                 }
@@ -567,7 +614,7 @@ export component ConfirmSheet inherits Rectangle {
                     }
 
                     if root.kind != 4: FilledButton {
-                        enabled: root.kind != 3 || !root.route-needed || root.route-choice > 0;
+                        enabled: root.kind != 3 || ((!root.route-needed || root.route-choice > 0) && (!root.custom-rom || root.super-plan != ""));
                         text: root.kind == 3 ? Tr.t("Install", "Установить", "安装", "安裝") : Tr.t("I understand, next", "Понятно, дальше", "我明白，下一步", "我明白，下一步");
                         clicked => {
                             if root.kind == 3 {

@@ -108,6 +108,7 @@ export component MainWindow inherits MaterialWindow {
     in-out property <bool> sound: true;
     callback set-sound(bool);
     in-out property <bool> rebuild-super: true;
+    in-out property <bool> custom-rom: false;
     // The layout a rebuild would write, from the chosen firmware; "" if none.
     in-out property <string> super-plan;
     callback set-rebuild-super(bool);
@@ -203,6 +204,8 @@ export component MainWindow inherits MaterialWindow {
         root.skip-recovery = false;
         root.skip-vendor-boot = false;
         root.skip-other = "";
+        // Wiping super is chosen anew for every install.
+        root.custom-rom = false;
         root.sheet = root.first-sheet();
     }
     in-out property <string> lang: "en";
@@ -1073,6 +1076,7 @@ export component MainWindow inherits MaterialWindow {
         route-needed: root.chip == 1 && !root.modem-bootloader && !root.bootloader-model && root.fw-android < 0;
         route-choice <=> root.route-choice;
         super-plan: root.super-plan;
+        custom-rom <=> root.custom-rom;
         firmware: root.fw-name + " · " + root.fw-parts + Tr.t(" parts", " разделов", " 个分区", " 個分割區");
         // One checkbox per warning kind: xbl/abl for ARB, preloader for MTK.
         skip-checked: root.sheet == 3 ? root.skip-preloader : root.skip-xbl-abl;

@@ -1394,6 +1394,13 @@ pub struct FlashOptions {
     /// why and keeps the layout as it is. The frontends pass true unless
     /// the user turned it off.
     pub rebuild_super: bool,
+    /// Custom ROM, at the user's own risk (Snapdragon and MediaTek): always wipe
+    /// super and install the firmware's own layout from its payload
+    /// ([`custom_rom_rebuild_plan`]), whatever the slot holds. Every
+    /// partition the ROM does not carry is deleted, both slots' contents
+    /// with them; no factory stand-ins are written. Nothing is flashed when
+    /// the layout cannot be built.
+    pub custom_rom: bool,
 }
 
 /// What a super rebuild installs: the empty layout, and the partitions the
@@ -1538,6 +1545,71 @@ pub fn super_rebuild_plan(
         stubs,
         dropped,
     }))
+}
+
+/// The super rebuild of a custom ROM ([`FlashOptions::custom_rom`]): the
+/// ROM's own layout from its payload, whatever the target slot holds.
+/// Unlike [`super_rebuild_plan`] nothing on the phone is kept — every
+/// partition the ROM lacks lands in `dropped` — and no stand-ins are added.
+/// Refused unless this session flashes exactly the dynamic partitions the
+/// layout lists into `target_slot`: one left out would stay empty, one the
+/// layout lacks would be created outside its group.
+pub fn custom_rom_rebuild_plan(
+    getvar_all: &str,
+    super_size: u64,
+    layout_json: Option<&str>,
+    super_names: &[String],
+    target_slot: &str,
+) -> Result<SuperRebuild, String> {
+    use crate::super_layout::SuperLayout;
+
+    let json = layout_json.ok_or(
+        "this firmware has no saved partition layout: unpack the ROM's .zip (with payload.bin) with this version",
+    )?;
+    if super_size == 0 {
+        return Err("could not read the size of super".into());
+    }
+    if super_names.is_empty() {
+        return Err("this flash has no dynamic partitions".into());
+    }
+    let layout = SuperLayout::from_payload_metadata(json, super_size)?;
+    let suffix = format!("_{target_slot}");
+    let listed: Vec<&str> = layout
+        .partitions
+        .iter()
+        .filter_map(|p| p.name.strip_suffix(&suffix))
+        .collect();
+    let mut not_flashed: Vec<&str> = listed
+        .iter()
+        .copied()
+        .filter(|n| !super_names.iter().any(|s| s == n))
+        .collect();
+    not_flashed.sort();
+    if !not_flashed.is_empty() {
+        return Err(format!(
+            "the ROM's layout lists {} but this flash does not write them",
+            not_flashed.join(", ")
+        ));
+    }
+    let mut unlisted: Vec<&str> = super_names
+        .iter()
+        .map(String::as_str)
+        .filter(|n| !listed.contains(n))
+        .collect();
+    unlisted.sort();
+    if !unlisted.is_empty() {
+        return Err(format!(
+            "the ROM has images for {} which its layout does not list",
+            unlisted.join(", ")
+        ));
+    }
+    let dropped = layout.missing_from(&logical_partitions(getvar_all));
+    let image = layout.to_checked_image()?;
+    Ok(SuperRebuild {
+        image,
+        stubs: Vec::new(),
+        dropped,
+    })
 }
 
 /// Outcome of flashing a batch of partitions.
@@ -1910,15 +1982,19 @@ pub fn run_flash_session_with_log(
 
         // Rebuild super? Decided before the switch, so that a layout which
         // cannot be built stops nothing: the flash just keeps the phone's.
-        let (rebuild, fill): (Option<SuperRebuild>, Vec<String>) = if modem_fastbootd
-            && options.rebuild_super
+        let (rebuild, fill): (Option<SuperRebuild>, Vec<String>) = if options.custom_rom
+            || (modem_fastbootd && options.rebuild_super)
         {
             let super_names: Vec<String> = fastbootd_images
                 .keys()
                 .filter(|k| is_super_partition(k))
                 .map(|k| k.to_string())
                 .collect();
-            let target = other_slot(&active_slot);
+            let target = if modem_fastbootd {
+                other_slot(&active_slot)
+            } else {
+                active_slot.as_str()
+            };
             let (_, out, err) = fastboot_cmd_serial(serial, &["getvar", "all"], 30);
             let getvar_all = format!("{out}\n{err}");
             // Asked on its own: OnePlus 15 leaves it out of `getvar all`, and
@@ -1946,55 +2022,84 @@ pub fn run_flash_session_with_log(
             }
             let json =
                 fs::read_to_string(firmware_dir.join(crate::extractor::PAYLOAD_METADATA_FILE)).ok();
-            match super_rebuild_plan(
-                &getvar_all,
-                super_size,
-                json.as_deref(),
-                &super_names,
-                target,
-            ) {
-                Ok(Some(r)) => {
-                    on_log(format!(
-                        "Slot {} has no partitions: super will be rebuilt from the firmware's layout, every partition read-only in its group, as from the factory",
-                        target.to_uppercase()
-                    ));
-                    if !r.stubs.is_empty() {
+            if options.custom_rom {
+                match custom_rom_rebuild_plan(
+                    &getvar_all,
+                    super_size,
+                    json.as_deref(),
+                    &super_names,
+                    target,
+                ) {
+                    Ok(r) => {
                         on_log(format!(
-                            "Not in the firmware, written as empty factory images: {}",
-                            r.stubs.join(", ")
+                            "Custom ROM: super will be wiped and rebuilt from the ROM's layout, its partitions going to slot {}. Both slots lose everything in super",
+                            target.to_uppercase()
                         ));
+                        if !r.dropped.is_empty() {
+                            on_log(format!("Not in the ROM, deleted: {}", r.dropped.join(", ")));
+                        }
+                        (Some(r), Vec::new())
                     }
-                    if !r.dropped.is_empty() {
+                    Err(e) => {
                         on_log(format!(
-                            "Factory partitions nothing uses any more, not in the firmware, deleted: {}",
-                            r.dropped.join(", ")
+                            "Refusing to flash: super cannot be rebuilt for this custom ROM — {e}. Nothing was flashed"
                         ));
+                        session.aborted = true;
+                        session.end_reason = Some("CustomRomLayout".into());
+                        return session;
                     }
-                    (Some(r), Vec::new())
                 }
-                Ok(None) => {
-                    on_log(format!(
-                        "Slot {} has its partitions: super is kept, resized in place",
-                        target.to_uppercase()
-                    ));
-                    let size_of = |name: &str| {
-                        let key = format!("partition-size:{name}");
-                        let (_, so, se) = fastboot_cmd_serial(serial, &["getvar", &key], 10);
-                        parse_partition_size(&format!("{so}\n{se}"), name)
-                    };
-                    let fill = empty_stub_slots(&getvar_all, &super_names, target, &size_of);
-                    if !fill.is_empty() {
+            } else {
+                match super_rebuild_plan(
+                    &getvar_all,
+                    super_size,
+                    json.as_deref(),
+                    &super_names,
+                    target,
+                ) {
+                    Ok(Some(r)) => {
                         on_log(format!(
-                            "Empty in slot {} and not in the firmware, written as empty factory images: {}",
-                            target.to_uppercase(),
-                            fill.join(", ")
+                            "Slot {} has no partitions: super will be rebuilt from the firmware's layout, every partition read-only in its group, as from the factory",
+                            target.to_uppercase()
                         ));
+                        if !r.stubs.is_empty() {
+                            on_log(format!(
+                                "Not in the firmware, written as empty factory images: {}",
+                                r.stubs.join(", ")
+                            ));
+                        }
+                        if !r.dropped.is_empty() {
+                            on_log(format!(
+                                "Factory partitions nothing uses any more, not in the firmware, deleted: {}",
+                                r.dropped.join(", ")
+                            ));
+                        }
+                        (Some(r), Vec::new())
                     }
-                    (None, fill)
-                }
-                Err(e) => {
-                    on_log(format!("Super is not rebuilt: {e}"));
-                    (None, Vec::new())
+                    Ok(None) => {
+                        on_log(format!(
+                            "Slot {} has its partitions: super is kept, resized in place",
+                            target.to_uppercase()
+                        ));
+                        let size_of = |name: &str| {
+                            let key = format!("partition-size:{name}");
+                            let (_, so, se) = fastboot_cmd_serial(serial, &["getvar", &key], 10);
+                            parse_partition_size(&format!("{so}\n{se}"), name)
+                        };
+                        let fill = empty_stub_slots(&getvar_all, &super_names, target, &size_of);
+                        if !fill.is_empty() {
+                            on_log(format!(
+                                "Empty in slot {} and not in the firmware, written as empty factory images: {}",
+                                target.to_uppercase(),
+                                fill.join(", ")
+                            ));
+                        }
+                        (None, fill)
+                    }
+                    Err(e) => {
+                        on_log(format!("Super is not rebuilt: {e}"));
+                        (None, Vec::new())
+                    }
                 }
             }
         } else {
@@ -2410,6 +2515,44 @@ mod tests {
 
     fn firmware() -> Vec<String> {
         FIRMWARE_DYNAMIC.iter().map(|n| n.to_string()).collect()
+    }
+
+    // A custom ROM over a stock phone whose active slot is full: rebuilt
+    // anyway, into the active slot, everything the ROM lacks deleted, no
+    // stand-ins.
+    #[test]
+    fn a_custom_rom_always_rebuilds_and_drops_the_rest() {
+        let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
+        device.extend(slot(&["my_company", "my_preload", "odm_dlkm"], "_a"));
+        let r =
+            custom_rom_rebuild_plan(&getvar_all(&device), SUPER, Some(PAYLOAD), &firmware(), "a")
+                .unwrap();
+        assert!(r.stubs.is_empty());
+        assert_eq!(r.dropped, ["my_company", "my_preload", "odm_dlkm"]);
+        let parsed = crate::super_layout::parse_image(&r.image).unwrap();
+        assert!(parsed.partitions.iter().any(|p| p.name == "system_a"));
+        assert!(
+            !parsed
+                .partitions
+                .iter()
+                .any(|p| p.name.starts_with("my_company"))
+        );
+    }
+
+    #[test]
+    fn a_custom_rom_must_flash_exactly_its_layout() {
+        let device = slot(&FIRMWARE_DYNAMIC, "_a");
+        let getvar = getvar_all(&device);
+        let mut fewer = firmware();
+        fewer.retain(|n| n != "my_stock");
+        let err = custom_rom_rebuild_plan(&getvar, SUPER, Some(PAYLOAD), &fewer, "a").unwrap_err();
+        assert!(err.contains("my_stock"), "{err}");
+        let mut more = firmware();
+        more.push("odm_dlkm".into());
+        let err = custom_rom_rebuild_plan(&getvar, SUPER, Some(PAYLOAD), &more, "a").unwrap_err();
+        assert!(err.contains("odm_dlkm"), "{err}");
+        assert!(custom_rom_rebuild_plan(&getvar, SUPER, None, &firmware(), "a").is_err());
+        assert!(custom_rom_rebuild_plan(&getvar, 0, Some(PAYLOAD), &firmware(), "a").is_err());
     }
 
     // The phones seen so far: only `_a` partitions, plus the two factory

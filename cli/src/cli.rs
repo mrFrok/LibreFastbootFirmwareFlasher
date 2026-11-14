@@ -214,6 +214,12 @@ pub enum Commands {
         /// next system updates need the OTA repair)
         #[arg(long)]
         no_rebuild_super: bool,
+
+        /// Custom ROM, at your own risk: always wipe super and rebuild it
+        /// from the ROM's own layout (needs the ROM unpacked from its .zip
+        /// with payload.bin). Every partition the ROM lacks is deleted
+        #[arg(long, conflicts_with = "no_rebuild_super")]
+        custom_rom: bool,
     },
 
     /// Flash a single .img file to a specific partition

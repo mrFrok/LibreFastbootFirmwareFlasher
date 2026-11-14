@@ -1634,6 +1634,7 @@ fn register_install_callbacks(
                 skip_xbl_abl: ui.get_skip_xbl_abl(),
                 skip_preloader: ui.get_skip_preloader(),
                 skip_partitions: ui.get_install_skips().to_string(),
+                custom_rom: ui.get_custom_rom(),
             })
             .ok();
         }

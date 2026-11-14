@@ -171,6 +171,17 @@ fn confirm_fastbootd_status(serial: Option<&str>) -> bool {
     }
 }
 
+/// What the flash may do to super's layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SuperMode {
+    /// Keep the phone's layout (`--no-rebuild-super`).
+    Keep,
+    /// Rebuild it when the slot being flashed is empty (the default).
+    RebuildWhenEmpty,
+    /// Custom ROM: always wipe it and rebuild from the ROM (`--custom-rom`).
+    CustomRom,
+}
+
 pub fn run(
     source: &FirmwareSource,
     serial: Option<&str>,
@@ -178,8 +189,9 @@ pub fn run(
     dry_run: bool,
     skip_xbl_abl: bool,
     skip_preloader: bool,
-    rebuild_super: bool,
+    super_mode: SuperMode,
 ) -> i32 {
+    let custom_rom = super_mode == SuperMode::CustomRom;
     let dir = source.path();
     if !dir.is_dir() {
         eprintln!(
@@ -402,7 +414,8 @@ pub fn run(
         // the session refuses a skipped partition instead.
         keep_images: Default::default(),
         skip_partitions: String::new(),
-        rebuild_super,
+        rebuild_super: super_mode != SuperMode::Keep,
+        custom_rom,
     };
 
     if !dry_run {
@@ -460,6 +473,14 @@ pub fn run(
             "  {}",
             "All partitions will be overwritten. This action is irreversible.".red()
         );
+        if custom_rom {
+            eprintln!(
+                "  {}",
+                "Custom ROM, at your own risk: super is wiped and rebuilt from the ROM's layout. Both slots lose everything in super, and partitions the ROM lacks are deleted. If the flash stops halfway the phone won't boot until it is flashed again (fastboot stays available)."
+                    .red()
+                    .bold()
+            );
+        }
         eprintln!("  {}", "The device should be in fastbootd/userspace fastboot; any warning above must be accepted.".dimmed());
         let ans = prompt(
             "\n  Type FLASH to start flashing, anything else to abort",

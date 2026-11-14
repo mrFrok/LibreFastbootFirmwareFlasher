@@ -99,6 +99,7 @@ fn main() {
             skip_xbl_abl,
             skip_preloader,
             no_rebuild_super,
+            custom_rom,
         }) => {
             // clap requires one of the two (`required_unless_present`).
             let source = match (firmware_dir, source) {
@@ -113,7 +114,13 @@ fn main() {
                 dry_run,
                 skip_xbl_abl,
                 skip_preloader,
-                !no_rebuild_super,
+                if custom_rom {
+                    handlers::flash::SuperMode::CustomRom
+                } else if no_rebuild_super {
+                    handlers::flash::SuperMode::Keep
+                } else {
+                    handlers::flash::SuperMode::RebuildWhenEmpty
+                },
             )
         }
 

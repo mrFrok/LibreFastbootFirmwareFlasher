@@ -2326,6 +2326,7 @@ pub fn worker(
                 skip_xbl_abl,
                 skip_preloader,
                 skip_partitions,
+                custom_rom,
             } => {
                 use lfff_lib::flasher::FastbootdStatus;
                 use std::sync::atomic::Ordering;
@@ -2482,6 +2483,7 @@ pub fn worker(
                     keep_images,
                     skip_partitions,
                     rebuild_super: crate::config::load_config().auto_rebuild_super,
+                    custom_rom,
                     ..Default::default()
                 };
                 do_flash(
