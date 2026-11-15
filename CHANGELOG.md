@@ -13,8 +13,9 @@ Each release's section below becomes its GitHub release notes
   firmware's init_boot (or boot) is patched with the fork's own ksud and
   flashed instead of the stock one; the kernel version is read from the
   firmware's boot.img, and a non-GKI kernel is refused before anything is
-  flashed. SukiSU Ultra, which has no desktop ksud, is patched on the phone
-  over adb. The manager app can be installed once the phone has started.
+  flashed. Everything is patched on the computer: SukiSU Ultra, which has
+  no desktop ksud, is patched by KernelSU's with SukiSU's own module and
+  init. The manager app can be installed once the phone has started.
 
 ### Flashing
 

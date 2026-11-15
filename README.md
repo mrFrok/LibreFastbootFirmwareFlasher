@@ -255,7 +255,7 @@ each from its latest release. Tick **Root** on the install's last step
 
 - The firmware's `init_boot` (or `boot`, without one) is patched with the fork's own `ksud boot-patch` and flashed instead of the stock image. The tool flashes the active slot only.
 - The kernel version (KMI) is read from the firmware's `boot.img`; a kernel that is not GKI is refused.
-- KernelSU and KernelSU Next are patched on the computer. SukiSU Ultra ships no desktop `ksud`, so it is patched on the phone: start with it in Android, USB debugging on. In Termux every fork is patched locally.
+- Everything is patched on the computer (or in Termux), never on the phone. SukiSU Ultra ships no desktop `ksud`, so KernelSU's patches it with SukiSU's own module and `ksuinit` from SukiSU's release.
 - The manager app from the same release can be installed over adb once the phone has started.
 - Play Integrity fails while the phone is rooted. Never lock the bootloader with a patched `init_boot`: flash the stock one first.
 

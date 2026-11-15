@@ -138,25 +138,21 @@ pub fn latest_release(fork: RootFork) -> Result<Release, String> {
 // Where ksud runs
 // ---------------------------------------------------------------------------
 
-/// Where `ksud boot-patch` runs, with the release asset it needs.
+/// Where `ksud boot-patch` runs, with the release assets it needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PatchSite {
     /// The fork's build for this computer.
     Host { asset: String },
     /// Its Android build, run right here in Termux.
     Termux { asset: String },
-    /// Its Android build, pushed to the phone and run there over adb.
-    Device { asset: String },
-}
-
-impl PatchSite {
-    pub fn asset(&self) -> &str {
-        match self {
-            PatchSite::Host { asset }
-            | PatchSite::Termux { asset }
-            | PatchSite::Device { asset } => asset,
-        }
-    }
+    /// A fork with no build for this computer (SukiSU Ultra): KernelSU's
+    /// ksud for it (`tool`) patches with the fork's own module and init,
+    /// both from the fork's release.
+    Borrowed {
+        tool: String,
+        module: String,
+        init: String,
+    },
 }
 
 /// The release asset name of `ksud` for a desktop OS and CPU, if the forks
@@ -177,59 +173,64 @@ pub fn android_ksud_asset(arch: &str) -> String {
     format!("ksud-{arch}-linux-android")
 }
 
-/// The CPU of an Android ABI as the release names it (`arm64-v8a` → `aarch64`).
-pub fn arch_of_abi(abi: &str) -> Option<&'static str> {
-    match abi.trim() {
-        "arm64-v8a" => Some("aarch64"),
-        "x86_64" => Some("x86_64"),
-        _ => None,
-    }
-}
-
 pub fn is_termux() -> bool {
     std::env::var_os("TERMUX_VERSION").is_some()
         || std::env::var("PREFIX").is_ok_and(|p| p.contains("com.termux"))
 }
 
-/// Pick where to patch. `device_arch` is the phone's CPU when it is in
-/// Android with adb, `None` otherwise.
+/// The fork's LKM for a KMI, as its release names it.
+pub fn module_asset(kmi: &str) -> String {
+    format!("lkm-aarch64-{kmi}_kernelsu.ko")
+}
+
+pub const INIT_ASSET: &str = "ksuinit-aarch64";
+
+/// Pick where and with what to patch: always on this computer (or in
+/// Termux), never on the phone.
 pub fn choose_site(
     fork: RootFork,
     release: &Release,
     os: &str,
     arch: &str,
     termux: bool,
-    device_arch: Option<&str>,
+    kmi: &str,
 ) -> Result<PatchSite, String> {
     if termux {
         let asset = android_ksud_asset(arch);
         if release.asset(&asset).is_some() {
             return Ok(PatchSite::Termux { asset });
         }
-    } else if let Some(asset) = host_ksud_asset(os, arch)
-        && release.asset(&asset).is_some()
-    {
-        return Ok(PatchSite::Host { asset });
     }
-    match device_arch {
-        Some(a) => {
-            let asset = android_ksud_asset(a);
-            if release.asset(&asset).is_some() {
-                Ok(PatchSite::Device { asset })
-            } else {
-                Err(format!(
-                    "{} {} has no ksud for this phone's CPU ({a})",
-                    fork.name(),
-                    release.tag_name
-                ))
-            }
-        }
-        None => Err(format!(
-            "{} {} has no ksud for this computer ({os}/{arch}), so the image is patched on the phone — start with the phone in Android, USB debugging on",
+    let Some(tool) = host_ksud_asset(os, arch) else {
+        return Err(format!(
+            "{} {} has no ksud for this computer ({os}/{arch})",
             fork.name(),
             release.tag_name
-        )),
+        ));
+    };
+    if release.asset(&tool).is_some() {
+        return Ok(PatchSite::Host { asset: tool });
     }
+    let module = module_asset(kmi);
+    if release.asset(&module).is_none() {
+        return Err(format!(
+            "{} {} has no module for {kmi}",
+            fork.name(),
+            release.tag_name
+        ));
+    }
+    if release.asset(INIT_ASSET).is_none() {
+        return Err(format!(
+            "{} {} has no {INIT_ASSET}",
+            fork.name(),
+            release.tag_name
+        ));
+    }
+    Ok(PatchSite::Borrowed {
+        tool,
+        module,
+        init: INIT_ASSET.into(),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -470,19 +471,6 @@ fn adb_args<'a>(serial: Option<&'a str>, args: &[&'a str]) -> Vec<&'a str> {
     v
 }
 
-/// The phone's CPU as the releases name it, when it is in Android with adb.
-pub fn device_arch(serial: Option<&str>) -> Option<&'static str> {
-    let r = run_cmd(
-        &adb_args(serial, &["shell", "getprop", "ro.product.cpu.abi"]),
-        15,
-    );
-    if r.success() {
-        arch_of_abi(&r.stdout)
-    } else {
-        None
-    }
-}
-
 /// The KMI of the kernel the phone runs now (`uname -r` over adb).
 pub fn device_kmi(serial: Option<&str>) -> Option<String> {
     let r = run_cmd(&adb_args(serial, &["shell", "uname", "-r"]), 15);
@@ -507,8 +495,6 @@ pub struct Patched {
     pub fork: RootFork,
     pub release: Release,
 }
-
-const DEVICE_DIR: &str = "/data/local/tmp/lfff-root";
 
 /// ksud's output, without its ASCII-art banner (lines with no letter or digit).
 fn log_output(text: &str, on_log: &dyn Fn(String)) {
@@ -535,8 +521,8 @@ pub fn root_target(names: &[&str]) -> Option<&'static str> {
 
 /// Patch the firmware's `init_boot` (or `boot`) for `fork`. `images` is the
 /// firmware's partition → image map ([`crate::flasher::collect_images`]);
-/// `serial` the phone, used only when it is in Android with adb (for SukiSU,
-/// and for the KMI when the firmware has no `boot.img`). Nothing is flashed.
+/// `serial` the phone, asked over adb only for the KMI when the firmware has
+/// no `boot.img`. Everything runs on this computer; nothing is flashed.
 pub fn patch_firmware(
     fork: RootFork,
     images: &std::collections::HashMap<String, PathBuf>,
@@ -559,16 +545,14 @@ pub fn patch_firmware(
     let release = latest_release(fork)?;
     on_log(format!("{} {}", fork.name(), release.tag_name));
     let termux = is_termux();
-    let dev_arch = if termux { None } else { device_arch(serial) };
     let site = choose_site(
         fork,
         &release,
         std::env::consts::OS,
         std::env::consts::ARCH,
         termux,
-        dev_arch,
+        &kmi,
     )?;
-    let ksud = ensure_asset(fork, &release, site.asset(), on_log)?;
 
     let out_dir = root_cache_dir().join("patched");
     fs::create_dir_all(&out_dir)
@@ -581,52 +565,65 @@ pub fn patch_firmware(
     let out = out_dir.join(&out_name);
     let _ = fs::remove_file(&out);
 
-    match &site {
-        PatchSite::Host { .. } | PatchSite::Termux { .. } => {
-            set_exec(&ksud)?;
-            let ksud_s = ksud.to_string_lossy().to_string();
-            check_kmi_supported(
-                fork,
-                &release,
-                &kmi,
-                &run_cmd(&[&ksud_s, "boot-info", "supported-kmis"], 30).stdout,
-            )?;
+    // ksud, and the fork's module and init when they are not built into it.
+    let (ksud, extra): (PathBuf, Vec<String>) = match &site {
+        PatchSite::Host { asset } | PatchSite::Termux { asset } => {
+            (ensure_asset(fork, &release, asset, on_log)?, Vec::new())
+        }
+        PatchSite::Borrowed { tool, module, init } => {
+            let ksu = latest_release(RootFork::KernelSu)?;
             on_log(format!(
-                "Patching {partition} with {} on this computer...",
+                "{} has no ksud for this computer: patching with KernelSU {}'s, using {}'s own module and init",
+                fork.name(),
+                ksu.tag_name,
                 fork.name()
             ));
-            let src = source.to_string_lossy().to_string();
-            let dir = out_dir.to_string_lossy().to_string();
-            let mut args = vec![
-                ksud_s.as_str(),
-                "boot-patch",
-                "-b",
-                &src,
-                "--kmi",
-                &kmi,
-                "-o",
-                &dir,
-                "--out-name",
-                &out_name,
-            ];
-            // Only the desktop builds take --arch (the phone's, not the PC's).
-            if matches!(site, PatchSite::Host { .. }) {
-                args.extend(["--arch", "aarch64"]);
-            }
-            let r = run_cmd(&args, 300);
-            log_output(&r.stdout, on_log);
-            log_output(&r.stderr, on_log);
-            if !r.success() {
-                return Err(format!("ksud boot-patch failed (exit {})", r.code));
-            }
+            let ksud = ensure_asset(RootFork::KernelSu, &ksu, tool, on_log)?;
+            let module = ensure_asset(fork, &release, module, on_log)?;
+            let init = ensure_asset(fork, &release, init, on_log)?;
+            let p = |x: PathBuf| x.to_string_lossy().to_string();
+            (ksud, vec!["-m".into(), p(module), "-i".into(), p(init)])
         }
-        PatchSite::Device { .. } => {
-            on_log(format!(
-                "Patching {partition} with {} on the phone...",
-                fork.name()
-            ));
-            patch_on_device(fork, &release, serial, &ksud, source, &kmi, &out, on_log)?;
-        }
+    };
+    set_exec(&ksud)?;
+    let ksud_s = ksud.to_string_lossy().to_string();
+    // The borrowed ksud's own list is not the fork's: its module was checked.
+    if !matches!(site, PatchSite::Borrowed { .. }) {
+        check_kmi_supported(
+            fork,
+            &release,
+            &kmi,
+            &run_cmd(&[&ksud_s, "boot-info", "supported-kmis"], 30).stdout,
+        )?;
+    }
+    on_log(format!(
+        "Patching {partition} with {} on this computer...",
+        fork.name()
+    ));
+    let src = source.to_string_lossy().to_string();
+    let dir = out_dir.to_string_lossy().to_string();
+    let mut args = vec![
+        ksud_s.as_str(),
+        "boot-patch",
+        "-b",
+        &src,
+        "--kmi",
+        &kmi,
+        "-o",
+        &dir,
+        "--out-name",
+        &out_name,
+    ];
+    args.extend(extra.iter().map(String::as_str));
+    // Only the desktop builds take --arch (the phone's, not the PC's).
+    if !matches!(site, PatchSite::Termux { .. }) {
+        args.extend(["--arch", "aarch64"]);
+    }
+    let r = run_cmd(&args, 300);
+    log_output(&r.stdout, on_log);
+    log_output(&r.stderr, on_log);
+    if !r.success() {
+        return Err(format!("ksud boot-patch failed (exit {})", r.code));
     }
 
     if !out.metadata().is_ok_and(|m| m.len() > 0) {
@@ -659,98 +656,6 @@ fn check_kmi_supported(
         ));
     }
     Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn patch_on_device(
-    fork: RootFork,
-    release: &Release,
-    serial: Option<&str>,
-    ksud: &Path,
-    source: &Path,
-    kmi: &str,
-    out: &Path,
-    on_log: &dyn Fn(String),
-) -> Result<(), String> {
-    let step = |args: &[&str], timeout: u64, what: &str| -> Result<String, String> {
-        let r = run_cmd(&adb_args(serial, args), timeout);
-        if r.success() {
-            Ok(r.stdout)
-        } else {
-            Err(format!("{what} failed: {}", r.stderr.trim()))
-        }
-    };
-    let ksud_s = ksud.to_string_lossy().to_string();
-    let src_s = source.to_string_lossy().to_string();
-    let out_s = out.to_string_lossy().to_string();
-    let dev_ksud = format!("{DEVICE_DIR}/ksud");
-    let dev_in = format!("{DEVICE_DIR}/in.img");
-    let dev_out = format!("{DEVICE_DIR}/out.img");
-
-    step(
-        &["shell", "rm", "-rf", DEVICE_DIR],
-        15,
-        "clearing the phone's work folder",
-    )?;
-    step(
-        &["shell", "mkdir", "-p", DEVICE_DIR],
-        15,
-        "creating the phone's work folder",
-    )?;
-    let result = (|| {
-        step(
-            &["push", &ksud_s, &dev_ksud],
-            120,
-            "copying ksud to the phone",
-        )?;
-        step(
-            &["push", &src_s, &dev_in],
-            300,
-            "copying the image to the phone",
-        )?;
-        step(&["shell", "chmod", "755", &dev_ksud], 15, "chmod ksud")?;
-        let supported = run_cmd(
-            &adb_args(serial, &["shell", &dev_ksud, "boot-info", "supported-kmis"]),
-            30,
-        );
-        check_kmi_supported(fork, release, kmi, &supported.stdout)?;
-        let r = run_cmd(
-            &adb_args(
-                serial,
-                &[
-                    "shell",
-                    &dev_ksud,
-                    "boot-patch",
-                    "-b",
-                    &dev_in,
-                    "--kmi",
-                    kmi,
-                    "-o",
-                    DEVICE_DIR,
-                    "--out-name",
-                    "out.img",
-                ],
-            ),
-            300,
-        );
-        log_output(&r.stdout, on_log);
-        log_output(&r.stderr, on_log);
-        // adb shell passes the exit code through since Android 7.
-        if !r.success() {
-            return Err(format!(
-                "ksud boot-patch on the phone failed (exit {})",
-                r.code
-            ));
-        }
-        step(
-            &["pull", &dev_out, &out_s],
-            300,
-            "copying the patched image back",
-        )?;
-        Ok(())
-    })();
-    let _ = run_cmd(&adb_args(serial, &["shell", "rm", "-rf", DEVICE_DIR]), 15);
-    result
 }
 
 /// Install the fork's manager app from the same release over adb.
@@ -802,7 +707,9 @@ mod tests {
 
     fn sukisu_release() -> Release {
         parse_release(
-            r#"{"tag_name":"v4.3.0","assets":[{"name":"ksud-aarch64-linux-android","browser_download_url":"u"}]}"#,
+            r#"{"tag_name":"v4.3.0","assets":[{"name":"ksud-aarch64-linux-android","browser_download_url":"u"},
+            {"name":"ksuinit-aarch64","browser_download_url":"u"},
+            {"name":"lkm-aarch64-android16-6.12_kernelsu.ko","browser_download_url":"u"}]}"#,
         )
         .unwrap()
     }
@@ -914,22 +821,25 @@ mod tests {
     #[test]
     fn ksud_runs_on_the_pc_when_the_fork_builds_for_it() {
         let r = release();
+        let k = "android16-6.12";
         assert_eq!(
-            choose_site(RootFork::KernelSuNext, &r, "linux", "x86_64", false, None),
+            choose_site(RootFork::KernelSuNext, &r, "linux", "x86_64", false, k),
             Ok(PatchSite::Host {
                 asset: "ksud-x86_64-unknown-linux-musl".into()
             })
         );
         assert_eq!(
-            choose_site(RootFork::KernelSuNext, &r, "macos", "aarch64", false, None),
+            choose_site(RootFork::KernelSuNext, &r, "macos", "aarch64", false, k),
             Ok(PatchSite::Host {
                 asset: "ksud-aarch64-apple-darwin".into()
             })
         );
     }
 
+    // SukiSU builds no desktop ksud: KernelSU's patches with SukiSU's own
+    // module and init, on the computer too. Never on the phone.
     #[test]
-    fn sukisu_is_patched_on_the_phone_or_in_termux() {
+    fn sukisu_is_patched_on_the_pc_with_its_own_module() {
         let r = sukisu_release();
         assert_eq!(
             choose_site(
@@ -938,19 +848,48 @@ mod tests {
                 "linux",
                 "x86_64",
                 false,
-                Some("aarch64")
+                "android16-6.12"
             ),
-            Ok(PatchSite::Device {
-                asset: "ksud-aarch64-linux-android".into()
+            Ok(PatchSite::Borrowed {
+                tool: "ksud-x86_64-unknown-linux-musl".into(),
+                module: "lkm-aarch64-android16-6.12_kernelsu.ko".into(),
+                init: "ksuinit-aarch64".into(),
             })
         );
         assert_eq!(
-            choose_site(RootFork::SukiSu, &r, "linux", "aarch64", true, None),
+            choose_site(
+                RootFork::SukiSu,
+                &r,
+                "android",
+                "aarch64",
+                true,
+                "android16-6.12"
+            ),
             Ok(PatchSite::Termux {
                 asset: "ksud-aarch64-linux-android".into()
             })
         );
-        assert!(choose_site(RootFork::SukiSu, &r, "linux", "x86_64", false, None).is_err());
+        let err = choose_site(
+            RootFork::SukiSu,
+            &r,
+            "linux",
+            "x86_64",
+            false,
+            "android15-6.6",
+        )
+        .unwrap_err();
+        assert!(err.contains("no module for android15-6.6"), "{err}");
+        assert!(
+            choose_site(
+                RootFork::SukiSu,
+                &r,
+                "windows",
+                "x86_64",
+                false,
+                "android16-6.12"
+            )
+            .is_err()
+        );
     }
 
     #[test]

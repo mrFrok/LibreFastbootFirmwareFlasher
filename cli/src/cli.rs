@@ -223,9 +223,7 @@ pub enum Commands {
 
         /// Root the phone: patch the firmware's init_boot (or boot) with
         /// 'ksu' (KernelSU), 'ksun' (KernelSU Next) or 'sukisu' (SukiSU
-        /// Ultra), each from its latest release, and flash it instead.
-        /// SukiSU is patched on the phone: start with it in Android, USB
-        /// debugging on
+        /// Ultra), each from its latest release, and flash it instead
         #[arg(long, value_name = "FORK", value_parser = ["ksu", "ksun", "sukisu"])]
         root: Option<String>,
     },
@@ -238,8 +236,7 @@ pub enum Commands {
         firmware_dir: PathBuf,
 
         /// 'ksu' (KernelSU), 'ksun' (KernelSU Next) or 'sukisu' (SukiSU
-        /// Ultra); the latest release is used. SukiSU is patched on the
-        /// phone, so it must be in Android with USB debugging on
+        /// Ultra); the latest release is used
         #[arg(long, value_name = "FORK", value_parser = ["ksu", "ksun", "sukisu"])]
         fork: String,
 

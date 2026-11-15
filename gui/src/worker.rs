@@ -2432,8 +2432,8 @@ pub fn worker(
                 } else {
                     HashMap::new()
                 };
-                // Root: patched while the phone may still be in Android
-                // (SukiSU is patched on it). Nothing is flashed if it fails.
+                // Root: patched on this computer before the flash. Nothing
+                // is flashed if it fails.
                 pending_manager = None;
                 let rooted = match root {
                     Some(fork) => {

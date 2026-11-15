@@ -606,9 +606,7 @@ export component ConfirmSheet inherits Rectangle {
                                     width: 446px;
                                     text: root.root-fork < 0
                                         ? Tr.t("From the latest release of the one you pick; the patched init_boot is flashed instead of the stock one.", "Из последнего релиза выбранного; вместо стокового init_boot прошивается пропатченный.", "使用所选方案的最新版本；刷入修补后的 init_boot 代替原厂版本。", "使用所選方案的最新版本；刷入修補後的 init_boot 代替原廠版本。")
-                                        : (root.root-fork == 2
-                                        ? Tr.t("SukiSU Ultra is patched on the phone: it must be in Android with USB debugging on now. ", "SukiSU Ultra патчится на смартфоне: сейчас он должен быть в Android с включённой отладкой по USB. ", "SukiSU Ultra 在手机上修补：此时手机必须处于 Android 并开启 USB 调试。", "SukiSU Ultra 在手機上修補：此時手機必須處於 Android 並開啟 USB 偵錯。")
-                                        : "") + Tr.t("Play Integrity fails while rooted. Never lock the bootloader with a patched init_boot: flash the stock one first.", "Пока стоит root, Play Integrity не проходит. Никогда не блокируйте загрузчик с пропатченным init_boot: сначала прошейте стоковый.", "root 期间 Play Integrity 无法通过。切勿在已修补 init_boot 的情况下锁定 bootloader：请先刷回原厂版本。", "root 期間 Play Integrity 無法通過。切勿在已修補 init_boot 的情況下鎖定 bootloader：請先刷回原廠版本。");
+                                        : Tr.t("Play Integrity fails while rooted. Never lock the bootloader with a patched init_boot: flash the stock one first.", "Пока стоит root, Play Integrity не проходит. Никогда не блокируйте загрузчик с пропатченным init_boot: сначала прошейте стоковый.", "root 期间 Play Integrity 无法通过。切勿在已修补 init_boot 的情况下锁定 bootloader：请先刷回原厂版本。", "root 期間 Play Integrity 無法通過。切勿在已修補 init_boot 的情況下鎖定 bootloader：請先刷回原廠版本。");
                                     font-size: 12px;
                                     color: MaterialPalette.on-surface-variant;
                                     wrap: word-wrap;

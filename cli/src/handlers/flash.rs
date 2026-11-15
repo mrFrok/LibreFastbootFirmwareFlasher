@@ -406,8 +406,8 @@ pub fn run(
         }
     }
 
-    // -- Root: patched before the checks, while the phone may still be in
-    // Android (SukiSU is patched on it). Nothing is flashed if it fails. --
+    // -- Root: patched on this computer before the checks. Nothing is
+    // flashed if it fails. --
     let rooted = match root {
         Some(fork) => {
             if !require_tools(&["adb", "curl"]) {
