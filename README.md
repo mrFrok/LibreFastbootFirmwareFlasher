@@ -269,6 +269,14 @@ Anti-Rollback: it is Qualcomm-specific.
 
 Retry it, restart the phone, skip the partition, or abort.
 
+### Logs
+
+Every session's log is saved in `~/.local/state/lfff/logs/` (macOS:
+`~/Library/Application Support/lfff/logs/`), the newest 30 kept: the app's
+whole run, and each `lfff flash`, `root`, `flash-partition` and `set-slot`.
+The app opens the folder from About → "Logs of past sessions". Attach the log
+when you report a problem.
+
 ---
 
 ## CLI commands

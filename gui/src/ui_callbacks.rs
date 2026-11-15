@@ -1409,6 +1409,21 @@ pub fn register_callbacks(
         }
     });
 
+    ui.on_open_logs(move || {
+        let dir = lfff_lib::session_log::log_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        std::thread::spawn(move || {
+            #[cfg(target_os = "linux")]
+            {
+                let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let _ = std::process::Command::new("open").arg(&dir).spawn();
+            }
+        });
+    });
+
     ui.on_open_url(move |url| {
         let u = url.to_string();
         std::thread::spawn(move || {

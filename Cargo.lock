@@ -3162,6 +3162,7 @@ name = "lfff-lib"
 version = "3.6.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "dirs",
  "flate2",
  "libc",

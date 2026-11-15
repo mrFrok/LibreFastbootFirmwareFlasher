@@ -54,6 +54,7 @@ export component AboutPage {
     in property <string> app-version;
 
     callback open-url(string);
+    callback open-logs();
 
     HorizontalLayout {
         alignment: center;
@@ -150,6 +151,14 @@ export component AboutPage {
                         text: Tr.t("Source code on GitHub", "Исходный код на GitHub", "GitHub 上的源代码", "GitHub 上的原始碼");
                         clicked => {
                             root.open-url("https://github.com/mrFrok/LibreFastbootFirmwareFlasher");
+                        }
+                    }
+
+                    LinkRow {
+                        icon: @image-url("../icons/folder.svg");
+                        text: Tr.t("Logs of past sessions, for a bug report", "Логи прошлых сессий — для сообщения об ошибке", "以往会话的日志，用于报告问题", "以往工作階段的日誌，用於回報問題");
+                        clicked => {
+                            root.open-logs();
                         }
                     }
 

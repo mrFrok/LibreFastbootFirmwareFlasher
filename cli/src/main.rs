@@ -3,6 +3,39 @@
 //! Subcommands: deps, find-ota, download, extract, devices, arb, flash, flash-partition,
 //! reboot, set-slot
 
+// Everything the CLI prints also goes to the session log, when one is open
+// (output::start_session_log). Defined before the modules, these shadow the
+// std macros in all of them.
+macro_rules! eprintln {
+    () => {{
+        ::std::eprintln!();
+        crate::output::log_piece("", true);
+    }};
+    ($($t:tt)*) => {{
+        let s = format!($($t)*);
+        ::std::eprintln!("{s}");
+        crate::output::log_piece(&s, true);
+    }};
+}
+macro_rules! eprint {
+    ($($t:tt)*) => {{
+        let s = format!($($t)*);
+        ::std::eprint!("{s}");
+        crate::output::log_piece(&s, false);
+    }};
+}
+macro_rules! println {
+    () => {{
+        ::std::println!();
+        crate::output::log_piece("", true);
+    }};
+    ($($t:tt)*) => {{
+        let s = format!($($t)*);
+        ::std::println!("{s}");
+        crate::output::log_piece(&s, true);
+    }};
+}
+
 mod cli;
 mod handlers;
 mod output;
@@ -27,6 +60,18 @@ fn main() {
         .with_writer(std::io::stderr)
         .without_time()
         .init();
+
+    // A session that touches the phone keeps its log on disk.
+    let log_kind = match &cli.command {
+        Some(Commands::Flash { .. }) => Some("flash"),
+        Some(Commands::Root { .. }) => Some("root"),
+        Some(Commands::FlashPartition { .. }) => Some("flash-partition"),
+        Some(Commands::SetSlot { .. }) => Some("set-slot"),
+        _ => None,
+    };
+    if let Some(kind) = log_kind {
+        output::start_session_log(kind);
+    }
 
     let exit_code = match cli.command {
         None => {
@@ -166,5 +211,8 @@ fn main() {
         }
     };
 
+    if let Some(path) = output::end_session_log(exit_code) {
+        ::std::eprintln!("Log saved: {}", path.display());
+    }
     process::exit(exit_code);
 }

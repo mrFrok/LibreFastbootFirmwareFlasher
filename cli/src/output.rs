@@ -7,12 +7,70 @@
 //! path, a link, a list — so that `$(lfff …)` and pipes get just that.
 
 use std::io::{self, IsTerminal, Write};
+use std::sync::Mutex;
+
+use lfff_lib::session_log::SessionLog;
 
 use lfff_lib::device::PreFlashCheck;
 use lfff_lib::device::{RebootTarget, Via, reboot, wipe_userdata};
 use lfff_lib::extractor::ExtractionResult;
 use lfff_lib::flasher::{FlashResult, FlashSession, is_critical_partition};
 use lfff_lib::utils::{check_tools, tool_install_hint};
+
+// ---------------------------------------------------------------------------
+// Session log
+// ---------------------------------------------------------------------------
+
+struct Log {
+    file: SessionLog,
+    /// What `eprint!` left without its line end yet (a prompt).
+    pending: String,
+}
+
+static LOG: Mutex<Option<Log>> = Mutex::new(None);
+
+/// Open the session log for `kind`; from now on everything printed goes
+/// there too. Without a writable log folder the session goes on without it.
+pub fn start_session_log(kind: &str) {
+    let Some(mut file) = SessionLog::create(kind, env!("CARGO_PKG_VERSION")) else {
+        return;
+    };
+    let args: Vec<String> = std::env::args().collect();
+    file.line(&format!("$ {}", args.join(" ")));
+    if let Ok(mut l) = LOG.lock() {
+        *l = Some(Log {
+            file,
+            pending: String::new(),
+        });
+    }
+}
+
+/// Close the session log with the exit code; its path, if one was open.
+pub fn end_session_log(code: i32) -> Option<std::path::PathBuf> {
+    let mut l = LOG.lock().ok()?.take()?;
+    if !l.pending.is_empty() {
+        let p = std::mem::take(&mut l.pending);
+        l.file.line(&p);
+    }
+    l.file.line(&format!("Exit code: {code}"));
+    Some(l.file.path.clone())
+}
+
+/// Called by the print macros (see main.rs): `text`, ended by a line break
+/// when `newline`.
+pub fn log_piece(text: &str, newline: bool) {
+    let Ok(mut guard) = LOG.lock() else {
+        return;
+    };
+    let Some(l) = guard.as_mut() else {
+        return;
+    };
+    l.pending.push_str(text);
+    if newline {
+        let p = std::mem::take(&mut l.pending);
+        l.file.line(&p);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Interactive input
@@ -39,6 +97,8 @@ pub fn prompt(message: &str, default: &str) -> String {
     let mut input = String::new();
     io::stdin().read_line(&mut input).ok();
     let trimmed = input.trim();
+    // The answer ends the prompt's line in the log.
+    log_piece(trimmed, true);
     if trimmed.is_empty() {
         default.to_string()
     } else {

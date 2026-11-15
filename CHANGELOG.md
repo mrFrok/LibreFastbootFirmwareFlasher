@@ -34,6 +34,17 @@ Each release's section below becomes its GitHub release notes
   whatever they held before: after a custom ROM or another build they kept
   old contents and the camera did not work (#20). A slot that lacks one the
   other slot has gets it created.
+- Cancelling a firmware download deletes what was downloaded so far.
+  Closing the app or losing the connection still keeps it, and the next
+  download of the same firmware continues it.
+
+### Logs
+
+- Every session's log is saved to disk, in `~/.local/state/lfff/logs/`
+  (the newest 30): the app's whole run, and each `lfff flash`, `root`,
+  `flash-partition` and `set-slot` with the command, the answers given
+  and the exit code. "Logs of past sessions" in About opens the folder;
+  attach the log to a bug report.
 
 ## 3.6.0
 

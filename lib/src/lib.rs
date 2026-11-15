@@ -14,5 +14,6 @@ pub mod file_ops;
 pub mod flash_history;
 pub mod flasher;
 pub mod root;
+pub mod session_log;
 pub mod super_layout;
 pub mod utils;

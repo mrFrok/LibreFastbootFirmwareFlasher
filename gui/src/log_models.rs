@@ -75,7 +75,29 @@ impl LogModels {
     }
 }
 
+thread_local! {
+    /// This run's log on disk, opened with the first line; `Some(None)` once
+    /// it could not be.
+    static SESSION_LOG: std::cell::RefCell<Option<Option<lfff_lib::session_log::SessionLog>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Every log line of every tab, also kept on disk (one file per run of the
+/// app, in [`lfff_lib::session_log::log_dir`]).
+fn save_line(l: &LogLevel, m: &str) {
+    SESSION_LOG.with(|c| {
+        let mut c = c.borrow_mut();
+        let log = c.get_or_insert_with(|| {
+            lfff_lib::session_log::SessionLog::create("gui", env!("CARGO_PKG_VERSION"))
+        });
+        if let Some(log) = log {
+            log.line(&format!("[{}] {:<7} {m}", ts(), lvl(l)));
+        }
+    });
+}
+
 pub fn add_log_m(model: &VecModel<LogEntry>, _ui: &MainWindow, l: &LogLevel, m: &str) {
+    save_line(l, m);
     model.push(LogEntry {
         timestamp: ts().into(),
         level: lvl(l).into(),

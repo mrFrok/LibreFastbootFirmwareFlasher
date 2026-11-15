@@ -513,6 +513,7 @@ export component MainWindow inherits MaterialWindow {
     callback load-ota-changes(int);
     callback extract-firmware();
     callback open-url(string);
+    callback open-logs();
     callback browse-output-dir();
     callback paste-clipboard();
     callback request-back();
@@ -738,6 +739,7 @@ export component MainWindow inherits MaterialWindow {
                         if root.page == 6: AboutPage {
                             app-version: root.app-version;
                             open-url(u) => { root.open-url(u); }
+                            open-logs => { root.open-logs(); }
                         }
 
                         if root.page == 10: InstallPage {

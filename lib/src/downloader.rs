@@ -6,6 +6,7 @@
 //! All progress data is surfaced through [`DownloadProgress`] and passed to
 //! the Slint GUI via an `on_progress` closure.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -433,8 +434,16 @@ where
         let why = match run {
             Run::Done => break,
             Run::Cancelled => {
+                // A cancel is meant: what came so far goes, with aria2c's
+                // control file. (A closed app or a lost connection keeps it,
+                // and the next download continues it.)
+                let removed = remove_partial(output_dir, &file_name);
                 on_progress(DownloadProgress {
-                    raw_line: "Download cancelled".into(),
+                    raw_line: if removed {
+                        "Download cancelled, the partial file deleted".into()
+                    } else {
+                        "Download cancelled".into()
+                    },
                     ..Default::default()
                 });
                 return DownloadResult {
@@ -685,10 +694,27 @@ fn build_aria2c_cmd(
 /// `name`, or `name.1.ext`, `name.2.ext`… when a finished file has it. A
 /// file with its `.aria2` beside it is one of ours left unfinished: that one
 /// is continued.
-fn free_name(output_dir: Option<&Path>, name: &str) -> String {
-    let dir = output_dir
+/// Delete an unfinished download (`name` and its `name.aria2`). Only one
+/// aria2c left unfinished: a finished file has no control file. True when
+/// something was deleted.
+fn remove_partial(output_dir: Option<&Path>, name: &str) -> bool {
+    let dir = download_dir(output_dir);
+    let control = dir.join(format!("{name}.aria2"));
+    if !control.exists() {
+        return false;
+    }
+    let _ = fs::remove_file(dir.join(name));
+    fs::remove_file(&control).is_ok()
+}
+
+fn download_dir(output_dir: Option<&Path>) -> PathBuf {
+    output_dir
         .map(Path::to_path_buf)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+}
+
+fn free_name(output_dir: Option<&Path>, name: &str) -> String {
+    let dir = download_dir(output_dir);
     let taken = |n: &str| dir.join(n).exists() && !dir.join(format!("{n}.aria2")).exists();
     if !taken(name) {
         return name.to_string();
@@ -725,6 +751,21 @@ fn file_name_of(cdn_url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cancel_deletes_only_an_unfinished_download() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = Some(tmp.path());
+        fs::write(tmp.path().join("fw.zip"), "part").unwrap();
+        fs::write(tmp.path().join("fw.zip.aria2"), "ctl").unwrap();
+        assert!(remove_partial(d, "fw.zip"));
+        assert!(!tmp.path().join("fw.zip").exists());
+        assert!(!tmp.path().join("fw.zip.aria2").exists());
+        // Finished (no control file): kept.
+        fs::write(tmp.path().join("done.zip"), "all").unwrap();
+        assert!(!remove_partial(d, "done.zip"));
+        assert!(tmp.path().join("done.zip").exists());
+    }
 
     #[test]
     fn test_extract_4pda() {
