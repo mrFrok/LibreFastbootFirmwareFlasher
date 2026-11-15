@@ -1,0 +1,2 @@
+# Material 3 components are vendored, not ours: keep them out of the language stats.
+gui/material-*/** linguist-vendored
