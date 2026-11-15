@@ -7,7 +7,7 @@ import {
 } from "@material";
 import { StatusColors } from "../globals/status-colors.slint";
 import { Tr } from "../globals/tr.slint";
-import { FieldRow } from "../components/wizard.slint";
+import { FieldRow, Segmented } from "../components/wizard.slint";
 
 // A toggle for one partition to leave alone.
 component SkipChip inherits TouchArea {
@@ -115,6 +115,10 @@ export component ConfirmSheet inherits Rectangle {
     // Custom ROM, at the user's own risk: super is always wiped and rebuilt
     // from the ROM's layout. Needs super-plan; Install waits without it.
     in-out property <bool> custom-rom;
+    // Root: index in RootFork::ALL (KernelSU, KernelSU Next, SukiSU Ultra),
+    // -1 off; the patched init_boot is flashed instead of the stock one.
+    in-out property <int> root-fork: -1;
+    in-out property <bool> root-manager: true;
     // xbl/abl for kinds 0 and 1, preloader for kind 2
     in-out property <bool> skip-checked;
     // Partitions to leave as they are on the phone; joined into the
@@ -563,6 +567,84 @@ export component ConfirmSheet inherits Rectangle {
                                     : Tr.t("Super is wiped: both slots lose their system, partitions the ROM lacks are deleted. If the install stops halfway, the phone won't start until it is flashed again; fastboot stays available. At your own risk.", "Super будет стёрт: оба слота теряют систему, разделы, которых нет в прошивке, удаляются. Если установка оборвётся на середине, смартфон не запустится до повторной прошивки; fastboot останется доступен. Только на свой страх и риск.", "super 将被清除：两个槽位的系统都会丢失，ROM 中没有的分区会被删除。若安装中途中断，手机在重新刷写前无法启动；fastboot 仍可使用。风险自负。", "super 將被清除：兩個槽位的系統都會遺失，ROM 中沒有的分割區會被刪除。若安裝中途中斷，手機在重新刷寫前無法啟動；fastboot 仍可使用。風險自負。");
                                 font-size: 12px;
                                 color: root.custom-rom ? MaterialPalette.error : MaterialPalette.on-surface-variant;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+
+                if root.kind == 3: Rectangle {
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: root.root-fork >= 0 ? MaterialPalette.primary : MaterialPalette.outline-variant;
+                    VerticalLayout {
+                        padding: 8px;
+                        padding-right: 14px;
+                        spacing: 6px;
+                        HorizontalLayout {
+                            spacing: 4px;
+                            CheckBox {
+                                check-state: root.root-fork >= 0 ? CheckState.checked : CheckState.unchecked;
+                                checked-state-changed(s) => {
+                                    root.root-fork = s == CheckState.checked ? 0 : -1;
+                                }
+                            }
+
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 2px;
+                                Text {
+                                    width: 446px;
+                                    text: Tr.t("Root: patch init_boot with KernelSU, KernelSU Next or SukiSU Ultra", "Root: пропатчить init_boot через KernelSU, KernelSU Next или SukiSU Ultra", "Root：用 KernelSU、KernelSU Next 或 SukiSU Ultra 修补 init_boot", "Root：用 KernelSU、KernelSU Next 或 SukiSU Ultra 修補 init_boot");
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    color: MaterialPalette.on-surface;
+                                    wrap: word-wrap;
+                                }
+
+                                Text {
+                                    width: 446px;
+                                    text: root.root-fork < 0
+                                        ? Tr.t("From the latest release of the one you pick; the patched init_boot is flashed instead of the stock one.", "Из последнего релиза выбранного; вместо стокового init_boot прошивается пропатченный.", "使用所选方案的最新版本；刷入修补后的 init_boot 代替原厂版本。", "使用所選方案的最新版本；刷入修補後的 init_boot 代替原廠版本。")
+                                        : (root.root-fork == 2
+                                        ? Tr.t("SukiSU Ultra is patched on the phone: it must be in Android with USB debugging on now. ", "SukiSU Ultra патчится на смартфоне: сейчас он должен быть в Android с включённой отладкой по USB. ", "SukiSU Ultra 在手机上修补：此时手机必须处于 Android 并开启 USB 调试。", "SukiSU Ultra 在手機上修補：此時手機必須處於 Android 並開啟 USB 偵錯。")
+                                        : "") + Tr.t("Play Integrity fails while rooted. Never lock the bootloader with a patched init_boot: flash the stock one first.", "Пока стоит root, Play Integrity не проходит. Никогда не блокируйте загрузчик с пропатченным init_boot: сначала прошейте стоковый.", "root 期间 Play Integrity 无法通过。切勿在已修补 init_boot 的情况下锁定 bootloader：请先刷回原厂版本。", "root 期間 Play Integrity 無法通過。切勿在已修補 init_boot 的情況下鎖定 bootloader：請先刷回原廠版本。");
+                                    font-size: 12px;
+                                    color: MaterialPalette.on-surface-variant;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                        if root.root-fork >= 0: HorizontalLayout {
+                            padding-left: 63px;
+                            alignment: start;
+                            Segmented {
+                                segment-width: 136px;
+                                items: ["KernelSU", "KernelSU Next", "SukiSU Ultra"];
+                                current: root.root-fork;
+                                selected(i) => {
+                                    root.root-fork = i;
+                                }
+                            }
+                        }
+
+                        if root.root-fork >= 0: HorizontalLayout {
+                            padding-left: 43px;
+                            spacing: 4px;
+                            CheckBox {
+                                check-state: root.root-manager ? CheckState.checked : CheckState.unchecked;
+                                checked-state-changed(s) => {
+                                    root.root-manager = s == CheckState.checked;
+                                }
+                            }
+
+                            Text {
+                                width: 403px;
+                                text: Tr.t("Install the manager app when the phone has started", "Установить приложение-менеджер, когда смартфон загрузится", "手机启动后安装管理器应用", "手機啟動後安裝管理器應用程式");
+                                font-size: 13px;
+                                color: MaterialPalette.on-surface;
+                                vertical-alignment: center;
                                 wrap: word-wrap;
                             }
                         }

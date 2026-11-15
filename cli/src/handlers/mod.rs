@@ -8,4 +8,5 @@ pub mod find_ota;
 pub mod flash;
 pub mod flash_partition;
 pub mod reboot;
+pub mod root;
 pub mod set_slot;

@@ -196,6 +196,8 @@ enum WMsg {
     DeviceUnauthorized,
     /// The OTA repair finished: Ok(partitions removed) or why it stopped.
     RepairDone(Result<usize, String>),
+    /// The Root tool finished: Ok(what was flashed) or why it stopped.
+    RootDone(Result<String, String>),
     /// Official firmware search (`ota`); `generation` drops stale answers.
     OtaProgress {
         generation: u64,
@@ -289,6 +291,18 @@ enum Cmd {
         /// Custom ROM: wipe super and rebuild it from the ROM's layout
         /// (`FlashOptions::custom_rom`).
         custom_rom: bool,
+        /// Root: patch the firmware's init_boot (or boot) with this fork
+        /// before the phone leaves Android, and flash it instead.
+        root: Option<lfff_lib::root::RootFork>,
+        /// With `root`: install the fork's manager once the phone has started.
+        install_manager: bool,
+    },
+    /// The Root tool: patch the init_boot (or boot) of the firmware in `dir`
+    /// — the build the phone runs — and flash it to the active slot.
+    RootPhone {
+        dir: String,
+        fork: lfff_lib::root::RootFork,
+        install_manager: bool,
     },
 }
 

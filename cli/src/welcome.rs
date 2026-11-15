@@ -32,6 +32,7 @@ pub fn print() {
     println!("  flash             flash full firmware (A/B, super)");
     println!("  flash-partition   flash a single partition by name");
     println!("  reboot            reboot to system/recovery/bootloader/fastbootd");
+    println!("  root              root with KernelSU / KernelSU Next / SukiSU");
     println!("  set-slot          make slot a or b the active one");
     println!();
 

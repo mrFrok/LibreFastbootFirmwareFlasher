@@ -909,6 +909,57 @@ fn wait_fastbootd_cancellable(
     }
 }
 
+/// After the phone restarts: wait for it in Android and install the root
+/// manager, off the worker thread (the wait can take minutes).
+fn install_manager_when_up(
+    tx: &mpsc::Sender<WMsg>,
+    serial: Option<String>,
+    p: lfff_lib::root::Patched,
+    tab: u8,
+) {
+    let tx = tx.clone();
+    thread::spawn(move || {
+        log(
+            &tx,
+            LogLevel::Info,
+            tab,
+            format!(
+                "Waiting for the phone in Android to install the {} manager...",
+                p.fork.name()
+            ),
+        );
+        let mut args: Vec<&str> = Vec::new();
+        if let Some(s) = serial.as_deref() {
+            args.extend(["-s", s]);
+        }
+        args.push("wait-for-device");
+        if !lfff_lib::utils::adb(&args, 240).success() {
+            log(
+                &tx,
+                LogLevel::Warn,
+                tab,
+                format!(
+                    "The phone did not show up over adb (USB debugging on?): install the {} manager yourself.",
+                    p.fork.name()
+                ),
+            );
+            return;
+        }
+        let tx_log = tx.clone();
+        match lfff_lib::root::install_manager(p.fork, &p.release, serial.as_deref(), &|m| {
+            log(&tx_log, LogLevel::Info, tab, m)
+        }) {
+            Ok(()) => log(
+                &tx,
+                LogLevel::Success,
+                tab,
+                format!("{} manager installed", p.fork.name()),
+            ),
+            Err(e) => log(&tx, LogLevel::Error, tab, format!("Manager: {e}")),
+        }
+    });
+}
+
 fn do_flash(
     tx: &mpsc::Sender<WMsg>,
     source: &lfff_lib::flasher::FirmwareSource,
@@ -1110,6 +1161,8 @@ pub fn worker(
     current_device: std::sync::Arc<std::sync::Mutex<Option<DeviceSnapshot>>>,
 ) {
     let mut current_source: Option<lfff_lib::flasher::FirmwareSource> = None;
+    // A root install's manager, installed once the phone has restarted.
+    let mut pending_manager: Option<lfff_lib::root::Patched> = None;
     let dl_cancel_token: std::sync::Arc<
         std::sync::Mutex<Option<lfff_lib::downloader::CancelToken>>,
     > = std::sync::Arc::new(std::sync::Mutex::new(None));
@@ -1610,6 +1663,9 @@ pub fn worker(
                         format!("Failed to reboot: {}", e.trim()),
                     ),
                 }
+                if let Some(p) = pending_manager.take() {
+                    install_manager_when_up(&tx, serial.clone(), p, 2);
+                }
             }
 
             Cmd::PostFlashWipe => {
@@ -1628,6 +1684,9 @@ pub fn worker(
                                 2,
                                 format!("Failed to reboot: {}", e.trim()),
                             );
+                        }
+                        if let Some(p) = pending_manager.take() {
+                            install_manager_when_up(&tx, serial.clone(), p, 2);
                         }
                     }
                     Err(e) => log(
@@ -2327,6 +2386,8 @@ pub fn worker(
                 skip_preloader,
                 skip_partitions,
                 custom_rom,
+                root,
+                install_manager,
             } => {
                 use lfff_lib::flasher::FastbootdStatus;
                 use std::sync::atomic::Ordering;
@@ -2370,6 +2431,43 @@ pub fn worker(
                     }
                 } else {
                     HashMap::new()
+                };
+                // Root: patched while the phone may still be in Android
+                // (SukiSU is patched on it). Nothing is flashed if it fails.
+                pending_manager = None;
+                let rooted = match root {
+                    Some(fork) => {
+                        let images = lfff_lib::flasher::collect_images(Path::new(&dir));
+                        let tx_log = tx.clone();
+                        match lfff_lib::root::patch_firmware(
+                            fork,
+                            &images,
+                            serial.as_deref(),
+                            &|m| log(&tx_log, LogLevel::Info, 2, m),
+                        ) {
+                            Ok(p) => {
+                                // Refused now, not after the restart: the
+                                // session would refuse an excluded image.
+                                let over = HashMap::from([(p.partition.clone(), p.image.clone())]);
+                                if let Err(e) = lfff_lib::flasher::apply_image_overrides(
+                                    images,
+                                    &over,
+                                    &skip_partitions,
+                                ) {
+                                    stage(&tx, 0, 3, "");
+                                    stop(format!("Root: {e}. Nothing was flashed."));
+                                    continue;
+                                }
+                                Some(p)
+                            }
+                            Err(e) => {
+                                stage(&tx, 0, 3, "");
+                                stop(format!("Root: {e}. Nothing was flashed."));
+                                continue;
+                            }
+                        }
+                    }
+                    None => None,
                 };
                 let reboot = |via: Via| {
                     let tool = if via == Via::Adb { "adb" } else { "fastboot" };
@@ -2484,6 +2582,10 @@ pub fn worker(
                     skip_partitions,
                     rebuild_super: crate::config::load_config().auto_rebuild_super,
                     custom_rom,
+                    image_overrides: rooted
+                        .iter()
+                        .map(|p| (p.partition.clone(), p.image.clone()))
+                        .collect(),
                     ..Default::default()
                 };
                 do_flash(
@@ -2495,6 +2597,105 @@ pub fn worker(
                     flash_cancel.clone(),
                 );
                 std::fs::remove_dir_all(kept_dir()).ok();
+                if install_manager {
+                    pending_manager = rooted;
+                }
+            }
+
+            Cmd::RootPhone {
+                dir,
+                fork,
+                install_manager,
+            } => {
+                use lfff_lib::flasher::DeviceMode;
+                let _awake = NoSleep::new(&tx, 3);
+                let done = |r: Result<String, String>| {
+                    match &r {
+                        Ok(m) => log(&tx, LogLevel::Success, 3, m),
+                        Err(e) => log(&tx, LogLevel::Error, 3, e),
+                    }
+                    tx.send(WMsg::RootDone(r)).ok();
+                };
+                let images = lfff_lib::flasher::collect_images(Path::new(&dir));
+                let tx_log = tx.clone();
+                let patched =
+                    match lfff_lib::root::patch_firmware(fork, &images, serial.as_deref(), &|m| {
+                        log(&tx_log, LogLevel::Info, 3, m)
+                    }) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            done(Err(format!("{e}. Nothing was flashed.")));
+                            continue;
+                        }
+                    };
+                match lfff_lib::flasher::detect_mode(serial.as_deref()) {
+                    DeviceMode::System => {
+                        log(&tx, LogLevel::Info, 3, "Restarting into the bootloader...");
+                        if let Err(e) = lfff_lib::device::reboot(
+                            serial.as_deref(),
+                            Via::Adb,
+                            RebootTarget::Bootloader,
+                        ) {
+                            done(Err(format!("Could not restart: {}", e.trim())));
+                            continue;
+                        }
+                        if !lfff_lib::flasher::wait_for_any_fastboot(serial.as_deref(), 120) {
+                            done(Err(
+                                "The phone did not come up in fastboot. Nothing was flashed."
+                                    .into(),
+                            ));
+                            continue;
+                        }
+                    }
+                    DeviceMode::Bootloader | DeviceMode::Fastbootd => {}
+                    DeviceMode::Unknown => {
+                        done(Err(
+                            "The phone is not connected. Nothing was flashed.".into()
+                        ));
+                        continue;
+                    }
+                }
+                adopt_fastboot_serial(&tx, &mut serial, 3);
+                let Some(slot) = lfff_lib::flasher::get_active_slot(serial.as_deref()) else {
+                    done(Err(
+                        "Could not read the active slot. Nothing was flashed.".into()
+                    ));
+                    continue;
+                };
+                log(
+                    &tx,
+                    LogLevel::Info,
+                    3,
+                    format!("Flashing {}_{slot}...", patched.partition),
+                );
+                let r = lfff_lib::flasher::flash_partition(
+                    &patched.image,
+                    &patched.partition,
+                    &slot,
+                    serial.as_deref(),
+                );
+                if !r.success {
+                    done(Err(format!(
+                        "Flashing {} failed: {}",
+                        patched.partition,
+                        r.error.trim()
+                    )));
+                    continue;
+                }
+                if let Err(e) =
+                    lfff_lib::device::reboot(serial.as_deref(), Via::Fastboot, RebootTarget::System)
+                {
+                    log(&tx, LogLevel::Warn, 3, format!("Reboot: {}", e.trim()));
+                }
+                if install_manager {
+                    install_manager_when_up(&tx, serial.clone(), patched.clone(), 3);
+                }
+                done(Ok(format!(
+                    "{}_{slot} flashed with {} {}; the phone is restarting",
+                    patched.partition,
+                    fork.name(),
+                    patched.release.tag_name
+                )));
             }
 
             Cmd::RepairOta => {

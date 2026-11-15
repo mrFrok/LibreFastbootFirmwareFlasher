@@ -5,6 +5,17 @@ Each release's section below becomes its GitHub release notes
 
 ## 3.7.0
 
+### Root
+
+- Root with KernelSU, KernelSU Next or SukiSU Ultra, from the fork's latest
+  release: a "Root" checkbox on the install's last step (`lfff flash --root`)
+  and a Root tool (`lfff root`) for the build the phone already runs. The
+  firmware's init_boot (or boot) is patched with the fork's own ksud and
+  flashed instead of the stock one; the kernel version is read from the
+  firmware's boot.img, and a non-GKI kernel is refused before anything is
+  flashed. SukiSU Ultra, which has no desktop ksud, is patched on the phone
+  over adb. The manager app can be installed once the phone has started.
+
 ### Flashing
 
 - Custom ROMs, at your own risk: a "Custom ROM" checkbox on the install's

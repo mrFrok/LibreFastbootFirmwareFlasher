@@ -182,6 +182,7 @@ pub enum SuperMode {
     CustomRom,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     source: &FirmwareSource,
     serial: Option<&str>,
@@ -190,6 +191,7 @@ pub fn run(
     skip_xbl_abl: bool,
     skip_preloader: bool,
     super_mode: SuperMode,
+    root: Option<lfff_lib::root::RootFork>,
 ) -> i32 {
     let custom_rom = super_mode == SuperMode::CustomRom;
     let dir = source.path();
@@ -404,6 +406,29 @@ pub fn run(
         }
     }
 
+    // -- Root: patched before the checks, while the phone may still be in
+    // Android (SukiSU is patched on it). Nothing is flashed if it fails. --
+    let rooted = match root {
+        Some(fork) => {
+            if !require_tools(&["adb", "curl"]) {
+                eprintln!(
+                    "{} {}",
+                    "✗".red().bold(),
+                    "Root needs adb and curl. Aborting.".red()
+                );
+                return 1;
+            }
+            match crate::handlers::root::patch(fork, &images, serial) {
+                Some(p) => Some(p),
+                None => return 1,
+            }
+        }
+        None => None,
+    };
+    if rooted.is_some() && !dry_run && !crate::handlers::root::to_fastbootd_if_in_android(serial) {
+        return 1;
+    }
+
     let options = FlashOptions {
         dry_run,
         skip_xbl_abl,
@@ -416,6 +441,10 @@ pub fn run(
         skip_partitions: String::new(),
         rebuild_super: super_mode != SuperMode::Keep,
         custom_rom,
+        image_overrides: rooted
+            .iter()
+            .map(|p| (p.partition.clone(), p.image.clone()))
+            .collect(),
     };
 
     if !dry_run {
@@ -473,6 +502,9 @@ pub fn run(
             "  {}",
             "All partitions will be overwritten. This action is irreversible.".red()
         );
+        if let Some(p) = &rooted {
+            crate::handlers::root::print_warnings(p);
+        }
         if custom_rom {
             eprintln!(
                 "  {}",
@@ -536,6 +568,9 @@ pub fn run(
 
     if !session.aborted && session.failed().is_empty() {
         offer_wipe_and_reboot(&session);
+        if let Some(p) = &rooted {
+            crate::handlers::root::offer_manager(p, serial);
+        }
         eprintln!("\n{}", "✓ Flash completed successfully".green().bold());
         0
     } else if session.aborted {

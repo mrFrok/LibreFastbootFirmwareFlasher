@@ -15,6 +15,7 @@ export global Tools {
             : id == 6 ? Tr.t("Drivers", "Драйверы", "驱动", "驅動程式")
             : id == 7 ? Tr.t("Download or unpack", "Скачать или распаковать", "下载或解压", "下載或解壓")
             : id == 8 ? Tr.t("Logs", "Журналы", "日志", "日誌")
+            : id == 10 ? Tr.t("Root", "Root", "Root", "Root")
             : Tr.t("Repair updates (OTA)", "Починить обновления (OTA)", "修复系统更新 (OTA)", "修復系統更新 (OTA)");
     }
     public pure function text(id: int) -> string {
@@ -26,6 +27,7 @@ export global Tools {
             : id == 6 ? Tr.t("Check and install adb, fastboot and the rest", "Проверить и установить adb, fastboot и остальное", "检查并安装 adb、fastboot 等", "檢查並安裝 adb、fastboot 等")
             : id == 7 ? Tr.t("Only download or only unpack a firmware", "Только скачать или только распаковать прошивку", "仅下载或仅解压固件", "僅下載或僅解壓韌體")
             : id == 8 ? Tr.t("Read and save the work logs", "Посмотреть и сохранить журналы работы", "查看并保存工作日志", "檢視並儲存工作日誌")
+            : id == 10 ? Tr.t("KernelSU, KernelSU Next or SukiSU Ultra", "KernelSU, KernelSU Next или SukiSU Ultra", "KernelSU、KernelSU Next 或 SukiSU Ultra", "KernelSU、KernelSU Next 或 SukiSU Ultra")
             : Tr.t("System updates fail after flashing with older versions? This fixes it", "Обновления не ставятся после прошивки старыми версиями? Это чинит", "使用旧版本刷写后系统更新失败？此工具可修复", "使用舊版本刷寫後系統更新失敗？此工具可修復");
     }
     public pure function icon(id: int) -> image {
@@ -37,6 +39,7 @@ export global Tools {
             : id == 6 ? @image-url("../icons/build.svg")
             : id == 7 ? @image-url("../icons/download.svg")
             : id == 8 ? @image-url("../icons/article.svg")
+            : id == 10 ? @image-url("../icons/lock_open.svg")
             : @image-url("../icons/system_update.svg");
     }
 }

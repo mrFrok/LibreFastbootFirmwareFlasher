@@ -220,6 +220,40 @@ pub enum Commands {
         /// with payload.bin). Every partition the ROM lacks is deleted
         #[arg(long, conflicts_with = "no_rebuild_super")]
         custom_rom: bool,
+
+        /// Root the phone: patch the firmware's init_boot (or boot) with
+        /// 'ksu' (KernelSU), 'ksun' (KernelSU Next) or 'sukisu' (SukiSU
+        /// Ultra), each from its latest release, and flash it instead.
+        /// SukiSU is patched on the phone: start with it in Android, USB
+        /// debugging on
+        #[arg(long, value_name = "FORK", value_parser = ["ksu", "ksun", "sukisu"])]
+        root: Option<String>,
+    },
+
+    /// Root the phone with KernelSU, KernelSU Next or SukiSU Ultra: patch the
+    /// init_boot (or boot) of the firmware the phone runs now and flash it to
+    /// the active slot
+    Root {
+        /// Extracted firmware directory of the build the phone runs now
+        firmware_dir: PathBuf,
+
+        /// 'ksu' (KernelSU), 'ksun' (KernelSU Next) or 'sukisu' (SukiSU
+        /// Ultra); the latest release is used. SukiSU is patched on the
+        /// phone, so it must be in Android with USB debugging on
+        #[arg(long, value_name = "FORK", value_parser = ["ksu", "ksun", "sukisu"])]
+        fork: String,
+
+        /// Target a specific device by serial number
+        #[arg(short, long, value_name = "SERIAL")]
+        serial: Option<String>,
+
+        /// Patch only: save the patched image, flash nothing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Do not offer to install the manager app afterwards
+        #[arg(long)]
+        no_manager: bool,
     },
 
     /// Flash a single .img file to a specific partition

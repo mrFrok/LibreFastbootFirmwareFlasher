@@ -116,7 +116,7 @@ pub fn tr(lang: &str, en: &str, ru: &str, cn: &str, tw: &str) -> String {
 }
 
 /// Pinned tool names in config.json, by Tools-page id - 1.
-const TOOL_NAMES: [&str; 9] = [
+const TOOL_NAMES: [&str; 10] = [
     "partition",
     "build",
     "reboot",
@@ -126,7 +126,16 @@ const TOOL_NAMES: [&str; 9] = [
     "download",
     "logs",
     "ota-repair",
+    "root",
 ];
+
+/// The root fork picked in the UI, by its index in `RootFork::ALL`; `None`
+/// for -1 (root off).
+fn fork_of(i: i32) -> Option<lfff_lib::root::RootFork> {
+    usize::try_from(i)
+        .ok()
+        .and_then(|i| lfff_lib::root::RootFork::ALL.get(i).copied())
+}
 
 pub fn apply_pins(ui: &MainWindow, pinned: &[String]) {
     let ids: Vec<i32> = pinned
@@ -735,6 +744,16 @@ pub fn poll(
                 index,
                 text,
             } => crate::ota::on_changes(&ui, generation, index, text),
+            WMsg::RootDone(r) => match r {
+                Ok(m) => {
+                    ui.set_root_state(2);
+                    ui.set_root_message(m.into());
+                }
+                Err(e) => {
+                    ui.set_root_state(3);
+                    ui.set_root_message(e.into());
+                }
+            },
             WMsg::RepairDone(r) => {
                 ui.set_repair_running(false);
                 match r {
@@ -1524,6 +1543,29 @@ fn register_install_callbacks(
 
     let t = ctx.clone();
     let w = ui.as_weak();
+    ui.on_root_phone(move || {
+        let Some(ui) = w.upgrade() else { return };
+        let dirs = lfff_lib::extractor::finished_extractions(&get_output_dir());
+        let (Some(dir), Some(fork)) = (
+            usize::try_from(ui.get_root_tool_fw())
+                .ok()
+                .and_then(|i| dirs.get(i)),
+            fork_of(ui.get_root_tool_fork()),
+        ) else {
+            return;
+        };
+        ui.set_root_state(1);
+        ui.set_root_message("".into());
+        t.send(Cmd::RootPhone {
+            dir: dir.display().to_string(),
+            fork,
+            install_manager: ui.get_root_tool_manager(),
+        })
+        .ok();
+    });
+
+    let t = ctx.clone();
+    let w = ui.as_weak();
     ui.on_repair_ota(move || {
         if let Some(ui) = w.upgrade() {
             ui.set_repair_running(true);
@@ -1635,6 +1677,8 @@ fn register_install_callbacks(
                 skip_preloader: ui.get_skip_preloader(),
                 skip_partitions: ui.get_install_skips().to_string(),
                 custom_rom: ui.get_custom_rom(),
+                root: fork_of(ui.get_root_fork()),
+                install_manager: ui.get_root_manager(),
             })
             .ok();
         }

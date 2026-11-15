@@ -1401,6 +1401,36 @@ pub struct FlashOptions {
     /// with them; no factory stand-ins are written. Nothing is flashed when
     /// the layout cannot be built.
     pub custom_rom: bool,
+    /// Images that replace the firmware's own, by partition name: the
+    /// root-patched `init_boot` ([`crate::root::patch_firmware`]). Each must
+    /// replace an image the firmware has and must not be excluded, or the
+    /// session refuses before flashing anything.
+    pub image_overrides: HashMap<String, PathBuf>,
+}
+
+/// Put `overrides` in place of the firmware's images of the same name.
+/// Refused when an override has no image to replace or is excluded by the
+/// user: either way the patched image would silently not be flashed.
+pub fn apply_image_overrides(
+    mut images: HashMap<String, PathBuf>,
+    overrides: &HashMap<String, PathBuf>,
+    skip_partitions: &str,
+) -> Result<HashMap<String, PathBuf>, String> {
+    let skips = skip_list(skip_partitions);
+    let mut names: Vec<&String> = overrides.keys().collect();
+    names.sort();
+    for name in names {
+        if skips.contains(name) {
+            return Err(format!(
+                "{name} is excluded, but it is the patched image to flash — flash it, or turn root off"
+            ));
+        }
+        if !images.contains_key(name) {
+            return Err(format!("the firmware has no {name}.img to replace"));
+        }
+        images.insert(name.clone(), overrides[name].clone());
+    }
+    Ok(images)
 }
 
 /// What a super rebuild installs: the empty layout, and the partitions the
@@ -1780,6 +1810,20 @@ pub fn run_flash_session_with_log(
     } else {
         collect_images(firmware_dir)
     };
+    let images = match apply_image_overrides(images, &options.image_overrides, &skip_partitions) {
+        Ok(i) => i,
+        Err(e) => {
+            on_log(format!("Refusing to flash: {e}"));
+            session.aborted = true;
+            session.end_reason = Some("OverrideRefused".into());
+            return session;
+        }
+    };
+    let mut overridden: Vec<(&String, &PathBuf)> = options.image_overrides.iter().collect();
+    overridden.sort();
+    for (name, path) in overridden {
+        on_log(format!("{name}: the patched image {}", path.display()));
+    }
 
     if images.is_empty() {
         if source.is_source() {
@@ -3036,6 +3080,20 @@ mod tests {
                 .iter()
                 .all(|(_, r)| r == "not a plain partition name")
         );
+    }
+
+    #[test]
+    fn a_patched_image_replaces_the_firmwares_own() {
+        let patched = PathBuf::from("/cache/init_boot-ksu.img");
+        let overrides = HashMap::from([("init_boot".to_string(), patched.clone())]);
+        let out = apply_image_overrides(images(&["boot", "init_boot"]), &overrides, "").unwrap();
+        assert_eq!(out["init_boot"], patched);
+        assert_eq!(out.len(), 2);
+        // Excluded, or nothing to replace: refused, never silently dropped.
+        assert!(
+            apply_image_overrides(images(&["boot", "init_boot"]), &overrides, "init_boot").is_err()
+        );
+        assert!(apply_image_overrides(images(&["boot"]), &overrides, "").is_err());
     }
 
     #[test]

@@ -39,6 +39,7 @@ What it does:
 - Anti-Rollback check: the phone against the firmware
 - Super rebuilt from the firmware's layout, so system updates keep installing
 - Custom ROMs, with super rebuilt from the ROM (at your own risk)
+- Root with KernelSU, KernelSU Next or SukiSU Ultra, from their latest release
 - Flashing a source build's output folder
 - Retry, skip or abort a failed partition
 - Installs its own tools (`fastboot`, `adb`, `aria2c`, `payload_dumper`)
@@ -245,6 +246,19 @@ super is wiped and rebuilt from the ROM's layout, whatever the phone had.
 - Nothing is flashed if the layout cannot be built, or does not match the ROM's images.
 - If the install stops halfway, the phone does not start until it is flashed again; fastboot stays available.
 
+### Root
+
+Root comes from the fork you pick: KernelSU, KernelSU Next or SukiSU Ultra,
+each from its latest release. Tick **Root** on the install's last step
+(`lfff flash --root ksu|ksun|sukisu`), or use the **Root** tool
+(`lfff root ./fw --fork ksu`) for the build the phone already runs.
+
+- The firmware's `init_boot` (or `boot`, without one) is patched with the fork's own `ksud boot-patch` and flashed instead of the stock image. The tool flashes the active slot only.
+- The kernel version (KMI) is read from the firmware's `boot.img`; a kernel that is not GKI is refused.
+- KernelSU and KernelSU Next are patched on the computer. SukiSU Ultra ships no desktop `ksud`, so it is patched on the phone: start with it in Android, USB debugging on. In Termux every fork is patched locally.
+- The manager app from the same release can be installed over adb once the phone has started.
+- Play Integrity fails while the phone is rooted. Never lock the bootloader with a patched `init_boot`: flash the stock one first.
+
 ### MediaTek
 
 MediaTek phones are flashed entirely in fastbootd. If the firmware has a
@@ -269,6 +283,7 @@ Retry it, restart the phone, skip the partition, or abort.
 | `devices` | List fastboot/adb devices | `lfff devices --check` |
 | `reboot [to]` | Restart to system, recovery, bootloader or fastbootd | `lfff reboot bootloader` |
 | `set-slot <a\|b>` | Make a slot the active one (fastboot/fastbootd) | `lfff set-slot b` |
+| `root <dir>` | Root with KernelSU, KernelSU Next or SukiSU Ultra (`--dry-run` only patches) | `lfff root ./fw --fork ksu` |
 | `arb` | Compare ARB, firmware against phone (`--device` reads the phone over adb, needs root) | `lfff arb --device --firmware-dir ./fw` |
 | `deps [tool..]` | Install missing tools | `lfff deps` / `lfff deps --check` |
 | `completion <shell>` | Print a shell completion script | `lfff completion zsh` |

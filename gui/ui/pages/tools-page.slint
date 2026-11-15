@@ -1,4 +1,4 @@
-import { MaterialPalette, FilledButton } from "@material";
+import { MaterialPalette, FilledButton, CheckBox, CheckState } from "@material";
 import { Notice } from "../components/wizard.slint";
 import { Tools } from "../globals/tools.slint";
 export { Tools }
@@ -208,6 +208,17 @@ export component ToolsGrid inherits VerticalLayout {
                     root.toggle-pin(9);
                 }
             }
+
+            ToolCard {
+                id: 10;
+                pinned: root.pinned[9];
+                clicked => {
+                    root.open(10);
+                }
+                toggle-pin => {
+                    root.toggle-pin(10);
+                }
+            }
         }
     }
 
@@ -320,5 +331,163 @@ export component RepairPage inherits VerticalLayout {
 
     Rectangle {
         vertical-stretch: 1;
+    }
+}
+
+// Patches the init_boot (or boot) of the build the phone runs with the
+// chosen root solution and flashes it to the active slot.
+export component RootPage inherits VerticalLayout {
+    // Unpacked firmwares, newest first (finished_extractions).
+    in property <[string]> firmwares;
+    // Index in RootFork::ALL: KernelSU, KernelSU Next, SukiSU Ultra.
+    in-out property <int> fork: 0;
+    // Index in firmwares, -1 for none.
+    in-out property <int> firmware: -1;
+    in-out property <bool> manager: true;
+    // 0 not run, 1 running, 2 done, 3 failed
+    in property <int> state;
+    in property <string> message;
+    in property <[LogEntry]> log;
+    in property <string> export-status;
+    callback run();
+    callback export-log();
+    spacing: 14px;
+    Text {
+        text: Tools.title(10);
+        font-size: 26px;
+        font-weight: 500;
+        color: MaterialPalette.on-surface;
+    }
+
+    Text {
+        text: Tr.t(
+            "Patches the init_boot (or boot) of the firmware the phone runs with the root solution you choose, from its latest release, and flashes it to the active slot. SukiSU Ultra is patched on the phone itself: start with the phone in Android, USB debugging on.",
+            "Патчит init_boot (или boot) прошивки, которая стоит на смартфоне, выбранным root-решением из его последнего релиза и прошивает в активный слот. SukiSU Ultra патчится на самом смартфоне: начинайте со смартфоном в Android с включённой отладкой по USB.",
+            "使用所选 root 方案的最新版本修补手机当前固件的 init_boot（或 boot），并刷入活动槽位。SukiSU Ultra 在手机上修补：请让手机处于 Android 系统并开启 USB 调试。",
+            "使用所選 root 方案的最新版本修補手機目前韌體的 init_boot（或 boot），並刷入使用中槽位。SukiSU Ultra 在手機上修補：請讓手機處於 Android 系統並開啟 USB 偵錯。");
+        font-size: 14px;
+        color: MaterialPalette.on-surface;
+        wrap: word-wrap;
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        Segmented {
+            segment-width: 140px;
+            items: ["KernelSU", "KernelSU Next", "SukiSU Ultra"];
+            current: root.fork;
+            selected(i) => {
+                root.fork = i;
+            }
+        }
+    }
+
+    Text {
+        text: root.firmwares.length > 0
+            ? Tr.t("The firmware the phone runs now:", "Прошивка, которая сейчас стоит на смартфоне:", "手机当前运行的固件：", "手機目前執行的韌體：")
+            : Tr.t("No unpacked firmware yet: download or unpack the build the phone runs (Download or unpack).", "Распакованных прошивок пока нет: скачайте или распакуйте ту сборку, что стоит на смартфоне («Скачать или распаковать»).", "还没有已解压的固件：请下载或解压手机当前运行的版本（“下载或解压”）。", "還沒有已解壓的韌體：請下載或解壓手機目前執行的版本（「下載或解壓」）。");
+        font-size: 14px;
+        color: MaterialPalette.on-surface-variant;
+        wrap: word-wrap;
+    }
+
+    for name[i] in root.firmwares: TouchArea {
+        visible: i < 5;
+        height: self.visible ? 44px : 0px;
+        clicked => {
+            root.firmware = i;
+        }
+        Rectangle {
+            border-radius: 12px;
+            background: root.firmware == i ? MaterialPalette.secondary-container
+                : parent.has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container-low;
+            border-width: 1px;
+            border-color: root.firmware == i ? MaterialPalette.primary : MaterialPalette.outline-variant;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                spacing: 12px;
+                Image {
+                    source: root.firmware == i ? @image-url("../icons/check.svg") : @image-url("../icons/folder.svg");
+                    width: 20px;
+                    height: 20px;
+                    y: (parent.height - self.height) / 2;
+                    colorize: MaterialPalette.primary;
+                }
+
+                Text {
+                    horizontal-stretch: 1;
+                    text: name;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: MaterialPalette.on-surface;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 4px;
+        CheckBox {
+            check-state: root.manager ? CheckState.checked : CheckState.unchecked;
+            checked-state-changed(s) => {
+                root.manager = s == CheckState.checked;
+            }
+        }
+
+        Text {
+            text: Tr.t("Install the manager app when the phone has started", "Установить приложение-менеджер, когда смартфон загрузится", "手机启动后安装管理器应用", "手機啟動後安裝管理器應用程式");
+            font-size: 14px;
+            color: MaterialPalette.on-surface;
+            vertical-alignment: center;
+        }
+    }
+
+    Notice {
+        kind: 1;
+        title: Tr.t("Before you root", "Перед установкой root", "安装 root 之前", "安裝 root 之前");
+        text: Tr.t(
+            "Pick exactly the build the phone runs: an init_boot from another build can stop it from starting. Play Integrity fails while the phone is rooted. Never lock the bootloader with a patched init_boot: flash the stock one first.",
+            "Выберите ровно ту сборку, что стоит на смартфоне: init_boot от другой сборки может не дать ему запуститься. Пока смартфон с root, Play Integrity не проходит. Никогда не блокируйте загрузчик с пропатченным init_boot: сначала прошейте стоковый.",
+            "请选择手机当前运行的同一版本：来自其他版本的 init_boot 可能导致无法启动。手机 root 期间 Play Integrity 无法通过。切勿在已修补 init_boot 的情况下锁定 bootloader：请先刷回原厂版本。",
+            "請選擇手機目前執行的同一版本：來自其他版本的 init_boot 可能導致無法開機。手機 root 期間 Play Integrity 無法通過。切勿在已修補 init_boot 的情況下鎖定 bootloader：請先刷回原廠版本。");
+    }
+
+    if root.state == 2: Notice {
+        kind: 3;
+        icon: @image-url("../icons/check.svg");
+        title: Tr.t("Root installed", "Root установлен", "Root 已安装", "Root 已安裝");
+        text: root.message;
+    }
+    if root.state == 3: Notice {
+        kind: 2;
+        title: Tr.t("Root stopped", "Установка root остановлена", "Root 安装已停止", "Root 安裝已停止");
+        text: root.message;
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 12px;
+        FilledButton {
+            enabled: root.state != 1 && root.firmware >= 0;
+            icon: @image-url("../icons/lock_open.svg");
+            text: root.state == 1 ? Tr.t("Rooting…", "Устанавливаю…", "正在安装…", "正在安裝…") : Tr.t("Patch and flash", "Пропатчить и прошить", "修补并刷入", "修補並刷入");
+            clicked => {
+                root.run();
+            }
+        }
+    }
+
+    LogView {
+        vertical-stretch: 1;
+        min-height: 160px;
+        entries: root.log;
+        export-status: root.export-status;
+        export-log => {
+            root.export-log();
+        }
     }
 }

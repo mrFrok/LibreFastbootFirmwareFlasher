@@ -100,6 +100,7 @@ fn main() {
             skip_preloader,
             no_rebuild_super,
             custom_rom,
+            ref root,
         }) => {
             // clap requires one of the two (`required_unless_present`).
             let source = match (firmware_dir, source) {
@@ -121,8 +122,24 @@ fn main() {
                 } else {
                     handlers::flash::SuperMode::RebuildWhenEmpty
                 },
+                root.as_deref().and_then(lfff_lib::root::RootFork::from_id),
             )
         }
+
+        Some(Commands::Root {
+            ref firmware_dir,
+            ref fork,
+            ref serial,
+            dry_run,
+            no_manager,
+        }) => handlers::root::run(
+            firmware_dir,
+            // clap allows only the three ids.
+            lfff_lib::root::RootFork::from_id(fork).expect("a fork id clap accepted"),
+            serial.as_deref(),
+            dry_run,
+            no_manager,
+        ),
 
         Some(Commands::FlashPartition {
             ref image,
