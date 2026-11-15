@@ -231,7 +231,7 @@ When the slot being flashed has no partitions (usual on Virtual A/B), super is
 rebuilt from the firmware's layout with `fastboot wipe-super` — groups and
 read-only partitions as from the factory — so system updates keep working.
 `my_company` and `my_preload`, which some firmware leaves out, get empty
-factory images. Turn it off with `--no-rebuild-super` (GUI: Settings → Super
+factory images — on every flash, rebuilt or not, as long as the phone has them. Turn it off with `--no-rebuild-super` (GUI: Settings → Super
 partition).
 
 ### Custom ROMs (at your own risk)

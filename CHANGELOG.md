@@ -15,6 +15,14 @@ Each release's section below becomes its GitHub release notes
   payload.bin, and refuses before flashing anything if the layout cannot
   be built or does not match the ROM's images. Snapdragon and MediaTek.
 
+### Fixes
+
+- `my_company` and `my_preload`, which some firmware leaves out, get their
+  empty factory images on every Snapdragon route, Android 16 included, and
+  whatever they held before: after a custom ROM or another build they kept
+  old contents and the camera did not work (#20). A slot that lacks one the
+  other slot has gets it created.
+
 ## 3.6.0
 
 ### Flashing

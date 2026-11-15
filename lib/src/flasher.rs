@@ -1449,25 +1449,21 @@ fn parse_partition_size(out: &str, name: &str) -> Option<u64> {
 }
 
 /// The stand-ins ([`crate::super_layout::STUB_IMAGES`]) the firmware lacks
-/// whose partition in `target_slot` is there but empty: a rebuild leaves the
-/// other slot's partitions in their groups with nothing in them, and a later
-/// flash into that slot without a rebuild would leave these empty — Android
-/// then fails to mount them and does not boot. One that is not there at all
-/// is left alone: fastbootd would create it outside its group.
-fn empty_stub_slots(
-    getvar_all: &str,
-    super_names: &[String],
-    target_slot: &str,
-    size_of: &dyn Fn(&str) -> Option<u64>,
-) -> Vec<String> {
+/// that the phone has in either slot: written into `target_slot` on every
+/// flash that keeps the layout, as FastbootFirmwareFlasher does. Left empty
+/// (a rebuild's other slot, Neo 5) Android does not boot; left with what was
+/// there before (another build, a custom ROM), the camera fails (#20). One
+/// the phone has in neither slot is left alone: this phone does not use it.
+fn stub_slots(getvar_all: &str, super_names: &[String]) -> Vec<String> {
     let device = logical_partitions(getvar_all);
     crate::super_layout::STUB_IMAGES
         .iter()
         .map(|(n, _)| *n)
         .filter(|n| !super_names.iter().any(|s| s == n))
         .filter(|n| {
-            let name = format!("{n}_{target_slot}");
-            device.contains(&name) && size_of(&name) == Some(0)
+            ["a", "b"]
+                .iter()
+                .any(|s| device.contains(&format!("{n}_{s}")))
         })
         .map(str::to_string)
         .collect()
@@ -2081,15 +2077,10 @@ pub fn run_flash_session_with_log(
                             "Slot {} has its partitions: super is kept, resized in place",
                             target.to_uppercase()
                         ));
-                        let size_of = |name: &str| {
-                            let key = format!("partition-size:{name}");
-                            let (_, so, se) = fastboot_cmd_serial(serial, &["getvar", &key], 10);
-                            parse_partition_size(&format!("{so}\n{se}"), name)
-                        };
-                        let fill = empty_stub_slots(&getvar_all, &super_names, target, &size_of);
+                        let fill = stub_slots(&getvar_all, &super_names);
                         if !fill.is_empty() {
                             on_log(format!(
-                                "Empty in slot {} and not in the firmware, written as empty factory images: {}",
+                                "Not in the firmware, written into slot {} as empty factory images: {}",
                                 target.to_uppercase(),
                                 fill.join(", ")
                             ));
@@ -2098,12 +2089,45 @@ pub fn run_flash_session_with_log(
                     }
                     Err(e) => {
                         on_log(format!("Super is not rebuilt: {e}"));
-                        (None, Vec::new())
+                        let fill = stub_slots(&getvar_all, &super_names);
+                        if !fill.is_empty() {
+                            on_log(format!(
+                                "Not in the firmware, written into slot {} as empty factory images: {}",
+                                target.to_uppercase(),
+                                fill.join(", ")
+                            ));
+                        }
+                        (None, fill)
                     }
                 }
             }
         } else {
-            (None, Vec::new())
+            // The layout is kept: the stand-ins the firmware lacks still go
+            // into the slot being flashed.
+            let super_names: Vec<String> = fastbootd_images
+                .keys()
+                .filter(|k| is_super_partition(k))
+                .map(|k| k.to_string())
+                .collect();
+            let fill = if super_names.is_empty() {
+                Vec::new()
+            } else {
+                let (_, out, err) = fastboot_cmd_serial(serial, &["getvar", "all"], 30);
+                stub_slots(&format!("{out}\n{err}"), &super_names)
+            };
+            if !fill.is_empty() {
+                let target = if modem_fastbootd {
+                    other_slot(&active_slot)
+                } else {
+                    active_slot.as_str()
+                };
+                on_log(format!(
+                    "Not in the firmware, written into slot {} as empty factory images: {}",
+                    target.to_uppercase(),
+                    fill.join(", ")
+                ));
+            }
+            (None, fill)
         };
         // The stand-ins, as files fastboot can flash; kept until the end.
         let stub_dir = tempfile::tempdir().ok();
@@ -2295,7 +2319,12 @@ pub fn run_flash_session_with_log(
                 }
             } else {
                 on_log("Preparing super partition...".into());
-                let super_names: Vec<String> = super_imgs.keys().map(|k| k.to_string()).collect();
+                // The stand-ins too: one missing from this slot is created.
+                let super_names: Vec<String> = super_imgs
+                    .keys()
+                    .map(|k| k.to_string())
+                    .chain(fill.iter().cloned())
+                    .collect();
                 session.outside_group =
                     prepare_super_with_log(serial, &super_names, &system_slot, &|msg| on_log(msg));
             }
@@ -2610,31 +2639,37 @@ mod tests {
         assert!(err.contains("size of super"), "{err}");
     }
 
-    // After a rebuild into B, slot A holds empty placeholders. The next
-    // flash into A keeps the layout, and must fill the two the firmware
-    // lacks — empty, Neo 5 did not boot.
+    // Kept layout: the stand-ins the firmware lacks go in whenever the
+    // phone has them — empty after a rebuild (Neo 5), or left over from
+    // another build (#20, camera broken).
     #[test]
-    fn empty_placeholders_get_stubs_and_nothing_else_does() {
+    fn stand_ins_go_where_the_phone_has_them() {
         let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
         device.extend(slot(&["my_company", "my_preload"], "_a"));
-        let size_of = |name: &str| match name {
-            "my_company_a" => Some(0),
-            "my_preload_a" => Some(0x55000),
-            _ => None,
-        };
-        let fill = empty_stub_slots(&getvar_all(&device), &firmware(), "a", &size_of);
-        assert_eq!(fill, ["my_company"]);
+        let fill = stub_slots(&getvar_all(&device), &firmware());
+        assert_eq!(fill, ["my_company", "my_preload"]);
 
-        // Not there at all: not created, fastbootd would put it in `default`.
+        // Only in the other slot: still written, created in this one.
+        let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
+        device.push("my_preload_b".into());
+        assert_eq!(
+            stub_slots(&getvar_all(&device), &firmware()),
+            ["my_preload"]
+        );
+
+        // In neither slot: this phone does not use them.
         let device = slot(&FIRMWARE_DYNAMIC, "_a");
-        assert!(empty_stub_slots(&getvar_all(&device), &firmware(), "a", &|_| Some(0)).is_empty());
+        assert!(stub_slots(&getvar_all(&device), &firmware()).is_empty());
 
         // In the firmware: its own image goes there, never a stand-in.
         let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
         device.push("my_company_a".into());
         let mut names = firmware();
         names.push("my_company".into());
-        assert!(empty_stub_slots(&getvar_all(&device), &names, "a", &|_| Some(0)).is_empty());
+        assert_eq!(
+            stub_slots(&getvar_all(&device), &names),
+            Vec::<String>::new()
+        );
     }
 
     // A cancel stops a critical partition only before anything is sent.
