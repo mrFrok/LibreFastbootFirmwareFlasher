@@ -2385,6 +2385,7 @@ pub fn worker(
                 skip_xbl_abl,
                 skip_preloader,
                 skip_partitions,
+                copy_skipped_partitions,
                 custom_rom,
                 root,
                 install_manager,
@@ -2413,7 +2414,7 @@ pub fn worker(
                             continue;
                         }
                     };
-                let keep_images = if modem_in_fastbootd {
+                let keep_images = if modem_in_fastbootd && copy_skipped_partitions {
                     match keep_from_phone(
                         &tx,
                         serial.as_deref(),
@@ -2579,6 +2580,7 @@ pub fn worker(
                     as_mediatek: Some(method == FlashMethod::Mtk),
                     modem_in_fastbootd,
                     keep_images,
+                    skip_without_copy: !copy_skipped_partitions,
                     skip_partitions,
                     rebuild_super: crate::config::load_config().auto_rebuild_super,
                     custom_rom,

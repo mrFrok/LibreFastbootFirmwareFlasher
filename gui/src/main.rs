@@ -288,6 +288,8 @@ enum Cmd {
         skip_preloader: bool,
         /// Comma-separated partitions to leave as they are.
         skip_partitions: String,
+        /// Copy skipped partitions from the active slot before switching slots.
+        copy_skipped_partitions: bool,
         /// Custom ROM: wipe super and rebuild it from the ROM's layout
         /// (`FlashOptions::custom_rom`).
         custom_rom: bool,

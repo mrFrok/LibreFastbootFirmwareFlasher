@@ -3,6 +3,36 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## 3.7.1
+
+### Fixes
+
+- The camera works again after coming back from a custom ROM: `my_company`
+  and `my_preload` are written even when the ROM's super rebuild deleted
+  them (#21). The stock `/vendor/etc/fstab.qcom` mounts `overlay` over
+  `/product/{app,priv-app,lib,lib64}` with `/my_preload` among the lower
+  dirs; without it the mounts fail, `/product/lib64` never sees the OPlus
+  libraries in `/my_product/lib64`, and the camera cannot load
+  `libCombineLutJni.so`. Before, the stand-ins were written only where the
+  phone already listed the partitions, which is exactly what a ROM's
+  rebuild removes. OxygenOS/ColorOS/realme UI firmware is recognised by its
+  `my_*` partitions.
+- The stand-ins also go into the other slot (about 700 KB together): the
+  next system update switches to that slot and its payload does not carry
+  them, so leaving it without `my_preload` would bring the same camera
+  failure back after the update.
+
+### Interface
+
+- The install's "Don't install" list is always visible, and ticking a
+  partition no longer needs root: the partition is simply left alone. When
+  the install switches slots, copying the current images there — the safe
+  way — is its own checkbox, marked as needing root for Shell; without it,
+  the target slot keeps its old copies, and the log says so before anything
+  is written. Before, ticking a partition with no root stopped the install
+  after the phone had already left Android. Dynamic partitions still cannot
+  be skipped when slots switch.
+
 ## 3.7.0
 
 ### Root

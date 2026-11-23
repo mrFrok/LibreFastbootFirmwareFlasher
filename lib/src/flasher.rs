@@ -1066,6 +1066,58 @@ pub fn prepare_super_with_log(
     outside_group
 }
 
+/// Make the stand-in partitions flashable in `slot`: create the ones that are
+/// not there at all. The flash deletes the other slot's copies to free space,
+/// and the next system update fills that slot from its own payload, which has
+/// no `my_company`/`my_preload` — so they are put back there too, or the fstab
+/// overlays over `/product/lib64` fail once the phone switches (#21).
+/// fastbootd can only create a partition in group `default`; the caller logs
+/// that. Returns the names ready to flash; one the device would not answer
+/// for is left out rather than flashed blindly.
+fn prepare_stand_in_slot(
+    serial: Option<&str>,
+    names: &[&str],
+    slot: &str,
+    on_log: &dyn Fn(String),
+) -> Vec<String> {
+    let mut base_args: Vec<String> = vec!["fastboot".into()];
+    if let Some(s) = serial {
+        base_args.push("-s".into());
+        base_args.push(s.into());
+    }
+    let mut ready = Vec::new();
+    for base in names {
+        let name = format!("{base}_{slot}");
+        match is_logical(&base_args, &name) {
+            Some(true) => ready.push((*base).to_string()),
+            Some(false) => {
+                let mut cmd = base_args.clone();
+                cmd.push("create-logical-partition".into());
+                cmd.push(name.clone());
+                cmd.push("0".into());
+                let refs: Vec<&str> = cmd.iter().map(|s| s.as_str()).collect();
+                let r = run_cmd(&refs, 15);
+                if r.code == 0 {
+                    on_log(format!(
+                        "Created {name} (fastbootd puts it in group default)"
+                    ));
+                    ready.push((*base).to_string());
+                } else {
+                    on_log(format!(
+                        "WARNING: could not create {name}: {}",
+                        r.stderr.trim()
+                    ));
+                }
+            }
+            None => on_log(format!(
+                "WARNING: could not ask the device about {name}; it was not written to slot {}",
+                slot.to_uppercase()
+            )),
+        }
+    }
+    ready
+}
+
 // ---------------------------------------------------------------------------
 // Image collection
 // ---------------------------------------------------------------------------
@@ -1385,6 +1437,9 @@ pub struct FlashOptions {
     /// written to the new slot, so "don't flash" still means "keep what the
     /// phone has" (a rooted init_boot, a custom recovery) after the switch.
     pub keep_images: HashMap<String, PathBuf>,
+    /// Leave excluded partitions untouched even when switching slots.
+    /// Otherwise all exclusions must have an image copied from the phone.
+    pub skip_without_copy: bool,
     /// With `modem_in_fastbootd`: when the slot switched to has none of
     /// its dynamic partitions, rebuild super from the firmware's layout
     /// (`fastboot wipe-super`) instead of letting fastbootd recreate them in
@@ -1479,21 +1534,27 @@ fn parse_partition_size(out: &str, name: &str) -> Option<u64> {
 }
 
 /// The stand-ins ([`crate::super_layout::STUB_IMAGES`]) the firmware lacks
-/// that the phone has in either slot: written into `target_slot` on every
-/// flash that keeps the layout, as FastbootFirmwareFlasher does. Left empty
-/// (a rebuild's other slot, Neo 5) Android does not boot; left with what was
-/// there before (another build, a custom ROM), the camera fails (#20). One
-/// the phone has in neither slot is left alone: this phone does not use it.
+/// that the phone has in either slot, and — for an OPlus firmware, whose
+/// factory layout always has them — that it has lost: a custom ROM rebuilds
+/// super without `my_company` and `my_preload`, and the `overlay` mounts over
+/// `/product/lib64` then fail, taking the camera with them (#21). Written
+/// into `target_slot` on every flash that keeps the layout, as
+/// FastbootFirmwareFlasher does. Left empty (a rebuild's other slot, Neo 5)
+/// Android does not boot; left with what was there before (another build, a
+/// custom ROM), the camera fails (#20). One the phone has in neither slot
+/// and its firmware does not know is left alone: this phone does not use it.
 fn stub_slots(getvar_all: &str, super_names: &[String]) -> Vec<String> {
     let device = logical_partitions(getvar_all);
+    let oplus = crate::super_layout::is_oplus_firmware(super_names);
     crate::super_layout::STUB_IMAGES
         .iter()
         .map(|(n, _)| *n)
         .filter(|n| !super_names.iter().any(|s| s == n))
         .filter(|n| {
-            ["a", "b"]
-                .iter()
-                .any(|s| device.contains(&format!("{n}_{s}")))
+            oplus
+                || ["a", "b"]
+                    .iter()
+                    .any(|s| device.contains(&format!("{n}_{s}")))
         })
         .map(str::to_string)
         .collect()
@@ -1535,10 +1596,27 @@ pub fn super_rebuild_plan(
     let size = super_size;
 
     let plain = SuperLayout::from_payload_metadata(json, size)?;
-    let (stubs, others): (Vec<String>, Vec<String>) = plain
-        .missing_from(&device)
-        .into_iter()
-        .partition(|n| stub_image(n).is_some());
+    let missing = plain.missing_from(&device);
+    let (mut stubs, others): (Vec<String>, Vec<String>) =
+        missing.into_iter().partition(|n| stub_image(n).is_some());
+    // An OPlus factory layout has these even when the phone lost them: a
+    // custom ROM's super rebuild removed them, and full OTA packages do not
+    // carry them, so a flash that only puts back what the payload has leaves
+    // /my_preload missing — the overlays over /product/lib64 then fail to
+    // mount and the camera cannot load its libraries (#21).
+    if crate::super_layout::is_oplus_firmware(super_names) {
+        for (name, _) in crate::super_layout::STUB_IMAGES {
+            let in_layout = plain.partitions.iter().any(|p| {
+                p.name
+                    .strip_suffix("_a")
+                    .or_else(|| p.name.strip_suffix("_b"))
+                    == Some(name)
+            });
+            if !in_layout && !stubs.iter().any(|s| s == name) {
+                stubs.push(name.to_string());
+            }
+        }
+    }
     let (dropped, others): (Vec<String>, Vec<String>) = others
         .into_iter()
         .partition(|n| DROPPABLE.contains(&n.as_str()));
@@ -1899,9 +1977,8 @@ pub fn run_flash_session_with_log(
         on_log("Snapdragon method, bootloader route — modem goes through bootloader mode".into());
     }
 
-    // After the switch the phone boots the other slot, where a partition
-    // that is not flashed holds whatever old copy was there. So everything
-    // the user held back must come from the phone, or nothing is flashed.
+    // After the switch the phone uses the target slot's old images unless
+    // the exclusions are copied over.
     let held = held_back(&skipped);
     let kept: Vec<(&str, &PathBuf)> = if modem_fastbootd {
         let dynamic: Vec<&str> = held
@@ -1918,27 +1995,37 @@ pub fn run_flash_session_with_log(
             session.end_reason = Some("SkippedDynamic".into());
             return session;
         }
-        let unsaved: Vec<&str> = held
-            .iter()
-            .copied()
-            .filter(|n| !options.keep_images.contains_key(*n))
-            .collect();
-        if !unsaved.is_empty() {
-            on_log(format!(
-                "Refusing to flash: with the modem in fastbootd the phone switches to the other slot, and {} were not copied from the phone — the new slot would keep its old copies. Start the install from Android with root for Shell, so they can be copied.",
-                unsaved.join(", ")
-            ));
-            session.aborted = true;
-            session.end_reason = Some("SkippedNotSaved".into());
-            return session;
+        if options.skip_without_copy {
+            if !held.is_empty() {
+                on_log(format!(
+                    "WARNING: not flashing {} in either slot. Booting the other slot will use the old copies there.",
+                    held.join(", ")
+                ));
+            }
+            Vec::new()
+        } else {
+            let unsaved: Vec<&str> = held
+                .iter()
+                .copied()
+                .filter(|n| !options.keep_images.contains_key(*n))
+                .collect();
+            if !unsaved.is_empty() {
+                on_log(format!(
+                    "Refusing to flash: with the modem in fastbootd the phone switches to the other slot, and {} were not copied from the phone — the new slot would keep its old copies. Start the install from Android with root for Shell, so they can be copied.",
+                    unsaved.join(", ")
+                ));
+                session.aborted = true;
+                session.end_reason = Some("SkippedNotSaved".into());
+                return session;
+            }
+            let mut kept: Vec<(&str, &PathBuf)> = held
+                .iter()
+                .filter_map(|n| options.keep_images.get_key_value(*n))
+                .map(|(k, v)| (k.as_str(), v))
+                .collect();
+            kept.sort_by_key(|(k, _)| *k);
+            kept
         }
-        let mut kept: Vec<(&str, &PathBuf)> = held
-            .iter()
-            .filter_map(|n| options.keep_images.get_key_value(*n))
-            .map(|(k, v)| (k.as_str(), v))
-            .collect();
-        kept.sort_by_key(|(k, _)| *k);
-        kept
     } else {
         Vec::new()
     };
@@ -2240,7 +2327,7 @@ pub fn run_flash_session_with_log(
         let total_ops = non_super_imgs.len() * 2
             + kept.len()
             + modem_imgs.len()
-            + stub_files.len()
+            + stub_files.len() * 2
             + super_imgs.len();
         let flash_start = std::time::Instant::now();
         let mut done_ops = 0usize;
@@ -2401,6 +2488,50 @@ pub fn run_flash_session_with_log(
                         session.aborted = true;
                         session.end_reason = Some("UserAborted".into());
                         return session;
+                    }
+                }
+
+                // And into the slot the next system update switches to. Its
+                // payload does not carry them, so a slot left without them
+                // would boot with the camera broken (#21).
+                let next = other_slot(&system_slot);
+                let names: Vec<&str> = stubs.iter().map(|(n, _)| *n).collect();
+                let ready = prepare_stand_in_slot(serial, &names, next, on_log);
+                let next_stubs: Vec<(&str, &PathBuf)> = stubs
+                    .iter()
+                    .filter(|(n, _)| ready.iter().any(|r| r == n))
+                    .copied()
+                    .collect();
+                if !next_stubs.is_empty() {
+                    on_log(format!(
+                        "Writing the empty factory images into slot {} too ...",
+                        next.to_uppercase()
+                    ));
+                    match flash_batch_with_log(
+                        &next_stubs,
+                        next,
+                        serial,
+                        total_ops,
+                        &mut done_ops,
+                        &cancel,
+                        &mut session,
+                        on_log,
+                        on_progress,
+                        on_failure,
+                    ) {
+                        BatchOutcome::Done => {}
+                        BatchOutcome::Cancelled => {
+                            warn_switched_slot(switched.as_deref(), on_log);
+                            session.aborted = true;
+                            session.end_reason = Some("Cancelled".into());
+                            return session;
+                        }
+                        BatchOutcome::Aborted => {
+                            warn_switched_slot(switched.as_deref(), on_log);
+                            session.aborted = true;
+                            session.end_reason = Some("UserAborted".into());
+                            return session;
+                        }
                     }
                 }
             }
@@ -2698,22 +2829,53 @@ mod tests {
         device.push("my_preload_b".into());
         assert_eq!(
             stub_slots(&getvar_all(&device), &firmware()),
-            ["my_preload"]
+            ["my_company", "my_preload"]
         );
-
-        // In neither slot: this phone does not use them.
-        let device = slot(&FIRMWARE_DYNAMIC, "_a");
-        assert!(stub_slots(&getvar_all(&device), &firmware()).is_empty());
 
         // In the firmware: its own image goes there, never a stand-in.
         let mut device = slot(&FIRMWARE_DYNAMIC, "_a");
         device.push("my_company_a".into());
         let mut names = firmware();
         names.push("my_company".into());
+        assert_eq!(stub_slots(&getvar_all(&device), &names), ["my_preload"]);
+        names.push("my_preload".into());
         assert_eq!(
             stub_slots(&getvar_all(&device), &names),
             Vec::<String>::new()
         );
+    }
+
+    // A custom ROM rebuilt super without the OPlus factory partitions, so the
+    // phone lists neither. The firmware is still an OPlus one and its fstab
+    // mounts /product over /my_preload: leaving it missing kills the camera
+    // and the next OTA (#21).
+    #[test]
+    fn a_phone_that_lost_its_factory_partitions_gets_them_back() {
+        let device = slot(&FIRMWARE_DYNAMIC, "_a");
+        assert_eq!(
+            stub_slots(&getvar_all(&device), &firmware()),
+            ["my_company", "my_preload"]
+        );
+
+        let rebuild =
+            super_rebuild_plan(&getvar_all(&device), SUPER, Some(PAYLOAD), &firmware(), "b")
+                .unwrap()
+                .unwrap();
+        assert_eq!(rebuild.stubs, ["my_company", "my_preload"]);
+        let parsed = crate::super_layout::parse_image(&rebuild.image).unwrap();
+        assert!(parsed.partitions.iter().any(|p| p.name == "my_preload_b"));
+    }
+
+    // Not an OPlus firmware and the phone has neither: creating them there
+    // would put partitions on a phone that does not use them.
+    #[test]
+    fn a_phone_without_oplus_partitions_is_left_alone() {
+        let plain: Vec<String> = ["system", "vendor", "product", "odm"]
+            .iter()
+            .map(|n| n.to_string())
+            .collect();
+        let device = slot(&["system", "vendor", "product", "odm"], "_a");
+        assert!(stub_slots(&getvar_all(&device), &plain).is_empty());
     }
 
     // A cancel stops a critical partition only before anything is sent.
@@ -2897,6 +3059,61 @@ mod tests {
             ),
         ];
         assert_eq!(held_back(&skipped), ["init_boot", "xbl"]);
+    }
+
+    #[test]
+    fn excluded_partitions_are_copied_only_in_copy_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["modem", "system", "init_boot", "abl"] {
+            fs::write(dir.path().join(format!("{name}.img")), []).unwrap();
+        }
+        let source = FirmwareSource::Extracted(dir.path().into());
+        let run = |options: &FlashOptions| {
+            let log = std::cell::RefCell::new(Vec::new());
+            let session = run_flash_session_with_log(
+                &source,
+                None,
+                options,
+                Default::default(),
+                &|line| log.borrow_mut().push(line),
+                &|_| {},
+                &|_, _, _| unreachable!(),
+            );
+            (session, log.into_inner().join("\n"))
+        };
+        let mut options = FlashOptions {
+            dry_run: true,
+            as_mediatek: Some(false),
+            modem_in_fastbootd: true,
+            skip_xbl_abl: true,
+            skip_partitions: "init_boot".into(),
+            skip_without_copy: true,
+            ..Default::default()
+        };
+        let (session, log) = run(&options);
+        assert_eq!(session.end_reason.as_deref(), Some("DryRun"));
+        assert!(log.contains("would flash: system"));
+        assert!(!log.contains("would flash: init_boot"));
+        assert!(!log.contains("would flash: abl"));
+
+        options.skip_without_copy = false;
+        let (session, _) = run(&options);
+        assert_eq!(session.end_reason.as_deref(), Some("SkippedNotSaved"));
+
+        options.keep_images = HashMap::from([
+            ("abl".into(), dir.path().join("saved-abl")),
+            ("init_boot".into(), dir.path().join("saved-init_boot")),
+        ]);
+        let (session, log) = run(&options);
+        assert_eq!(session.end_reason.as_deref(), Some("DryRun"));
+        assert!(log.contains("would flash: init_boot (copied from the phone"));
+        assert!(log.contains("would flash: abl (copied from the phone"));
+
+        options.skip_without_copy = true;
+        options.skip_partitions = "init_boot,system".into();
+        fs::write(dir.path().join("vendor.img"), []).unwrap();
+        let (session, _) = run(&options);
+        assert_eq!(session.end_reason.as_deref(), Some("SkippedDynamic"));
     }
 
     #[test]

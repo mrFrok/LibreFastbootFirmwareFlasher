@@ -438,6 +438,7 @@ pub fn run(
         // Nothing is copied from the phone here; with the modem in fastbootd
         // the session refuses a skipped partition instead.
         keep_images: Default::default(),
+        skip_without_copy: false,
         skip_partitions: String::new(),
         rebuild_super: super_mode != SuperMode::Keep,
         custom_rom,

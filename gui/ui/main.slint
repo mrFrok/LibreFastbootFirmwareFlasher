@@ -180,6 +180,7 @@ export component MainWindow inherits MaterialWindow {
     in-out property <bool> skip-recovery;
     in-out property <bool> skip-vendor-boot;
     in-out property <string> skip-other;
+    in-out property <bool> copy-skipped-partitions;
     // The partitions chosen on the summary sheet, comma-separated.
     out property <string> install-skips: (root.skip-boot ? "boot," : "") + (root.skip-init-boot ? "init_boot," : "")
         + (root.skip-recovery ? "recovery," : "") + (root.skip-vendor-boot ? "vendor_boot," : "") + root.skip-other;
@@ -220,6 +221,7 @@ export component MainWindow inherits MaterialWindow {
         root.skip-recovery = false;
         root.skip-vendor-boot = false;
         root.skip-other = "";
+        root.copy-skipped-partitions = false;
         // Wiping super and root are chosen anew for every install.
         root.custom-rom = false;
         root.root-fork = -1;
@@ -1119,6 +1121,7 @@ export component MainWindow inherits MaterialWindow {
         skip-recovery <=> root.skip-recovery;
         skip-vendor-boot <=> root.skip-vendor-boot;
         skip-other <=> root.skip-other;
+        copy-skipped-partitions <=> root.copy-skipped-partitions;
         cancel => { root.sheet = 0; }
         next => {
             if root.sheet == 3 {

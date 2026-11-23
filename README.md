@@ -221,10 +221,13 @@ slot it is not running from, so the slot is switched first:
 ```
 
 The old slot keeps its old modem. A flash with a modem but no system images is
-refused rather than sent to the bootloader. Partitions you choose not to flash
-(a rooted `init_boot`, say) are copied from the phone's active slot over adb
-as root before the switch and written to the new slot; if they cannot be
-copied, nothing is flashed.
+refused rather than sent to the bootloader. In the GUI install wizard,
+skipped partitions are left untouched by default. If the install switches
+slots, the target slot keeps its old copies, which may not boot with the new
+system. To use the current copies instead, tick **Copy skipped partitions
+from the current slot**. This needs root for ADB Shell on the current system;
+if the copies cannot be read, nothing is flashed. Dynamic partitions cannot
+be skipped when switching slots.
 
 ### The super partition
 
@@ -232,8 +235,11 @@ When the slot being flashed has no partitions (usual on Virtual A/B), super is
 rebuilt from the firmware's layout with `fastboot wipe-super` — groups and
 read-only partitions as from the factory — so system updates keep working.
 `my_company` and `my_preload`, which some firmware leaves out, get empty
-factory images — on every flash, rebuilt or not, as long as the phone has them. Turn it off with `--no-rebuild-super` (GUI: Settings → Super
-partition).
+factory images — on every flash, rebuilt or not, even when a custom ROM's
+super rebuild deleted them, and in both slots: the stock fstab mounts
+`/product/lib64` over `/my_preload`, without it the camera cannot load its
+libraries, and the next system update switches to the other slot. Turn it
+off with `--no-rebuild-super` (GUI: Settings → Super partition).
 
 ### Custom ROMs (at your own risk)
 

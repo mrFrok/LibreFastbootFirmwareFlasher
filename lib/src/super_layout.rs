@@ -70,6 +70,18 @@ pub const STUB_IMAGES: [(&str, &[u8]); 2] = [
 /// which cannot load them, and no fstab mounts the partition.
 pub const DROPPABLE: [&str; 1] = ["system_dlkm_oki"];
 
+/// Whether the firmware is an OPlus one (ColorOS, OxygenOS, realme UI): its
+/// super carries the `my_*` custom images. Their factory layout also has
+/// `my_company` and `my_preload`, which full OTA packages leave out. A
+/// custom ROM's super rebuild deletes both, and then the `overlay` mounts in
+/// `/vendor/etc/fstab.qcom` over `/product/{app,priv-app,lib,lib64}` fail
+/// with ENOENT — `/product/lib64` never sees the OPlus libraries, and the
+/// camera cannot load `libCombineLutJni.so` (#21). So such a firmware gets
+/// its stand-ins even when the phone no longer has the partitions.
+pub fn is_oplus_firmware(super_names: &[String]) -> bool {
+    super_names.iter().any(|n| n.starts_with("my_"))
+}
+
 /// The stand-in image for `name` (no slot suffix), if it has one.
 pub fn stub_image(name: &str) -> Option<&'static [u8]> {
     STUB_IMAGES

@@ -110,6 +110,9 @@ export component ConfirmSheet inherits Rectangle {
     in property <bool> route-needed;
     // 0 not chosen, 1 the modem through the bootloader, 2 all in fastbootd.
     in-out property <int> route-choice;
+    private property <bool> switches-slot: root.chip-name == "Snapdragon" && !root.modem-bootloader
+        && (root.route-needed ? root.route-choice == 2 : root.fw-android >= 17);
+    in-out property <bool> copy-skipped-partitions;
     // The firmware's super layout, one line per group; empty without one.
     in property <string> super-plan;
     // Custom ROM, at the user's own risk: super is always wiped and rebuilt
@@ -291,7 +294,7 @@ export component ConfirmSheet inherits Rectangle {
                             Text {
                                 width: 446px;
                                 text: root.kind == 2 ? Tr.t("Skip the preloader", "Пропустить preloader", "跳过 preloader", "跳過 preloader")
-                                    : Tr.t("Don't install the bootloader files (xbl, abl)", "Не прошивать файлы загрузчика (xbl, abl)", "不刷写引导程序文件（xbl、abl）", "不刷寫引導程式檔案（xbl、abl）");
+                                    : Tr.t("Skip the firmware's bootloader files (xbl, abl)", "Пропустить файлы загрузчика из прошивки (xbl, abl)", "跳过固件中的引导程序文件（xbl、abl）", "跳過韌體中的引導程式檔案（xbl、abl）");
                                 font-size: 14px;
                                 font-weight: 500;
                                 color: MaterialPalette.on-surface;
@@ -445,10 +448,9 @@ export component ConfirmSheet inherits Rectangle {
                 }
 
                 if root.kind == 3: Text {
-                    text: Tr.t("Don't install (the phone keeps its own), e.g. to keep root or a custom recovery:", "Не прошивать (останется то, что на смартфоне) — например, чтобы сохранить root или свой recovery:", "不刷写（保留手机上现有的），例如为了保留 root 或第三方 recovery：", "不刷寫（保留手機上現有的），例如為了保留 root 或第三方 recovery：");
+                    text: Tr.t("Partitions to skip:", "Какие разделы не прошивать:", "要跳过的分区：", "要跳過的分割區：");
                     font-size: 13px;
                     color: MaterialPalette.on-surface-variant;
-                    wrap: word-wrap;
                 }
 
                 if root.kind == 3: HorizontalLayout {
@@ -497,6 +499,34 @@ export component ConfirmSheet inherits Rectangle {
                             color: MaterialPalette.on-surface;
                             vertical-alignment: center;
                             single-line: true;
+                        }
+                    }
+                }
+
+                if root.kind == 3 && root.switches-slot: HorizontalLayout {
+                    spacing: 4px;
+                    CheckBox {
+                        check-state: root.copy-skipped-partitions ? CheckState.checked : CheckState.unchecked;
+                        checked-state-changed(s) => {
+                            root.copy-skipped-partitions = s == CheckState.checked;
+                        }
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 2px;
+                        Text {
+                            text: Tr.t("Copy skipped partitions from the current slot (requires root for Shell)", "Сохранить пропущенные разделы с текущего слота (нужен root для Shell)", "从当前槽位复制跳过的分区（需要 Shell root 权限）", "從目前槽位複製跳過的分割區（需要 Shell root 權限）");
+                            font-size: 13px;
+                            color: MaterialPalette.on-surface;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            text: Tr.t("Without copying, the target slot keeps its old images and might not boot.", "Без копирования в целевом слоте останутся старые образы. Смартфон может не загрузиться.", "不复制时，目标槽位保留旧镜像，手机可能无法启动。", "不複製時，目標槽位保留舊映像，手機可能無法開機。");
+                            font-size: 12px;
+                            color: StatusColors.warning;
+                            wrap: word-wrap;
                         }
                     }
                 }

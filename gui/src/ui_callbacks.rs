@@ -1691,6 +1691,7 @@ fn register_install_callbacks(
                 skip_xbl_abl: ui.get_skip_xbl_abl(),
                 skip_preloader: ui.get_skip_preloader(),
                 skip_partitions: ui.get_install_skips().to_string(),
+                copy_skipped_partitions: ui.get_copy_skipped_partitions(),
                 custom_rom: ui.get_custom_rom(),
                 root: fork_of(ui.get_root_fork()),
                 install_manager: ui.get_root_manager(),
