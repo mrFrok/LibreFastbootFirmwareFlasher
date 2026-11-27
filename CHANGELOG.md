@@ -3,7 +3,7 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
-## Unreleased
+## 3.7.2
 
 ### Builds
 

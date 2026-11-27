@@ -3114,7 +3114,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-cli"
-version = "3.7.1"
+version = "3.7.2"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -3132,7 +3132,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-gui"
-version = "3.7.1"
+version = "3.7.2"
 dependencies = [
  "arboard",
  "chrono",
@@ -3152,7 +3152,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-lib"
-version = "3.7.1"
+version = "3.7.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3174,7 +3174,7 @@ dependencies = [
 
 [[package]]
 name = "lfff-ota"
-version = "3.7.1"
+version = "3.7.2"
 dependencies = [
  "aes",
  "anyhow",
