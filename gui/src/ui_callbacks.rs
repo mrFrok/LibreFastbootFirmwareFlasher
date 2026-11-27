@@ -1413,7 +1413,9 @@ pub fn register_callbacks(
         let dir = lfff_lib::session_log::log_dir();
         let _ = std::fs::create_dir_all(&dir);
         std::thread::spawn(move || {
-            #[cfg(target_os = "linux")]
+            // Every desktop Unix has xdg-open somewhere; a missing one is
+            // already handled by ignoring the spawn error.
+            #[cfg(all(unix, not(target_os = "macos")))]
             {
                 let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
             }
@@ -1427,7 +1429,7 @@ pub fn register_callbacks(
     ui.on_open_url(move |url| {
         let u = url.to_string();
         std::thread::spawn(move || {
-            #[cfg(target_os = "linux")]
+            #[cfg(all(unix, not(target_os = "macos")))]
             {
                 let _ = std::process::Command::new("xdg-open").arg(&u).spawn();
             }
@@ -1470,7 +1472,7 @@ pub fn register_callbacks(
                 return;
             }
             std::thread::spawn(move || {
-                #[cfg(target_os = "linux")]
+                #[cfg(all(unix, not(target_os = "macos")))]
                 {
                     let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
                 }
