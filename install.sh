@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # LFFF installer — downloads prebuilt binaries from GitHub Releases
-# Works on any Linux (including immutable distros) and macOS
+# Works on any Linux (including immutable distros), macOS, FreeBSD and OpenBSD
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
@@ -50,9 +50,11 @@ detect_platform() {
     arch="$(uname -m)"
 
     case "$os" in
-        linux*)  os="linux" ;;
-        darwin*) os="macos" ;;
-        *)       err "Unsupported OS: $os" ;;
+        linux*)   os="linux" ;;
+        darwin*)  os="macos" ;;
+        freebsd*) os="freebsd" ;;
+        openbsd*) os="openbsd" ;;
+        *)        err "Unsupported OS: $os" ;;
     esac
 
     case "$arch" in
@@ -87,12 +89,15 @@ fetch() {
     fi
 }
 
-# sha256 of a file: sha256sum on Linux and Termux, shasum on macOS.
+# sha256 of a file: sha256sum on Linux and Termux, shasum on macOS, and the
+# base-system sha256 (libmd on FreeBSD, MD5(1) on OpenBSD) on the BSDs.
 sha256_of() {
     if command -v sha256sum &>/dev/null; then
         sha256sum "$1" | cut -d' ' -f1
     elif command -v shasum &>/dev/null; then
         shasum -a 256 "$1" | cut -d' ' -f1
+    elif command -v sha256 &>/dev/null; then
+        sha256 -q "$1"
     fi
 }
 
@@ -157,8 +162,8 @@ uninstall() {
         remove_file "$dir/lfff-gui"
     done
 
-    # Remove desktop entry and icon on Linux
-    if [ "$(uname -s)" = "Linux" ]; then
+    # Remove desktop entry and icon on Linux and FreeBSD
+    if [ "$(uname -s)" = "Linux" ] || [ "$(uname -s)" = "FreeBSD" ]; then
         remove_file "$HOME/.local/share/applications/lfff-gui.desktop"
         remove_file "$HOME/.local/share/icons/hicolor/scalable/apps/lfff-gui.svg"
         command -v update-desktop-database &>/dev/null && \
@@ -181,7 +186,8 @@ install_binary() {
 
     local url="https://github.com/${REPO}/releases/download/${version}/${asset_name}"
     local tmp
-    tmp="$(mktemp -d)"
+    # FreeBSD's mktemp has no GNU-style default template.
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/lfff.XXXXXX")"
     trap 'rm -rf "$tmp"; trap - RETURN' RETURN
 
     info "Downloading $asset_name..."
@@ -301,8 +307,8 @@ main() {
     if $INSTALL_GUI; then
         install_binary "lfff-gui" "$gui_asset" "$VERSION" "$install_dir"
 
-        # Install .desktop entry and icon on Linux
-        if [ "$(uname -s)" = "Linux" ]; then
+        # Install .desktop entry and icon on Linux and FreeBSD (same XDG paths).
+        if [ "$(uname -s)" = "Linux" ] || [ "$(uname -s)" = "FreeBSD" ]; then
             local desktop_dir="$HOME/.local/share/applications"
             local icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
             mkdir -p "$desktop_dir" "$icon_dir"
@@ -319,10 +325,13 @@ main() {
                 wget -qO "$icon_dir/lfff-gui.svg" "$raw/lfff-gui.svg" || true
             fi
 
-            # Replace Exec= with absolute path
+            # Replace Exec= with absolute path. sed -i takes a backup suffix
+            # on the BSDs, so write through a temporary file instead.
             local gui_bin
             gui_bin="$(command -v lfff-gui 2>/dev/null || echo "$install_dir/lfff-gui")"
-            sed -i "s|^Exec=.*|Exec=$gui_bin|" "$desktop_dir/lfff-gui.desktop" 2>/dev/null || true
+            sed "s|^Exec=.*|Exec=$gui_bin|" "$desktop_dir/lfff-gui.desktop" \
+                > "$desktop_dir/lfff-gui.desktop.new" 2>/dev/null &&
+                mv "$desktop_dir/lfff-gui.desktop.new" "$desktop_dir/lfff-gui.desktop" || true
 
             command -v gtk-update-icon-cache &>/dev/null && \
                 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true

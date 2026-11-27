@@ -22,13 +22,16 @@ export component StepRow inherits Rectangle {
         : root.state == 1 || root.state == 4 ? MaterialPalette.outline-variant
         : transparent;
     opacity: root.state == 0 ? 0.45 : 1.0;
+
     VerticalLayout {
         padding-left: 16px;
         padding-right: 16px;
         padding-top: 12px;
         padding-bottom: 12px;
+
         HorizontalLayout {
             spacing: 14px;
+
             Rectangle {
                 width: 30px;
                 height: 30px;
@@ -149,6 +152,7 @@ export component ChipCard inherits TouchArea {
     in property <string> text;
     in property <bool> selected;
     min-height: 92px;
+
     Rectangle {
         border-radius: 14px;
         background: root.selected ? MaterialPalette.secondary-container
@@ -156,6 +160,7 @@ export component ChipCard inherits TouchArea {
             : MaterialPalette.surface-container-low;
         border-width: root.selected ? 2px : 1px;
         border-color: root.selected ? MaterialPalette.primary : MaterialPalette.outline-variant;
+
         Rectangle {
             x: 14px;
             y: 14px;
@@ -163,6 +168,7 @@ export component ChipCard inherits TouchArea {
             height: 36px;
             border-radius: 10px;
             background: MaterialPalette.tertiary-container;
+
             Image {
                 source: @image-url("../icons/memory.svg");
                 width: 20px;
@@ -177,6 +183,7 @@ export component ChipCard inherits TouchArea {
             padding: 14px;
             padding-left: 62px;
             spacing: 4px;
+
             Text {
                 text: root.title;
                 font-size: 15px;
@@ -213,9 +220,11 @@ export component Segmented inherits Rectangle {
         clicked => {
             root.selected(i);
         }
+
         Rectangle {
             background: i == root.current ? MaterialPalette.secondary-container
                 : parent.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent;
+
             Text {
                 text: item;
                 font-size: 13px;
@@ -238,6 +247,7 @@ export component FieldRow inherits HorizontalLayout {
     in property <length> label-width: 180px;
     spacing: 16px;
     min-height: 44px;
+
     Text {
         width: root.label-width;
         text: root.label;
@@ -259,6 +269,7 @@ export component Section inherits Rectangle {
     in property <string> title;
     border-radius: 16px;
     background: MaterialPalette.surface-container;
+
     VerticalLayout {
         padding: 16px;
         padding-top: 12px;
@@ -289,6 +300,7 @@ export component AppNav inherits Rectangle {
     in property <string> version: "2.10.0";
     width: 256px;
     background: MaterialPalette.surface-container-low;
+
     VerticalLayout {
         padding-left: 12px;
         padding-right: 12px;
@@ -300,6 +312,7 @@ export component AppNav inherits Rectangle {
             HorizontalLayout {
                 padding-left: 8px;
                 spacing: 12px;
+
                 Image {
                     source: @image-url("../icons/logo_icon.svg");
                     width: 28px;
@@ -311,6 +324,7 @@ export component AppNav inherits Rectangle {
                     spacing: 0px;
                     horizontal-stretch: 1;
                     alignment: center;
+
                     Text {
                         text: "Libre Fastboot";
                         font-size: 13px;
@@ -351,6 +365,7 @@ export component AppNav inherits Rectangle {
             padding-left: 12px;
             padding-top: 20px;
             padding-bottom: 6px;
+
             Text {
                 text: Tr.t("Pinned", "Закреплённые", "已固定", "已釘選");
                 font-size: 12px;
@@ -414,6 +429,7 @@ export component AppNav inherits Rectangle {
         HorizontalLayout {
             padding-left: 12px;
             padding-top: 8px;
+
             Text {
                 text: "v" + root.version;
                 font-size: 12px;
@@ -432,6 +448,7 @@ export component StageRow inherits HorizontalLayout {
     in property <string> detail;
     spacing: 14px;
     min-height: 40px;
+
     Rectangle {
         width: 26px;
         height: 26px;

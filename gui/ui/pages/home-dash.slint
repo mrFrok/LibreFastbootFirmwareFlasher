@@ -16,6 +16,7 @@ component Fact inherits VerticalLayout {
     // Technical values (slot, charge) are set in mono, like a rating plate.
     in property <bool> mono;
     spacing: 4px;
+
     Text {
         text: root.label;
         font-size: 12px;
@@ -35,13 +36,16 @@ export component LinkRow inherits TouchArea {
     in property <image> icon;
     in property <string> text;
     height: 40px;
+
     Rectangle {
         border-radius: 10px;
         background: root.has-hover ? MaterialPalette.surface-container-high : transparent;
+
         HorizontalLayout {
             padding-left: 10px;
             padding-right: 10px;
             spacing: 12px;
+
             Image {
                 source: root.icon;
                 width: 18px;
@@ -91,8 +95,10 @@ export component HomeDash inherits VerticalLayout {
         : "—";
 
     spacing: 16px;
+
     VerticalLayout {
         spacing: 4px;
+
         Text {
             text: Tr.t("Home", "Главная", "主页", "首頁");
             font-size: 26px;
@@ -113,16 +119,20 @@ export component HomeDash inherits VerticalLayout {
         background: MaterialPalette.surface-container;
         border-width: 1px;
         border-color: root.device.connected ? MaterialPalette.primary.with-alpha(0.5) : MaterialPalette.outline-variant;
+
         VerticalLayout {
             padding: 20px;
             spacing: 16px;
+
             HorizontalLayout {
                 spacing: 16px;
+
                 Rectangle {
                     width: 56px;
                     height: 56px;
                     border-radius: 16px;
                     background: root.device.connected ? MaterialPalette.primary-container : MaterialPalette.surface-container-highest;
+
                     Image {
                         source: @image-url("../icons/smartphone.svg");
                         width: 30px;
@@ -134,6 +144,7 @@ export component HomeDash inherits VerticalLayout {
                 VerticalLayout {
                     alignment: center;
                     spacing: 2px;
+
                     Text {
                         text: root.device.connected ? root.device.name
                             : root.unauthorized ? Tr.t("Allow USB debugging on the phone", "Разрешите отладку по USB на смартфоне", "请在手机上允许 USB 调试", "請在手機上允許 USB 偵錯")
@@ -155,6 +166,7 @@ export component HomeDash inherits VerticalLayout {
 
             if root.device.connected: HorizontalLayout {
                 spacing: 32px;
+
                 Fact {
                     label: Tr.t("Bootloader", "Загрузчик", "Bootloader", "Bootloader");
                     value: root.device.unlocked == 1 ? Tr.t("unlocked", "разблокирован", "已解锁", "已解鎖")
@@ -183,6 +195,7 @@ export component HomeDash inherits VerticalLayout {
 
             HorizontalLayout {
                 alignment: start;
+
                 FilledButton {
                     icon: @image-url("../icons/flash.svg");
                     text: Tr.t("Install firmware", "Установить прошивку", "安装固件", "安裝韌體");
@@ -197,15 +210,18 @@ export component HomeDash inherits VerticalLayout {
     // ── The app ─────────────────────────────────────────────────────────────
     HorizontalLayout {
         spacing: 16px;
+
         Rectangle {
             horizontal-stretch: 2;
             preferred-width: 100px;
             border-radius: 20px;
             background: root.update-version != "" ? StatusColors.success-container : MaterialPalette.surface-container;
+
             VerticalLayout {
                 padding: 20px;
                 spacing: 8px;
                 alignment: start;
+
                 Text {
                     text: root.update-version != ""
                         ? Tr.t("Update available: ", "Доступно обновление: ", "有可用更新：", "有可用更新：") + root.update-version
@@ -225,6 +241,7 @@ export component HomeDash inherits VerticalLayout {
                 if root.update-version != "": HorizontalLayout {
                     alignment: start;
                     padding-top: 4px;
+
                     FilledButton {
                         text: Tr.t("What's new", "Что нового", "更新内容", "更新內容");
                         clicked => {
@@ -240,8 +257,10 @@ export component HomeDash inherits VerticalLayout {
             preferred-width: 150px;
             border-radius: 20px;
             background: MaterialPalette.surface-container;
+
             VerticalLayout {
                 padding: 12px;
+
                 LinkRow {
                     icon: @image-url("../icons/github.svg");
                     text: "GitHub";

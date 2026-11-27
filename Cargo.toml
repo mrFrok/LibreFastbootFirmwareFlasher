@@ -1,3 +1,12 @@
 [workspace]
 members = ["lib", "ota", "cli", "gui"]
 resolver = "2"
+
+# Fontique (Slint's font stack) enumerates system fonts through Fontconfig on
+# Linux and FreeBSD only; on the other BSDs it finds none and the GUI would
+# draw no text at all. Upstream added NetBSD, OpenBSD and DragonFly in
+# linebender/parley#977, merged 2026-11-23 but not yet in any released
+# fontique. gui/vendor/fontique is fontique 0.12.0 with exactly that commit
+# applied — drop this section once Slint depends on a fontique that has it.
+[patch.crates-io]
+fontique = { path = "gui/vendor/fontique" }

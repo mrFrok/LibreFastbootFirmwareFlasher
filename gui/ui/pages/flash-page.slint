@@ -61,6 +61,7 @@ export component FlashPage {
             ]: TouchArea {
                 horizontal-stretch: 1;
                 clicked => { root.flash-source-mode = item.val; }
+
                 Rectangle {
                     border-radius: 10px;
                     border-width: root.flash-source-mode == item.val ? 2px : 1px;
@@ -83,6 +84,7 @@ export component FlashPage {
                         duration: 200ms;
                         easing: cubic-bezier(0.05, 0.7, 0.1, 1.0);
                     }
+
                     Text {
                         text: item.label;
                         font-size: 13px;
@@ -103,6 +105,7 @@ export component FlashPage {
 
         if root.flash-source-mode == 0: HorizontalLayout {
             spacing: 8px;
+
             PathField {
                 path: root.firmware-path;
                 horizontal-stretch: 1;
@@ -123,8 +126,10 @@ export component FlashPage {
 
         if root.flash-source-mode == 1: VerticalLayout {
             spacing: 8px;
+
             HorizontalLayout {
                 spacing: 8px;
+
                 PathField {
                     path: root.source-dir;
                     horizontal-stretch: 1;
@@ -151,9 +156,11 @@ export component FlashPage {
                 background: MaterialPalette.primary-container;
                 visible: root.source-image-count > 0;
                 opacity: root.source-image-count > 0 ? 1.0 : 0.0;
+
                 HorizontalLayout {
                     padding-left: 12px;
                     padding-right: 12px;
+
                     Text {
                         text: root.badge-text;
                         font-size: 12px;
@@ -176,6 +183,7 @@ export component FlashPage {
 
             HorizontalLayout {
                 spacing: 10px;
+
                 Rectangle {
                     width: 18px;
                     height: 18px;
@@ -225,6 +233,7 @@ export component FlashPage {
 
             VerticalLayout {
                 spacing: 4px;
+
                 Text {
                     text: root.lang == "ru" ? "Разделы для пропуска (через запятую):"
                         : root.lang == "zh-CN" ? "要跳过的分区（逗号分隔）："

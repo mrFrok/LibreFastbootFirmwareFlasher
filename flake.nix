@@ -87,12 +87,12 @@
         # nix sandbox. The revision is not free to choose: it must be the exact
         # commit skia-bindings expects, i.e. the `skia-bindings/skia` submodule
         # of rust-skia at the tag matching the resolved skia-safe version
-        # (slint 1.18 → skia-safe 0.153.3 → rust-skia 0.153.3 → this commit).
+        # (slint 1.19 → skia-safe 0.157.0 → rust-skia 0.157.0 → this commit).
         skiaSrc = pkgs.fetchFromGitHub {
           owner = "rust-skia";
           repo = "skia";
-          rev = "61e7ca4e99062cdd0ab69445d5963fb3365778f6";
-          hash = "sha256-xKCkvQoTAMlLvKdVzzSxTST6kER4kRUIDjvTRZ9z72o=";
+          rev = "6a8fe80eadfac737c12e64229a1b9530bc78f3d1";
+          hash = "sha256-L2kQNj+8A5S1ALHV/R0oD7H1QyHtb1APRTwymo7ndFQ=";
         };
 
         commonRustArgs = {

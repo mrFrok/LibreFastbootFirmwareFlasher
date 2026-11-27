@@ -26,6 +26,7 @@ export component SourceFlashFinalDialog {
         background: StatusColors.scrim;
         width: 100%;
         height: 100%;
+
         TouchArea { }
 
         Rectangle {
@@ -42,6 +43,7 @@ export component SourceFlashFinalDialog {
             VerticalLayout {
                 padding: 24px;
                 spacing: 12px;
+
                 Text {
                     text: Tr.src-final-title;
                     font-size: 18px;
@@ -60,6 +62,7 @@ export component SourceFlashFinalDialog {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
+
                     TextButton {
                         text: Tr.cancel;
                         clicked => { root.cancel(); }

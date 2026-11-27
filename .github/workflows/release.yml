@@ -250,6 +250,15 @@ jobs:
           name: gui-musl-${{ matrix.arch }}
           path: dist/lfff-gui-linux-${{ matrix.arch }}-musl.tar.gz*
 
+  # The BSDs: the builds themselves live in bsd.yml, which can also be run on
+  # its own from the Actions tab to check the ports without cutting a release.
+  # The artifacts land in this run, so the release job picks them up like any
+  # other platform's.
+  build-bsd:
+    name: BSD
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/bsd.yml
+
   package-appimage:
     name: AppImage — ${{ matrix.arch }}
     needs: [build-cli, build-gui]
@@ -361,7 +370,7 @@ jobs:
           path: dist/LibreFastbootFirmwareFlasher-*-${{ matrix.arch }}.AppImage*
 
   release:
-    needs: [build-cli, build-gui, build-gui-musl, package-appimage]
+    needs: [build-cli, build-gui, build-gui-musl, build-bsd, package-appimage]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

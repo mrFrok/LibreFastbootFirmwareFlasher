@@ -18,6 +18,7 @@ component ToolCard inherits TouchArea {
         border-radius: 12px;
         background: root.has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container;
         animate background { duration: 150ms; }
+
         Image {
             // Level with the title's line, whatever the card's height.
             x: 16px;
@@ -36,6 +37,7 @@ component ToolCard inherits TouchArea {
             padding-right: 48px;
             alignment: start;
             spacing: 4px;
+
             Text {
                 text: Tools.title(root.id);
                 font-size: 15px;
@@ -61,10 +63,12 @@ component ToolCard inherits TouchArea {
             clicked => {
                 root.toggle-pin();
             }
+
             Rectangle {
                 border-radius: 18px;
                 background: root.pinned ? MaterialPalette.primary-container
                     : pin.has-hover ? MaterialPalette.on-surface.with-alpha(0.08) : transparent;
+
                 Image {
                     source: root.pinned ? @image-url("../icons/pin-filled.svg") : @image-url("../icons/pin.svg");
                     width: 18px;
@@ -82,8 +86,10 @@ export component ToolsGrid inherits VerticalLayout {
     callback open(int);
     callback toggle-pin(int);
     spacing: 16px;
+
     VerticalLayout {
         spacing: 4px;
+
         Text {
             text: Tr.t("Tools", "Инструменты", "工具", "工具");
             font-size: 26px;
@@ -101,6 +107,7 @@ export component ToolsGrid inherits VerticalLayout {
 
     GridLayout {
         spacing: 12px;
+
         Row {
             ToolCard {
                 id: 1;
@@ -237,6 +244,7 @@ export component LogsPage inherits VerticalLayout {
     callback export(int);
     property <int> tab: 2;
     spacing: 12px;
+
     Text {
         text: Tools.title(8);
         font-size: 26px;
@@ -246,6 +254,7 @@ export component LogsPage inherits VerticalLayout {
 
     HorizontalLayout {
         alignment: start;
+
         Segmented {
             segment-width: 150px;
             items: [
@@ -279,6 +288,7 @@ export component RepairPage inherits VerticalLayout {
     in property <string> error;
     callback run();
     spacing: 14px;
+
     Text {
         text: Tools.title(9);
         font-size: 26px;
@@ -312,6 +322,7 @@ export component RepairPage inherits VerticalLayout {
     HorizontalLayout {
         alignment: start;
         spacing: 12px;
+
         FilledButton {
             enabled: root.state != 1;
             icon: @image-url("../icons/restart.svg");
@@ -352,6 +363,7 @@ export component RootPage inherits VerticalLayout {
     callback run();
     callback export-log();
     spacing: 14px;
+
     Text {
         text: Tools.title(10);
         font-size: 26px;
@@ -372,6 +384,7 @@ export component RootPage inherits VerticalLayout {
 
     HorizontalLayout {
         alignment: start;
+
         Segmented {
             segment-width: 140px;
             items: ["KernelSU", "KernelSU Next", "SukiSU Ultra"];
@@ -397,16 +410,19 @@ export component RootPage inherits VerticalLayout {
         clicked => {
             root.firmware = i;
         }
+
         Rectangle {
             border-radius: 12px;
             background: root.firmware == i ? MaterialPalette.secondary-container
                 : parent.has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container-low;
             border-width: 1px;
             border-color: root.firmware == i ? MaterialPalette.primary : MaterialPalette.outline-variant;
+
             HorizontalLayout {
                 padding-left: 14px;
                 padding-right: 14px;
                 spacing: 12px;
+
                 Image {
                     source: root.firmware == i ? @image-url("../icons/check.svg") : @image-url("../icons/folder.svg");
                     width: 20px;
@@ -431,6 +447,7 @@ export component RootPage inherits VerticalLayout {
     HorizontalLayout {
         alignment: start;
         spacing: 4px;
+
         CheckBox {
             check-state: root.manager ? CheckState.checked : CheckState.unchecked;
             checked-state-changed(s) => {
@@ -471,6 +488,7 @@ export component RootPage inherits VerticalLayout {
     HorizontalLayout {
         alignment: start;
         spacing: 12px;
+
         FilledButton {
             enabled: root.state != 1 && root.firmware >= 0;
             icon: @image-url("../icons/lock_open.svg");

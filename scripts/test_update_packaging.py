@@ -114,7 +114,7 @@ class TestFlake(Case):
                      "sha256-+5WoJZEGAfDQfHLxthS/c2d05k5h5v6n2pjk3sW7ojg=",
                      "sha256-CBFVM9eUIOKoL/a7xePwJoA1jNfMdyLB9F7urEjYGts=",
                      "sha256-sM9SHt2KtDsNMuSyq3CyY1q8VZ5AVQRbNdt2MmEaEiI=",
-                     '61e7ca4e99062cdd0ab69445d5963fb3365778f6'):
+                     '6a8fe80eadfac737c12e64229a1b9530bc78f3d1'):
             self.assertIn(keep, self.after)
         self.assertIn('payloadDumperVersion = "0.8.4"', self.after)
 

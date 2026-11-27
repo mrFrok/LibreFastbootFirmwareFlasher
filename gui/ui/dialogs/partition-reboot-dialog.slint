@@ -30,6 +30,7 @@ export component PartitionRebootDialog {
         background: StatusColors.scrim;
         width: 100%;
         height: 100%;
+
         TouchArea { }
 
         Rectangle {
@@ -46,6 +47,7 @@ export component PartitionRebootDialog {
             VerticalLayout {
                 padding: 24px;
                 spacing: 14px;
+
                 Text {
                     text: Tr.part-reboot-title;
                     font-size: 16px;
@@ -63,6 +65,7 @@ export component PartitionRebootDialog {
                     ]: TouchArea {
                         height: 48px;
                         clicked => { root.reboot-choice = item.val; }
+
                         Rectangle {
                             border-radius: 12px;
                             border-width: 2px;
@@ -72,6 +75,7 @@ export component PartitionRebootDialog {
                                 : (parent.has-hover ? MaterialPalette.primary.with-alpha(0.12) : MaterialPalette.surface-container);
                             animate background { duration: 80ms; }
                             animate border-color { duration: 80ms; }
+
                             Text {
                                 text: item.label;
                                 font-size: 13px;
@@ -87,6 +91,7 @@ export component PartitionRebootDialog {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
+
                     TextButton {
                         text: Tr.cancel;
                         clicked => { root.reboot-choice = 0; root.cancel(); }

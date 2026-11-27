@@ -60,9 +60,11 @@ export component DevicePage {
             border-radius: 12px;
             border-width: 1px;
             border-color: MaterialPalette.error;
+
             VerticalLayout {
                 spacing: 8px;
                 padding: 12px;
+
                 Text {
                     text: Tr.slot-switch-warn;
                     font-size: 13px;
@@ -72,6 +74,7 @@ export component DevicePage {
 
                 HorizontalLayout {
                     spacing: 8px;
+
                     FilledButton {
                         text: Tr.slot-switch-btn + "A";
                         enabled: root.device.is-fastboot-mode && root.device.slot != "a";
@@ -100,6 +103,7 @@ export component DevicePage {
 
         if root.section == 0 || root.section == 4: HorizontalLayout {
             spacing: 8px;
+
             OutlineButton {
                 text: Tr.find-device;
                 horizontal-stretch: 1;
@@ -132,6 +136,7 @@ export component DevicePage {
         if root.section == 0 || root.section == 3: HorizontalLayout {
             spacing: 8px;
             height: 32px;
+
             Text {
                 text: Tr.driver-test;
                 font-size: 15px;
@@ -165,6 +170,7 @@ export component DevicePage {
                 { label: Tr.t("Done", "Готово", "完成", "完成"), n: 5 },
             ]: HorizontalLayout {
                 spacing: 6px;
+
                 Rectangle {
                     width: 10px;
                     height: 10px;
@@ -223,6 +229,7 @@ export component DevicePage {
         if root.section == 0 || root.section == 1: HorizontalLayout {
             spacing: 8px;
             height: 32px;
+
             Text {
                 text: Tr.reboot-title;
                 font-size: 15px;

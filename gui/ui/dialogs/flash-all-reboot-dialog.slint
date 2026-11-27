@@ -28,6 +28,7 @@ export component FlashAllRebootDialog {
         background: StatusColors.scrim;
         width: 100%;
         height: 100%;
+
         TouchArea { }
 
         Rectangle {
@@ -44,6 +45,7 @@ export component FlashAllRebootDialog {
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
+
                 Text {
                     text: Tr.flash-reboot-title;
                     font-size: 15px;
@@ -93,6 +95,7 @@ export component FlashAllRebootDialog {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
+
                     TextButton {
                         text: Tr.cancel;
                         clicked => { root.cancel(); }

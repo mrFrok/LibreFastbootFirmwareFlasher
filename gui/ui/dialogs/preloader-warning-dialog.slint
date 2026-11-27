@@ -26,12 +26,15 @@ export component PreloaderWarningDialog {
         background: StatusColors.scrim;
         width: 100%;
         height: 100%;
+
         TouchArea { }
 
         VerticalLayout {
             alignment: center;
+
             HorizontalLayout {
                 alignment: center;
+
                 Rectangle {
                     width: 480px;
                     border-radius: 16px;
@@ -51,8 +54,10 @@ export component PreloaderWarningDialog {
                     VerticalLayout {
                         padding: 28px;
                         spacing: 12px;
+
                         HorizontalLayout {
                             spacing: 12px;
+
                             Text {
                                 text: "⚠";
                                 font-size: 24px;
@@ -88,6 +93,7 @@ export component PreloaderWarningDialog {
 
                         VerticalLayout {
                             spacing: 6px;
+
                             Text {
                                 text: Tr.preloader-skip-hint;
                                 font-size: 12px;
@@ -98,8 +104,10 @@ export component PreloaderWarningDialog {
                             TouchArea {
                                 height: 24px;
                                 clicked => { root.skip-preloader = !root.skip-preloader; }
+
                                 HorizontalLayout {
                                     spacing: 10px;
+
                                     Rectangle {
                                         width: 18px;
                                         height: 18px;
@@ -110,6 +118,7 @@ export component PreloaderWarningDialog {
                                         animate background { duration: 100ms; }
                                         animate border-color { duration: 100ms; }
                                         y: (parent.height - 18px) / 2;
+
                                         Text {
                                             visible: root.skip-preloader;
                                             opacity: root.skip-preloader ? 1.0 : 0.0;
@@ -142,6 +151,7 @@ export component PreloaderWarningDialog {
                         HorizontalLayout {
                             spacing: 8px;
                             alignment: end;
+
                             TextButton {
                                 text: Tr.cancel;
                                 clicked => { root.cancel(); }

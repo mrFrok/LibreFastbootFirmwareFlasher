@@ -16,9 +16,11 @@ export component LogView inherits Rectangle {
     VerticalLayout {
         spacing: 8px;
         padding: 8px;
+
         HorizontalLayout {
             horizontal-stretch: 1;
             padding-left: 8px;
+
             Text {
                 text: Tr.log-title;
                 font-size: 14px;
@@ -43,6 +45,7 @@ export component LogView inherits Rectangle {
         }
         if entries.length == 0: HorizontalLayout {
             padding-left: 8px;
+
             Text {
                 text: Tr.log-empty;
                 color: MaterialPalette.on-surface-variant;
@@ -57,10 +60,12 @@ export component LogView inherits Rectangle {
                     height: 20px;
                     background: transparent;
                     animate opacity { duration: 200ms; }
+
                     HorizontalLayout {
                         spacing: 6px;
                         padding-left: 8px;
                         padding-right: 8px;
+
                         Text {
                             text: e.timestamp;
                             font-size: 12px;
@@ -78,6 +83,7 @@ export component LogView inherits Rectangle {
                                 : e.level == "success" ? StatusColors.success-container
                                 : e.level == "warn" ? StatusColors.warning-container
                                 : MaterialPalette.primary-container;
+
                             Text {
                                 text: e.level == "error" ? "ERR" : e.level == "success" ? " OK" : e.level == "warn" ? "WRN" : "INF";
                                 font-size: 10px;

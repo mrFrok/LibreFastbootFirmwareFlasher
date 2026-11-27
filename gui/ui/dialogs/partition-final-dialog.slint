@@ -31,6 +31,7 @@ export component PartitionFinalDialog {
         background: StatusColors.scrim;
         width: 100%;
         height: 100%;
+
         TouchArea { }
 
         Rectangle {
@@ -47,6 +48,7 @@ export component PartitionFinalDialog {
             VerticalLayout {
                 padding: 28px;
                 spacing: 12px;
+
                 Text {
                     text: Tr.part-final-title + ": " + root.partition-name;
                     font-size: 18px;
@@ -68,6 +70,7 @@ export component PartitionFinalDialog {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
+
                     TextButton {
                         text: Tr.cancel;
                         clicked => { root.cancel(); }

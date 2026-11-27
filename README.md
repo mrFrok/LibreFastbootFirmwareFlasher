@@ -5,7 +5,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-orange.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Rust](https://img.shields.io/badge/Rust-1.95%2B-orange)](https://www.rust-lang.org)
 [![Slint](https://img.shields.io/badge/UI-Slint-orange)](https://slint.dev)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-orange)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20BSD-orange)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher)
 [![Releases](https://img.shields.io/github/v/release/mrFrok/LibreFastbootFirmwareFlasher)](https://github.com/mrFrok/LibreFastbootFirmwareFlasher/releases)
 
 **Free, open-source firmware flasher for Android A/B phones, over fastboot.**  
@@ -53,6 +53,7 @@ Links: [Author](https://t.me/mrFrok228) · [Telegram group](https://t.me/lfffcom
 | System | Command |
 |---|---|
 | Any Linux, macOS | `curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh \| bash` |
+| FreeBSD, OpenBSD | `pkg install bash` (FreeBSD) or `pkg_add bash` (OpenBSD), then the one-liner, below |
 | Arch Linux (AUR) | `yay -S lfff` (from source) or `yay -S lfff-bin` (prebuilt) |
 | macOS (Homebrew) | `brew install --cask librefastbootfirmwareflasher` (after the tap, below) |
 | Linux (Homebrew) | `brew install lfff` (after the tap, below) |
@@ -62,7 +63,7 @@ Links: [Author](https://t.me/mrFrok228) · [Telegram group](https://t.me/lfffcom
 
 Except for Flatpak, install the external tools afterwards with `lfff deps`.
 
-### One-liner (any Linux, macOS)
+### One-liner (any Linux, macOS, FreeBSD, OpenBSD)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
@@ -84,6 +85,33 @@ The CLI only: there is no display server for the GUI.
 curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash -s -- --cli-only
 pkg install android-tools    # fastboot and adb
 ```
+
+### FreeBSD, OpenBSD
+
+The GUI and the CLI are built in FreeBSD 15 and OpenBSD 8.0 VMs. FreeBSD
+needs the X11 libraries from packages; OpenBSD ships them in the base
+system (`xbase`), so only a few ports are left:
+
+```bash
+# FreeBSD
+pkg install bash libxkbcommon fontconfig libX11 libxcb libXcursor libXi \
+  libXrandr libXrender wayland zenity
+
+# OpenBSD
+pkg_add bash libxkbcommon wayland zenity
+```
+
+Then the one-liner, with `bash` on the PATH (on OpenBSD it installs to
+`/usr/local/bin`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mrFrok/LibreFastbootFirmwareFlasher/main/install.sh | bash
+```
+
+The GUI runs on Slint's software renderer: its Skia backend has no BSD build
+(`skia-safe` rejects the target), so there is no GPU acceleration yet. File
+dialogs use xdg-desktop-portal when one is running and fall back to zenity,
+which is why it is in the lists.
 
 ### Arch Linux (AUR)
 
@@ -392,7 +420,9 @@ LibreFastbootFirmwareFlasher/
 │       └── handlers/        # one file per command
 └── gui/                     # lfff-gui
     ├── build.rs
-    ├── material-1.18.1/     # vendored Material 3 components (MIT)
+    ├── material-1.19.1/     # vendored Material 3 components (MIT)
+    ├── vendor/
+    │   └── fontique/        # fontique 0.12.0 + the BSD fontconfig patch (see below)
     ├── src/
     │   ├── main.rs
     │   ├── worker.rs        # long jobs off the UI thread
@@ -413,15 +443,27 @@ LibreFastbootFirmwareFlasher/
 
 The GUI is built with the official [Material 3 component set for
 Slint](https://material.slint.dev). It ships no crate, so a copy lives in
-`gui/material-1.18.1/`, taken from `ui-libraries/material/src` of
-[slint-ui/slint](https://github.com/slint-ui/slint) at tag `v1.18.1` and
-licensed MIT (see `gui/material-1.18.1/LICENSE.md`). It is versioned in lockstep
+`gui/material-1.19.1/`, taken from `ui-libraries/material/src` of
+[slint-ui/slint](https://github.com/slint-ui/slint) at tag `v1.19.1` and
+licensed MIT (see `gui/material-1.19.1/LICENSE.md`). It is versioned in lockstep
 with Slint, so it is refreshed from the tag matching the `slint` dependency.
 `gui/build.rs` registers it as the `@material` library.
 
 One local change, to repeat on every refresh: `MaterialTypography.medium` in
 `ui/styling/material_typography.slint` is 500 (the Material 3 value) instead of
 upstream's 600, which made buttons and labels too heavy.
+
+### Vendored fontique
+
+Slint discovers system fonts through fontique, which enumerates them with
+Fontconfig on Linux and FreeBSD only — on OpenBSD (and NetBSD, DragonFly) it
+would find no fonts at all and the GUI would draw no text. Upstream fixed this
+in [linebender/parley#977](https://github.com/linebender/parley/pull/977),
+merged 2026-11-23 but not yet in a released fontique. Until Slint depends on a
+version that has it, `gui/vendor/fontique` is fontique 0.12.0 with exactly that
+commit applied, wired in through `[patch.crates-io]` in the workspace
+`Cargo.toml`. Delete the directory and the patch section together once Slint
+moves past it.
 
 ---
 

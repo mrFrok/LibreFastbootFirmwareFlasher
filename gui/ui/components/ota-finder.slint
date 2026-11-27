@@ -34,6 +34,7 @@ component Badge inherits Rectangle {
     background: root.bg;
     height: 22px;
     width: label.preferred-width + 16px;
+
     label := Text {
         text: root.text;
         font-size: 12px;
@@ -52,19 +53,24 @@ component BuildRow inherits Rectangle {
     background: MaterialPalette.surface-container-low;
     border-width: 1px;
     border-color: root.build.newest ? MaterialPalette.primary.with-alpha(0.5) : MaterialPalette.outline-variant;
+
     VerticalLayout {
         padding: 12px;
         padding-left: 14px;
         spacing: 6px;
+
         HorizontalLayout {
             spacing: 12px;
+
             VerticalLayout {
                 horizontal-stretch: 1;
                 min-width: 0px;
                 alignment: center;
                 spacing: 3px;
+
                 HorizontalLayout {
                     spacing: 8px;
+
                     Text {
                         min-width: 0px;
                         text: root.build.version;
@@ -113,6 +119,7 @@ component BuildRow inherits Rectangle {
 
                 HorizontalLayout {
                     spacing: 10px;
+
                     Text {
                         min-width: 0px;
                         text: root.build.facts;
@@ -126,6 +133,7 @@ component BuildRow inherits Rectangle {
                         clicked => {
                             root.toggle-changes();
                         }
+
                         link := Text {
                             text: root.show-changes ? Tr.t("Hide changes", "Скрыть изменения", "收起更新内容", "收合更新內容") : Tr.t("What's new", "Что нового", "更新内容", "更新內容");
                             font-size: 13px;
@@ -141,6 +149,7 @@ component BuildRow inherits Rectangle {
             }
 
             TonalButton {
+                height: self.preferred-height;
                 y: (parent.height - self.height) / 2;
                 icon: @image-url("../icons/download.svg");
                 text: Tr.t("Download", "Скачать", "下载", "下載");
@@ -200,6 +209,7 @@ export component OtaFinder inherits Rectangle {
                 background: MaterialPalette.surface-container-low;
                 border-width: 1px;
                 border-color: model-input.has-focus ? MaterialPalette.primary : MaterialPalette.outline-variant;
+
                 Text {
                     x: 14px;
                     width: parent.width - 28px;
@@ -305,6 +315,7 @@ export component OtaFinder inherits Rectangle {
         }
         if root.state == 2 && root.builds.length > 3 && !root.show-all: HorizontalLayout {
             alignment: start;
+
             TextButton {
                 text: Tr.t("Show all (", "Показать все (", "显示全部（", "顯示全部（") + root.builds.length + Tr.t(")", ")", "）", "）");
                 clicked => {

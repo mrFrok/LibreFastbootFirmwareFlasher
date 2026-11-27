@@ -39,6 +39,7 @@ export component FlashMethodDialog {
         background: StatusColors.scrim;
         width: 100%;
         height: 100%;
+
         TouchArea { }
 
         fs := FocusScope {
@@ -71,8 +72,10 @@ export component FlashMethodDialog {
 
             VerticalLayout {
                 alignment: center;
+
                 HorizontalLayout {
                     alignment: center;
+
                     Rectangle {
                         width: 460px;
                         border-radius: 16px;
@@ -84,6 +87,7 @@ export component FlashMethodDialog {
                         VerticalLayout {
                             padding: 20px;
                             spacing: 10px;
+
                             Text {
                                 text: Tr.flash-method-title;
                                 font-size: 18px;
@@ -149,6 +153,7 @@ export component FlashMethodDialog {
                                                     ? MaterialPalette.primary
                                                     : MaterialPalette.outline;
                                                 animate border-color { duration: 100ms; }
+
                                                 Rectangle {
                                                     width: 10px;
                                                     height: 10px;
@@ -165,6 +170,7 @@ export component FlashMethodDialog {
                                             VerticalLayout {
                                                 alignment: center;
                                                 spacing: 2px;
+
                                                 Text {
                                                     text: item.label;
                                                     font-size: 14px;
@@ -196,6 +202,7 @@ export component FlashMethodDialog {
                             HorizontalLayout {
                                 spacing: 8px;
                                 alignment: end;
+
                                 TextButton {
                                     text: Tr.cancel;
                                     clicked => { root.cancel(); }

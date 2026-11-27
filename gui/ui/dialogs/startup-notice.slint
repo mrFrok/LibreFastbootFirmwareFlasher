@@ -9,6 +9,7 @@ export component StartupNotice inherits Rectangle {
     width: 100%;
     height: 100%;
     background: StatusColors.scrim;
+
     TouchArea { }
 
     Rectangle {
@@ -21,6 +22,7 @@ export component StartupNotice inherits Rectangle {
         border-width: 2px;
         border-color: MaterialPalette.error;
         clip: true;
+
         card := VerticalLayout {
             Rectangle {
                 height: 6px;
@@ -30,6 +32,7 @@ export component StartupNotice inherits Rectangle {
             VerticalLayout {
                 padding: 24px;
                 spacing: 14px;
+
                 Image {
                     source: @image-url("../icons/warning.svg");
                     width: 36px;
@@ -62,6 +65,7 @@ export component StartupNotice inherits Rectangle {
                 HorizontalLayout {
                     alignment: end;
                     padding-top: 6px;
+
                     FilledButton {
                         text: Tr.t("I understand", "Понятно", "我明白", "我明白");
                         clicked => {

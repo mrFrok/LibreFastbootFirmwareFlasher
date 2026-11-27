@@ -27,6 +27,7 @@ export component UpdateDialog {
         width: 100%;
         height: 100%;
         background: StatusColors.scrim;
+
         TouchArea { }
 
         // Placed by hand, as confirm-sheet: centring through nested layouts
@@ -45,6 +46,7 @@ export component UpdateDialog {
             card := VerticalLayout {
                 spacing: 12px;
                 padding: 20px;
+
                 Text {
                     text: root.lang == "ru" ? "Доступно обновление"
                         : root.lang == "zh-CN" ? "有可用更新"
@@ -72,12 +74,15 @@ export component UpdateDialog {
                     background: MaterialPalette.surface-container;
                     border-radius: 8px;
                     clip: true;
+
                     ScrollView {
                         content-width: self.visible-width;
                         content-height: notes.preferred-height;
+
                         notes := VerticalLayout {
                             width: parent.width;
                             padding: 12px;
+
                             Text {
                                 text: root.update-body;
                                 font-size: 14px;
@@ -90,6 +95,7 @@ export component UpdateDialog {
 
                 HorizontalLayout {
                     spacing: 8px;
+
                     TextButton {
                         text: Tr.cancel;
                         clicked => { root.cancel(); }

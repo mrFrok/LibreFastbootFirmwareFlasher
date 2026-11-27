@@ -58,6 +58,7 @@ export component DownloadPage {
         HorizontalLayout {
             spacing: 8px;
             height: 44px;
+
             PathField {
                 path: root.output-dir;
                 horizontal-stretch: 1;
@@ -73,6 +74,7 @@ export component DownloadPage {
         HorizontalLayout {
             spacing: 8px;
             height: 44px;
+
             Rectangle {
                 horizontal-stretch: 1;
                 min-width: 0px;
@@ -138,8 +140,10 @@ export component DownloadPage {
 
         if root.dl-percent > 0 || root.dl-total != "": VerticalLayout {
             spacing: 6px;
+
             HorizontalLayout {
                 spacing: 10px;
+
                 Text {
                     text: Math.round(root.dl-percent) + "%";
                     font-size: 15px;
@@ -187,6 +191,7 @@ export component DownloadPage {
         HorizontalLayout {
             spacing: 8px;
             height: 44px;
+
             PathField {
                 path: root.firmware-path;
                 horizontal-stretch: 1;

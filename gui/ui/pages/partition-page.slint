@@ -44,6 +44,7 @@ export component PartitionPage {
 
         HorizontalLayout {
             spacing: 8px;
+
             PathField {
                 path: root.single-image-path;
                 horizontal-stretch: 1;
@@ -63,6 +64,7 @@ export component PartitionPage {
         HorizontalLayout {
             spacing: 8px;
             height: 20px;
+
             Text {
                 text: Tr.part-lbl;
                 font-size: 15px;
@@ -86,6 +88,7 @@ export component PartitionPage {
             for p in ["recovery", "boot", "init_boot", "modem", "vendor_boot"]: TouchArea {
                 horizontal-stretch: 1;
                 clicked => { root.partition-name = p; }
+
                 Rectangle {
                     border-radius: 12px;
                     background: root.partition-name == p
@@ -99,6 +102,7 @@ export component PartitionPage {
                     animate background { duration: 80ms; }
                     animate border-color { duration: 80ms; }
                     animate border-width { duration: 80ms; }
+
                     Text {
                         text: p;
                         font-size: 13px;
@@ -116,6 +120,7 @@ export component PartitionPage {
         HorizontalLayout {
             spacing: 8px;
             height: 36px;
+
             Rectangle {
                 horizontal-stretch: 1;
                 height: 36px;
@@ -175,6 +180,7 @@ export component PartitionPage {
 
         HorizontalLayout {
             spacing: 8px;
+
             FilledButton {
                 text: root.is-flashing ? Tr.flashing : Tr.flash-part-btn;
                 enabled: !root.is-flashing && root.single-image-path != "" && root.device.connected && root.partition-name != "";

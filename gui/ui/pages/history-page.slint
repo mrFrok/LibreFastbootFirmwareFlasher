@@ -22,6 +22,7 @@ export component HistoryPage {
     VerticalLayout {
         spacing: 0px;
         vertical-stretch: 1;
+
         Text {
             text: root.lang == "ru" ? "История прошивок"
                 : root.lang == "zh-CN" ? "刷写历史"
@@ -54,12 +55,15 @@ export component HistoryPage {
                     background: Palette.color-scheme == ColorScheme.dark
                         ? MaterialPalette.surface-container-highest
                         : MaterialPalette.surface-container-high;
+
                     HorizontalLayout {
                         spacing: 0px;
                         padding-left: 16px;
                         padding-right: 16px;
+
                         Rectangle {
                             width: 150px;
+
                             Text {
                                 text: root.lang == "ru"
                                     ? "Дата" : root.lang == "zh-CN"
@@ -75,6 +79,7 @@ export component HistoryPage {
 
                         Rectangle {
                             horizontal-stretch: 1;
+
                             Text {
                                 text: root.lang == "ru"
                                     ? "Прошивка" : root.lang == "zh-CN"
@@ -90,6 +95,7 @@ export component HistoryPage {
 
                         Rectangle {
                             width: 130px;
+
                             Text {
                                 text: root.lang == "ru"
                                     ? "Устройство" : root.lang == "zh-CN"
@@ -105,6 +111,7 @@ export component HistoryPage {
 
                         Rectangle {
                             width: 100px;
+
                             Text {
                                 text: root.lang == "ru"
                                     ? "Результат" : root.lang == "zh-CN"
@@ -121,6 +128,7 @@ export component HistoryPage {
 
                         Rectangle {
                             width: 75px;
+
                             Text {
                                 text: root.lang == "ru"
                                     ? "Время" : root.lang == "zh-CN"
@@ -141,15 +149,18 @@ export component HistoryPage {
 
                 if history-items.length == 0: Rectangle {
                     vertical-stretch: 1;
+
                     VerticalLayout {
                         alignment: center;
                         spacing: 8px;
+
                         Rectangle {
                             vertical-stretch: 1;
                         }
 
                         HorizontalLayout {
                             alignment: center;
+
                             Image {
                                 source: @image-url("../icons/history.svg");
                                 width: 36px;
@@ -177,12 +188,14 @@ export component HistoryPage {
                 ScrollView {
                     vertical-stretch: 1;
                     horizontal-stretch: 1;
+
                     VerticalLayout {
                         spacing: 0px;
                         horizontal-stretch: 1;
                         for item[index] in history-items: row-ta := TouchArea {
                             height: 44px;
                             horizontal-stretch: 1;
+
                             Rectangle {
                                 width: 100%;
                                 height: 100%;
@@ -204,8 +217,10 @@ export component HistoryPage {
                                     spacing: 0px;
                                     padding-left: 16px;
                                     padding-right: 16px;
+
                                     Rectangle {
                                         width: 150px;
+
                                         Text {
                                             text: item.timestamp;
                                             font-size: 12px;
@@ -218,6 +233,7 @@ export component HistoryPage {
 
                                     Rectangle {
                                         horizontal-stretch: 1;
+
                                         Text {
                                             text: item.firmware;
                                             font-size: 12px;
@@ -229,6 +245,7 @@ export component HistoryPage {
 
                                     Rectangle {
                                         width: 130px;
+
                                         Text {
                                             text: item.device;
                                             font-size: 12px;
@@ -240,6 +257,7 @@ export component HistoryPage {
 
                                     Rectangle {
                                         width: 100px;
+
                                         Rectangle {
                                             x: (parent.width - 80px) / 2;
                                             y: (parent.height - 22px) / 2;
@@ -253,6 +271,7 @@ export component HistoryPage {
                                             border-color: item.result == "OK" ? StatusColors.success.with-alpha(0.3)
                                                 : item.result == "Aborted" ? StatusColors.warning.with-alpha(0.3)
                                                 : MaterialPalette.error.with-alpha(0.3);
+
                                             Text {
                                                 text: item.result == "OK"
                                                     ? root.status-ok
@@ -272,6 +291,7 @@ export component HistoryPage {
 
                                     Rectangle {
                                         width: 75px;
+
                                         Text {
                                             text: item.duration;
                                             font-size: 12px;

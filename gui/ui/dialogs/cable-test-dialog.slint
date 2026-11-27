@@ -37,6 +37,7 @@ export component CableTestDialog {
         background: StatusColors.scrim;
         width: 100%;
         height: 100%;
+
         TouchArea { }
 
         Rectangle {
@@ -53,8 +54,10 @@ export component CableTestDialog {
             VerticalLayout {
                 padding: 24px;
                 spacing: 14px;
+
                 HorizontalLayout {
                     spacing: 10px;
+
                     Text {
                         text: "🔌";
                         font-size: 22px;
@@ -89,6 +92,7 @@ export component CableTestDialog {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
+
                     TextButton {
                         text: Tr.cancel;
                         enabled: !root.cable-test-passed;

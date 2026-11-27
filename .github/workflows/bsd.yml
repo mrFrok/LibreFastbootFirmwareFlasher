@@ -1,0 +1,127 @@
+name: BSD
+
+# Builds the FreeBSD and OpenBSD CLI and GUI, and nothing else. release.yml
+# calls this for a tag; the manual dispatch exists so the ports can be checked
+# on a branch without cutting a release and without waiting for one. The
+# workflow lives in its own file because release.yml's dispatch is reserved
+# for re-pointing the packaging at a release that already exists.
+#
+# GitHub has no BSD runners, and the binaries have to link against each
+# system's own libc and X11, so both builds run inside real VMs (QEMU). The
+# actions mount the workspace and sync it back, which is why the build trees
+# go to /tmp and only dist/ is left behind.
+#
+# The GUI has no Skia on the BSDs: skia-safe rejects every BSD target, so
+# gui's Cargo.toml leaves it out and Slint's software renderer is used
+# instead. The CLI is the same plain Rust on every platform.
+#
+# System fonts still work: gui/vendor/fontique (see the [patch.crates-io] in
+# the workspace Cargo.toml) is fontique with linebender/parley#977 applied,
+# which adds the BSDs to its Fontconfig enumeration.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  freebsd:
+    name: FreeBSD — ${{ matrix.arch }}
+    strategy:
+      matrix:
+        include:
+          # aarch64 works the same way (arch: aarch64) but runs under QEMU and
+          # takes hours; add it once an ARM machine can build it natively.
+          - arch: x86_64
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "15"
+          arch: ${{ matrix.arch }}
+          prepare: |
+            pkg install -y rust pkgconf cmake ninja gmake perl5 ca_root_nss \
+              libxkbcommon fontconfig freetype2 \
+              libX11 libxcb libXcursor libXi libXrandr libXrender libXfixes libXext \
+              xorgproto wayland
+          run: |
+            set -eux
+            freebsd-version
+            rustc -V
+            cargo -V
+            # Outside the workspace: rsync would otherwise copy the whole
+            # target tree back to the runner.
+            export CARGO_TARGET_DIR=/tmp/lfff-target
+            cargo build --release -p lfff-cli -p lfff-gui
+            mkdir -p dist
+            cp /tmp/lfff-target/release/lfff /tmp/lfff-target/release/lfff-gui dist/
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          cd dist
+          tar czf lfff-freebsd-${{ matrix.arch }}.tar.gz lfff
+          tar czf lfff-gui-freebsd-${{ matrix.arch }}.tar.gz lfff-gui
+          sha256sum lfff-freebsd-${{ matrix.arch }}.tar.gz \
+            > lfff-freebsd-${{ matrix.arch }}.tar.gz.sha256
+          sha256sum lfff-gui-freebsd-${{ matrix.arch }}.tar.gz \
+            > lfff-gui-freebsd-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bsd-freebsd-${{ matrix.arch }}
+          path: dist/lfff*-freebsd-${{ matrix.arch }}.tar.gz*
+
+  openbsd:
+    name: OpenBSD — ${{ matrix.arch }}
+    strategy:
+      matrix:
+        include:
+          # 7.9's rust package is 1.94, older than Slint's MSRV; 8.0 carries
+          # 1.98. aarch64: same QEMU caveat as FreeBSD.
+          - arch: x86_64
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in OpenBSD
+        uses: vmactions/openbsd-vm@v1
+        with:
+          release: "8.0"
+          arch: ${{ matrix.arch }}
+          prepare: |
+            pkg_add -I rust cmake ninja gmake wayland libxkbcommon zenity
+          run: |
+            set -eux
+            # pkg-config is in base, and the X11 stack — fontconfig, freetype,
+            # libxcb and the rest, with headers — is in xbase under /usr/X11R6.
+            export PKG_CONFIG_PATH=/usr/X11R6/lib/pkgconfig
+            rustc -V
+            cargo -V
+            # Outside the workspace: rsync would otherwise copy the whole
+            # target tree back to the runner.
+            export CARGO_TARGET_DIR=/tmp/lfff-target
+            cargo build --release -p lfff-cli -p lfff-gui
+            mkdir -p dist
+            cp /tmp/lfff-target/release/lfff /tmp/lfff-target/release/lfff-gui dist/
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          cd dist
+          tar czf lfff-openbsd-${{ matrix.arch }}.tar.gz lfff
+          tar czf lfff-gui-openbsd-${{ matrix.arch }}.tar.gz lfff-gui
+          sha256sum lfff-openbsd-${{ matrix.arch }}.tar.gz \
+            > lfff-openbsd-${{ matrix.arch }}.tar.gz.sha256
+          sha256sum lfff-gui-openbsd-${{ matrix.arch }}.tar.gz \
+            > lfff-gui-openbsd-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bsd-openbsd-${{ matrix.arch }}
+          path: dist/lfff*-openbsd-${{ matrix.arch }}.tar.gz*

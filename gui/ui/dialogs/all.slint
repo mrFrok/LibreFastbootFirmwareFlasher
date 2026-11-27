@@ -59,9 +59,11 @@ export component ConfirmDialog {
             VerticalLayout {
                 padding: 28px;
                 spacing: 12px;
+
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: start;
+
                     Text {
                         text: root.icon-text;
                         font-size: 22px;
@@ -91,6 +93,7 @@ export component ConfirmDialog {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
+
                     TextButton {
                         text: root.cancel-text;
                         clicked => { root.cancelled(); }
@@ -139,8 +142,10 @@ export component WarningDialog {
 
         VerticalLayout {
             alignment: center;
+
             HorizontalLayout {
                 alignment: center;
+
                 Rectangle {
                     width: 460px;
                     border-radius: 16px;
@@ -160,8 +165,10 @@ export component WarningDialog {
                     VerticalLayout {
                         padding: 28px;
                         spacing: 12px;
+
                         HorizontalLayout {
                             spacing: 12px;
+
                             Text {
                                 text: "⚠";
                                 font-size: 24px;
@@ -191,6 +198,7 @@ export component WarningDialog {
 
                         if root.has-checkbox: VerticalLayout {
                             spacing: 6px;
+
                             Text {
                                 text: root.warning-text;
                                 font-size: 12px;
@@ -201,8 +209,10 @@ export component WarningDialog {
                             TouchArea {
                                 height: 24px;
                                 clicked => { root.checkbox-toggled(); }
+
                                 HorizontalLayout {
                                     spacing: 10px;
+
                                     Rectangle {
                                         width: 18px;
                                         height: 18px;
@@ -213,6 +223,7 @@ export component WarningDialog {
                                         animate background { duration: 100ms; }
                                         animate border-color { duration: 100ms; }
                                         y: (parent.height - 18px) / 2;
+
                                         Text {
                                             visible: root.checkbox-checked;
                                             opacity: root.checkbox-checked ? 1.0 : 0.0;
@@ -241,6 +252,7 @@ export component WarningDialog {
                         HorizontalLayout {
                             spacing: 8px;
                             alignment: end;
+
                             TextButton {
                                 text: Tr.cancel;
                                 clicked => { root.cancelled(); }
@@ -309,6 +321,7 @@ export component RebootChoiceDialog {
             VerticalLayout {
                 padding: 20px;
                 spacing: 10px;
+
                 Text {
                     text: root.title;
                     font-size: 15px;
@@ -322,6 +335,7 @@ export component RebootChoiceDialog {
                     for item in root.options: TouchArea {
                         height: 48px;
                         clicked => { root.choice = item.val; }
+
                         Rectangle {
                             border-radius: 12px;
                             border-width: 2px;
@@ -335,6 +349,7 @@ export component RebootChoiceDialog {
                                 : MaterialPalette.surface-container);
                             animate background { duration: 80ms; }
                             animate border-color { duration: 80ms; }
+
                             Text {
                                 text: item.label;
                                 font-size: 13px;
@@ -352,6 +367,7 @@ export component RebootChoiceDialog {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
+
                     TextButton {
                         text: Tr.cancel;
                         clicked => { root.cancelled(); }

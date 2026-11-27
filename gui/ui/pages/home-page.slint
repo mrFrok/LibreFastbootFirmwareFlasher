@@ -20,12 +20,14 @@ export component HomePage {
                 : MaterialPalette.error-container.with-alpha(0.25);
             border-width: 1px;
             border-color: MaterialPalette.error;
+
             HorizontalLayout {
                 padding-left: 14px;
                 padding-right: 14px;
                 padding-top: 12px;
                 padding-bottom: 12px;
                 spacing: 10px;
+
                 Text {
                     text: "⚠";
                     font-size: 15px;
@@ -37,6 +39,7 @@ export component HomePage {
                 VerticalLayout {
                     spacing: 4px;
                     horizontal-stretch: 1;
+
                     Text {
                         text: Tr.home-warning;
                         font-size: 13px;
@@ -60,11 +63,14 @@ export component HomePage {
 
         HorizontalLayout {
             alignment: center;
+
             VerticalLayout {
                 spacing: 10px;
                 alignment: center;
+
                 HorizontalLayout {
                     alignment: center;
+
                     Image {
                         source: @image-url("../icons/logo_icon.svg");
                         width: 96px;
@@ -103,6 +109,7 @@ export component HomePage {
         FlexboxLayout {
             spacing: 10px;
             alignment: stretch;
+
             NavCard {
                 min-width: 150px;
                 horizontal-stretch: 1;
@@ -140,6 +147,7 @@ export component HomePage {
             VerticalLayout {
                 padding: 16px;
                 spacing: 8px;
+
                 Text {
                     text: Tr.home-features-title;
                     font-size: Typography.label-medium-size;
@@ -156,6 +164,7 @@ export component HomePage {
                     Tr.home-feat5,
                 ]: HorizontalLayout {
                     spacing: 10px;
+
                     Rectangle {
                         width: 6px;
                         height: 6px;

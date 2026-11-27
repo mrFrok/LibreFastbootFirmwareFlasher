@@ -3,6 +3,19 @@
 Each release's section below becomes its GitHub release notes
 (`scripts/release-notes.py`); the release fails without one.
 
+## Unreleased
+
+### Builds
+
+- FreeBSD and OpenBSD: the CLI and the GUI are built in FreeBSD 15 and
+  OpenBSD 8.0 VMs and published as `lfff-{,-gui-}{freebsd,openbsd}-x86_64.tar.gz`;
+  the installer recognises both systems. The GUI uses Slint's software renderer
+  there, because `skia-safe` has no BSD target, and finds system fonts through
+  a vendored fontique carrying linebender/parley#977 — without it, fontique
+  enumerates fonts on Linux and FreeBSD only and the GUI would draw no text.
+- Slint 1.19.1 (was 1.18.1), with the vendored Material 3 components refreshed
+  from the same tag.
+
 ## 3.7.1
 
 ### Fixes

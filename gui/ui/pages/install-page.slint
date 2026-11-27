@@ -131,10 +131,12 @@ export component InstallPage inherits VerticalLayout {
     // ════ Checklist ═════════════════════════════════════════════════════════
     if root.view == 0: VerticalLayout {
         spacing: 8px;
+
         VerticalLayout {
             vertical-stretch: 0;
             spacing: 4px;
             padding-bottom: 8px;
+
             Text {
                 text: Tr.t("Install firmware", "Установка прошивки", "安装固件", "安裝韌體");
                 font-size: 26px;
@@ -153,6 +155,7 @@ export component InstallPage inherits VerticalLayout {
         Flickable {
             vertical-stretch: 1;
             content-height: steps.preferred-height;
+
             steps := VerticalLayout {
                 width: parent.width;
                 // Its own height, not the Flickable's: otherwise the steps
@@ -177,6 +180,7 @@ export component InstallPage inherits VerticalLayout {
                     }
                     if root.deps-state == 1: HorizontalLayout {
                         alignment: start;
+
                         FilledButton {
                             text: Tr.t("Install", "Установить", "安装", "安裝");
                             clicked => {
@@ -211,9 +215,11 @@ export component InstallPage inherits VerticalLayout {
                         border-width: 1.5px;
                         border-color: MaterialPalette.primary.with-alpha(0.5);
                         background: MaterialPalette.primary.with-alpha(0.06);
+
                         VerticalLayout {
                             alignment: center;
                             spacing: 10px;
+
                             Text {
                                 text: Tr.t("Choose the firmware: a .zip file or an unpacked folder", "Выберите прошивку: файл .zip или распакованную папку", "选择固件：.zip 文件或已解压的文件夹", "選擇韌體：.zip 檔案或已解壓的資料夾");
                                 font-size: 14px;
@@ -224,6 +230,7 @@ export component InstallPage inherits VerticalLayout {
                             HorizontalLayout {
                                 alignment: center;
                                 spacing: 8px;
+
                                 FilledButton {
                                     icon: @image-url("../icons/file-zip.svg");
                                     text: Tr.t("Choose .zip", "Выбрать .zip", "选择 .zip", "選擇 .zip");
@@ -255,15 +262,18 @@ export component InstallPage inherits VerticalLayout {
                         clicked => {
                             root.pick-cached(i);
                         }
+
                         Rectangle {
                             border-radius: 12px;
                             background: parent.has-hover ? MaterialPalette.surface-container-high : MaterialPalette.surface-container-low;
                             border-width: 1px;
                             border-color: MaterialPalette.outline-variant;
+
                             HorizontalLayout {
                                 padding-left: 14px;
                                 padding-right: 14px;
                                 spacing: 12px;
+
                                 Image {
                                     source: @image-url("../icons/folder.svg");
                                     width: 20px;
@@ -310,6 +320,7 @@ export component InstallPage inherits VerticalLayout {
                             background: MaterialPalette.surface-container-low;
                             border-width: 1px;
                             border-color: url-input.has-focus ? MaterialPalette.primary : MaterialPalette.outline-variant;
+
                             Text {
                                 x: 14px;
                                 width: parent.width - 28px;
@@ -349,6 +360,7 @@ export component InstallPage inherits VerticalLayout {
                     if (root.fw-state == 0 || root.fw-state == 5) && root.link-life != "": HorizontalLayout {
                         spacing: 6px;
                         padding-bottom: 6px;
+
                         Image {
                             source: @image-url("../icons/history.svg");
                             width: 16px;
@@ -507,6 +519,7 @@ export component InstallPage inherits VerticalLayout {
                     }
                     if root.device.connected && root.chip == 0: HorizontalLayout {
                         spacing: 12px;
+
                         ChipCard {
                             horizontal-stretch: 1;
                             preferred-width: 100px;
@@ -545,6 +558,7 @@ export component InstallPage inherits VerticalLayout {
         HorizontalLayout {
             alignment: center;
             spacing: 16px;
+
             FilledButton {
                 min-width: 260px;
                 height: 52px;
@@ -581,9 +595,11 @@ export component InstallPage inherits VerticalLayout {
     // ════ Running ═══════════════════════════════════════════════════════════
     if root.view == 1: VerticalLayout {
         spacing: 16px;
+
         VerticalLayout {
             vertical-stretch: 0;
             spacing: 4px;
+
             Text {
                 text: Tr.t("Installing the firmware", "Устанавливаю прошивку", "正在安装固件", "正在安裝韌體");
                 font-size: 26px;
@@ -602,9 +618,11 @@ export component InstallPage inherits VerticalLayout {
             vertical-stretch: 0;
             border-radius: 16px;
             background: MaterialPalette.surface-container;
+
             VerticalLayout {
                 padding: 16px;
                 spacing: 6px;
+
                 StageRow {
                     state: root.stage0;
                     title: Tr.t("Prepare the phone", "Подготовка смартфона", "准备手机", "準備手機");
@@ -626,9 +644,11 @@ export component InstallPage inherits VerticalLayout {
                     // charging and are often poor at data: not recommended.
                     text: (root.cable-slow ? "" : Tr.t("Check that the phone still shows flashing mode (fastbootd). ", "Проверьте, что на смартфоне всё ещё режим прошивки (fastbootd). ", "请确认手机仍处于刷机模式（fastbootd）。", "請確認手機仍處於刷機模式（fastbootd）。"))
                         + Tr.t("Try another cable — a plain USB data cable, not the fast-charging one from the box — and a USB port directly on the computer, without hubs or adapters.", "Попробуйте другой кабель — обычный кабель для передачи данных, а не зарядный из комплекта — и порт USB прямо на компьютере, без хабов и переходников.", "请换一根普通的 USB 数据线（不要用原装快充线），并直接连接电脑上的 USB 接口，不要使用集线器或转接头。", "請換一條普通的 USB 傳輸線（不要用原廠快充線），並直接連接電腦上的 USB 連接埠，不要使用集線器或轉接頭。");
+
                     HorizontalLayout {
                         alignment: end;
                         spacing: 8px;
+
                         TextButton {
                             text: Tr.t("Stop", "Остановить", "停止", "停止");
                             clicked => {
@@ -655,6 +675,7 @@ export component InstallPage inherits VerticalLayout {
                 if root.stage2 == 1: HorizontalLayout {
                     padding-left: 40px;
                     spacing: 12px;
+
                     LinearProgressIndicator {
                         horizontal-stretch: 1;
                         y: (parent.height - self.height) / 2;
@@ -682,6 +703,7 @@ export component InstallPage inherits VerticalLayout {
 
         HorizontalLayout {
             alignment: end;
+
             TextButton {
                 text: Tr.t("Stop the installation", "Остановить установку", "停止安装", "停止安裝");
                 clicked => {
@@ -695,13 +717,16 @@ export component InstallPage inherits VerticalLayout {
     if root.view == 2: VerticalLayout {
         alignment: center;
         spacing: 20px;
+
         HorizontalLayout {
             alignment: center;
+
             Rectangle {
                 width: 72px;
                 height: 72px;
                 border-radius: 36px;
                 background: StatusColors.success-container;
+
                 Image {
                     source: @image-url("../icons/check.svg");
                     width: 40px;
@@ -730,6 +755,7 @@ export component InstallPage inherits VerticalLayout {
             spacing: 16px;
             padding-left: 24px;
             padding-right: 24px;
+
             Rectangle {
                 horizontal-stretch: 1;
                 preferred-width: 100px;
@@ -737,9 +763,11 @@ export component InstallPage inherits VerticalLayout {
                 background: MaterialPalette.surface-container;
                 border-width: 2px;
                 border-color: MaterialPalette.primary;
+
                 VerticalLayout {
                     padding: 18px;
                     spacing: 8px;
+
                     Text {
                         text: Tr.t("Restart the phone", "Перезагрузить смартфон", "重启手机", "重新啟動手機");
                         font-size: 16px;
@@ -772,9 +800,11 @@ export component InstallPage inherits VerticalLayout {
                 background: MaterialPalette.surface-container;
                 border-width: 1px;
                 border-color: MaterialPalette.outline-variant;
+
                 VerticalLayout {
                     padding: 18px;
                     spacing: 8px;
+
                     Text {
                         text: Tr.t("Erase everything and restart", "Стереть всё и перезагрузить", "清除全部数据并重启", "清除所有資料並重新啟動");
                         font-size: 16px;
@@ -803,6 +833,7 @@ export component InstallPage inherits VerticalLayout {
 
         HorizontalLayout {
             alignment: center;
+
             TextButton {
                 text: Tr.t("Leave the phone as it is", "Оставить смартфон как есть", "保持手机现状", "保持手機現狀");
                 clicked => {
@@ -818,13 +849,16 @@ export component InstallPage inherits VerticalLayout {
         spacing: 18px;
         padding-left: 40px;
         padding-right: 40px;
+
         HorizontalLayout {
             alignment: center;
+
             Rectangle {
                 width: 72px;
                 height: 72px;
                 border-radius: 36px;
                 background: MaterialPalette.error-container;
+
                 Image {
                     source: @image-url("../icons/warning.svg");
                     width: 36px;
@@ -855,9 +889,11 @@ export component InstallPage inherits VerticalLayout {
         Rectangle {
             border-radius: 12px;
             background: MaterialPalette.surface-container;
+
             VerticalLayout {
                 padding: 14px;
                 spacing: 6px;
+
                 Text {
                     text: Tr.t("What happened", "Что случилось", "发生了什么", "發生了什麼");
                     font-size: 13px;
@@ -878,6 +914,7 @@ export component InstallPage inherits VerticalLayout {
         HorizontalLayout {
             alignment: center;
             spacing: 12px;
+
             OutlineButton {
                 text: Tr.t("Save the log", "Сохранить журнал", "保存日志", "儲存日誌");
                 clicked => {
@@ -906,13 +943,16 @@ export component InstallPage inherits VerticalLayout {
     if root.view == 4: VerticalLayout {
         alignment: center;
         spacing: 18px;
+
         HorizontalLayout {
             alignment: center;
+
             Rectangle {
                 width: 112px;
                 height: 112px;
                 border-radius: 56px;
                 background: StatusColors.success-container;
+
                 Image {
                     source: @image-url("../icons/check.svg");
                     width: 64px;
@@ -950,6 +990,7 @@ export component InstallPage inherits VerticalLayout {
         HorizontalLayout {
             alignment: center;
             padding-top: 8px;
+
             FilledButton {
                 min-width: 180px;
                 text: Tr.t("Done", "Готово", "完成", "完成");

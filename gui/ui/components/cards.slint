@@ -38,8 +38,10 @@ export component NavCard inherits TouchArea {
         VerticalLayout {
             alignment: center;
             spacing: 6px;
+
             HorizontalLayout {
                 alignment: center;
+
                 Rectangle {
                     width: 40px;
                     height: 40px;
@@ -52,6 +54,7 @@ export component NavCard inherits TouchArea {
                         easing: spring;
                     }
                     animate background { duration: 200ms; }
+
                     Image {
                         source: icon;
                         width: 20px;

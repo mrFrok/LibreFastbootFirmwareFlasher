@@ -20,12 +20,14 @@ component SkipChip inherits TouchArea {
     clicked => {
         root.checked = !root.checked;
     }
+
     Rectangle {
         border-radius: 8px;
         background: root.checked ? MaterialPalette.secondary-container
             : root.has-hover ? MaterialPalette.on-surface.with-alpha(0.06) : transparent;
         border-width: root.checked ? 0px : 1px;
         border-color: MaterialPalette.outline;
+
         HorizontalLayout {
             padding-left: root.checked ? 10px : 14px;
             padding-right: 14px;
@@ -55,6 +57,7 @@ component RouteChip inherits TouchArea {
     // As tall as the row, so the chip sits level with its label.
     height: 44px;
     width: label.preferred-width + 28px;
+
     Rectangle {
         height: 32px;
         y: (parent.height - self.height) / 2;
@@ -63,6 +66,7 @@ component RouteChip inherits TouchArea {
             : root.has-hover ? MaterialPalette.on-surface.with-alpha(0.06) : transparent;
         border-width: root.checked ? 0px : 1px;
         border-color: MaterialPalette.outline;
+
         label := Text {
             text: root.text;
             font-size: 13px;
@@ -136,6 +140,7 @@ export component ConfirmSheet inherits Rectangle {
     callback back();
     callback change-chip();
     callback install();
+
     TouchArea { }
 
     width: 100%;
@@ -155,6 +160,7 @@ export component ConfirmSheet inherits Rectangle {
         border-color: root.danger ? MaterialPalette.error : MaterialPalette.outline-variant;
         clip: true;
         height: card.preferred-height;
+
         card := VerticalLayout {
                     // Red band on top: the one thing that must not be missed.
                     if root.danger: Rectangle {
@@ -176,6 +182,7 @@ export component ConfirmSheet inherits Rectangle {
                 // ── Warning step ─────────────────────────────────
                         if root.kind != 3: HorizontalLayout {
                     spacing: 12px;
+
                     Image {
                         source: @image-url("../icons/warning.svg");
                         width: 28px;
@@ -277,10 +284,12 @@ export component ConfirmSheet inherits Rectangle {
                 if root.kind < 3: Rectangle {
                     border-radius: 12px;
                     background: root.danger ? MaterialPalette.error-container.with-alpha(0.5) : StatusColors.warning-container.with-alpha(0.5);
+
                     HorizontalLayout {
                         padding: 8px;
                         padding-right: 14px;
                         spacing: 4px;
+
                         CheckBox {
                             check-state: root.skip-checked ? CheckState.checked : CheckState.unchecked;
                             checked-state-changed(s) => {
@@ -291,6 +300,7 @@ export component ConfirmSheet inherits Rectangle {
                         VerticalLayout {
                             alignment: center;
                             spacing: 2px;
+
                             Text {
                                 width: 446px;
                                 text: root.kind == 2 ? Tr.t("Skip the preloader", "Пропустить preloader", "跳过 preloader", "跳過 preloader")
@@ -326,6 +336,7 @@ export component ConfirmSheet inherits Rectangle {
                     FieldRow {
                         label-width: 150px;
                         label: Tr.t("Phone", "Смартфон", "手机", "手機");
+
                         Text {
                             text: root.phone;
                             font-size: 14px;
@@ -338,6 +349,7 @@ export component ConfirmSheet inherits Rectangle {
                     FieldRow {
                         label-width: 150px;
                         label: Tr.t("Processor", "Процессор", "处理器", "處理器");
+
                         Text {
                             text: root.chip-name;
                             font-size: 14px;
@@ -357,6 +369,7 @@ export component ConfirmSheet inherits Rectangle {
                     FieldRow {
                         label-width: 150px;
                         label: Tr.t("Firmware", "Прошивка", "固件", "韌體");
+
                         Text {
                             text: root.firmware;
                             font-size: 14px;
@@ -369,6 +382,7 @@ export component ConfirmSheet inherits Rectangle {
                     if root.wrong-device != "": FieldRow {
                         label-width: 150px;
                         label: Tr.t("Built for", "Собрана для", "适用于", "適用於");
+
                         Text {
                             text: root.wrong-device + Tr.t(" — not this phone?", " — не этот смартфон?", " —— 不是这台手机？", " —— 不是這台手機？");
                             font-size: 14px;
@@ -381,6 +395,7 @@ export component ConfirmSheet inherits Rectangle {
                     if root.modem-bootloader: FieldRow {
                         label-width: 150px;
                         label: "Modem";
+
                         Text {
                             text: root.refused
                                 ? Tr.t("through the bootloader — refused for Android 17, turn it off in Settings", "через bootloader — для Android 17 запрещено, выключите в настройках", "经由 bootloader——Android 17 禁止，请在设置中关闭", "經由 bootloader——Android 17 禁止，請在設定中關閉")
@@ -399,6 +414,7 @@ export component ConfirmSheet inherits Rectangle {
                     if root.route-needed: FieldRow {
                         label-width: 150px;
                         label: "Modem";
+
                         RouteChip {
                             text: Tr.t("through the bootloader", "через bootloader", "经由 bootloader", "經由 bootloader");
                             checked: root.route-choice == 1;
@@ -431,12 +447,14 @@ export component ConfirmSheet inherits Rectangle {
                     if root.arb > 0: FieldRow {
                         label-width: 150px;
                         label: "ARB";
+
                         Rectangle {
                             border-radius: 8px;
                             background: MaterialPalette.error-container;
                             width: arb-text.preferred-width + 16px;
                             height: 26px;
                             y: (parent.height - self.height) / 2;
+
                             arb-text := Text {
                                 text: root.arb + Tr.t(" — no going back to lower", " — откат на меньший невозможен", "——无法回退到更低版本", "——無法退回更低版本");
                                 font-size: 13px;
@@ -455,6 +473,7 @@ export component ConfirmSheet inherits Rectangle {
 
                 if root.kind == 3: HorizontalLayout {
                     spacing: 8px;
+
                     SkipChip {
                         text: "boot";
                         checked <=> root.skip-boot;
@@ -483,6 +502,7 @@ export component ConfirmSheet inherits Rectangle {
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: other.has-focus ? MaterialPalette.primary : MaterialPalette.outline;
+
                         Text {
                             x: 10px;
                             visible: root.skip-other == "" && !other.has-focus;
@@ -505,6 +525,7 @@ export component ConfirmSheet inherits Rectangle {
 
                 if root.kind == 3 && root.switches-slot: HorizontalLayout {
                     spacing: 4px;
+
                     CheckBox {
                         check-state: root.copy-skipped-partitions ? CheckState.checked : CheckState.unchecked;
                         checked-state-changed(s) => {
@@ -515,6 +536,7 @@ export component ConfirmSheet inherits Rectangle {
                     VerticalLayout {
                         alignment: center;
                         spacing: 2px;
+
                         Text {
                             text: Tr.t("Copy skipped partitions from the current slot (requires root for Shell)", "Сохранить пропущенные разделы с текущего слота (нужен root для Shell)", "从当前槽位复制跳过的分区（需要 Shell root 权限）", "從目前槽位複製跳過的分割區（需要 Shell root 權限）");
                             font-size: 13px;
@@ -536,9 +558,11 @@ export component ConfirmSheet inherits Rectangle {
                 if root.kind == 3 && root.rebuild-super && !root.custom-rom && root.super-plan != "": Rectangle {
                     border-radius: 12px;
                     background: StatusColors.warning-container.with-alpha(0.6);
+
                     VerticalLayout {
                         padding: 12px;
                         spacing: 6px;
+
                         Text {
                             width: 508px;
                             text: Tr.t("If the slot being flashed has no partitions, super is wiped and rebuilt with this layout, as from the factory — then system updates work without a repair:", "Если в прошиваемом слоте нет разделов, super будет стёрт и пересоздан с такой разметкой, как с завода, — тогда обновления системы ставятся без починки:", "如果要刷写的槽位没有分区，super 将被清除并按此布局重建（与出厂一致），之后系统更新无需修复即可安装：", "如果要刷寫的槽位沒有分割區，super 將被清除並按此配置重建（與出廠一致），之後系統更新無需修復即可安裝：");
@@ -565,10 +589,12 @@ export component ConfirmSheet inherits Rectangle {
                     // filled one, two red cards in a row compete.
                     border-width: 1px;
                     border-color: root.custom-rom ? MaterialPalette.error : MaterialPalette.outline-variant;
+
                     HorizontalLayout {
                         padding: 8px;
                         padding-right: 14px;
                         spacing: 4px;
+
                         CheckBox {
                             check-state: root.custom-rom ? CheckState.checked : CheckState.unchecked;
                             checked-state-changed(s) => {
@@ -579,6 +605,7 @@ export component ConfirmSheet inherits Rectangle {
                         VerticalLayout {
                             alignment: center;
                             spacing: 2px;
+
                             Text {
                                 width: 446px;
                                 text: Tr.t("Custom ROM: wipe super and rebuild it from the ROM", "Кастомная прошивка: стереть super и пересоздать по прошивке", "第三方 ROM：清除 super 并按 ROM 重建", "第三方 ROM：清除 super 並按 ROM 重建");
@@ -607,12 +634,15 @@ export component ConfirmSheet inherits Rectangle {
                     border-radius: 12px;
                     border-width: 1px;
                     border-color: root.root-fork >= 0 ? MaterialPalette.primary : MaterialPalette.outline-variant;
+
                     VerticalLayout {
                         padding: 8px;
                         padding-right: 14px;
                         spacing: 6px;
+
                         HorizontalLayout {
                             spacing: 4px;
+
                             CheckBox {
                                 check-state: root.root-fork >= 0 ? CheckState.checked : CheckState.unchecked;
                                 checked-state-changed(s) => {
@@ -623,6 +653,7 @@ export component ConfirmSheet inherits Rectangle {
                             VerticalLayout {
                                 alignment: center;
                                 spacing: 2px;
+
                                 Text {
                                     width: 446px;
                                     text: Tr.t("Root: patch init_boot with KernelSU, KernelSU Next or SukiSU Ultra", "Root: пропатчить init_boot через KernelSU, KernelSU Next или SukiSU Ultra", "Root：用 KernelSU、KernelSU Next 或 SukiSU Ultra 修补 init_boot", "Root：用 KernelSU、KernelSU Next 或 SukiSU Ultra 修補 init_boot");
@@ -647,6 +678,7 @@ export component ConfirmSheet inherits Rectangle {
                         if root.root-fork >= 0: HorizontalLayout {
                             padding-left: 63px;
                             alignment: start;
+
                             Segmented {
                                 segment-width: 136px;
                                 items: ["KernelSU", "KernelSU Next", "SukiSU Ultra"];
@@ -660,6 +692,7 @@ export component ConfirmSheet inherits Rectangle {
                         if root.root-fork >= 0: HorizontalLayout {
                             padding-left: 43px;
                             spacing: 4px;
+
                             CheckBox {
                                 check-state: root.root-manager ? CheckState.checked : CheckState.unchecked;
                                 checked-state-changed(s) => {
@@ -682,9 +715,11 @@ export component ConfirmSheet inherits Rectangle {
                 if root.kind == 3: Rectangle {
                     border-radius: 12px;
                     background: MaterialPalette.error-container;
+
                     HorizontalLayout {
                         padding: 12px;
                         spacing: 10px;
+
                         Image {
                             source: @image-url("../icons/warning.svg");
                             width: 20px;
@@ -710,6 +745,7 @@ export component ConfirmSheet inherits Rectangle {
                     alignment: end;
                     spacing: 8px;
                     padding-top: 6px;
+
                     TextButton {
                         text: root.kind == 3 ? Tr.t("Back", "Назад", "返回", "返回")
                             : root.kind == 4 ? Tr.t("Close", "Закрыть", "关闭", "關閉")

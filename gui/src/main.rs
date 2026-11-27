@@ -321,13 +321,36 @@ fn lvl(l: &LogLevel) -> &'static str {
     }
 }
 
+/// The renderer Slint picks when nothing else does. The BSDs have no Skia
+/// (skia-safe does not build there), so they get the software renderer.
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+))]
+const DEFAULT_RENDERER: &str = "software";
+#[cfg(not(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+)))]
+const DEFAULT_RENDERER: &str = "skia-opengl";
+
 fn select_renderer() {
     if let Ok(renderer) = std::env::var("SLINT_RENDERER") {
         log::info!("Renderer: {} (from env)", renderer);
         return;
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    ))]
     if std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err() {
         unsafe {
             std::env::set_var("SLINT_RENDERER", "software");
@@ -385,7 +408,7 @@ fn select_renderer() {
         }
     }
 
-    log::info!("Renderer: skia-opengl (default)");
+    log::info!("Renderer: {} (default)", DEFAULT_RENDERER);
 }
 
 fn main() -> Result<(), slint::PlatformError> {

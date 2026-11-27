@@ -41,6 +41,7 @@ export component FlashFailureDialog {
         background: StatusColors.scrim;
         width: 100%;
         height: 100%;
+
         TouchArea { }
 
         Rectangle {
@@ -57,8 +58,10 @@ export component FlashFailureDialog {
             VerticalLayout {
                 padding: 24px;
                 spacing: 14px;
+
                 HorizontalLayout {
                     spacing: 10px;
+
                     Text {
                         text: "⚠";
                         font-size: 22px;
@@ -77,6 +80,7 @@ export component FlashFailureDialog {
 
                 if root.is-session-error: ScrollView {
                     vertical-stretch: 1;
+
                     Text {
                         text: root.flash-fail-error;
                         font-size: 13px;

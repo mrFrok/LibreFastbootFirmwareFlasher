@@ -83,8 +83,8 @@ jobs:
     env:
       # Same version as the slint dependency: the formatter's output can
       # change between releases. Bump the two together.
-      SLINT_VERSION: 1.18.1
-      SLINT_LSP_SHA256: 62735d2b1908ae8a33b35dcdc71fd0c713f44ef8a4a9b57e8dfa07319903eefa
+      SLINT_VERSION: 1.19.1
+      SLINT_LSP_SHA256: a8a1aa5a023a3eaef4b97394db3e8037adf18a4bf14c48bf8dd961e0a0eb78ff
     steps:
       - uses: actions/checkout@v4
       - name: Install slint-lsp

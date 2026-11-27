@@ -35,9 +35,11 @@ export component PathField inherits Rectangle {
     border-color: has-focus ? MaterialPalette.primary : MaterialPalette.outline-variant;
     animate border-color { duration: 150ms; }
     animate border-width { duration: 100ms; }
+
     HorizontalLayout {
         padding-left: 16px;
         padding-right: 16px;
+
         Text {
             text: root.path != "" ? root.path : "…";
             font-size: Typography.body-medium-size;
@@ -55,8 +57,10 @@ export component BackButton {
     callback clicked;
     width: 44px;
     height: 44px;
+
     ta := TouchArea {
         clicked => { root.clicked(); }
+
         Rectangle {
             border-radius: ta.pressed ? 14px : 22px;
             y: ta.pressed ? 1.5px : 0px;
@@ -73,6 +77,7 @@ export component BackButton {
                 duration: 120ms;
                 easing: cubic-bezier(0.2, 0.0, 0, 1.0);
             }
+
             Image {
                 source: @image-url("../icons/arrow_back.svg");
                 width: 20px;
@@ -120,6 +125,7 @@ export component DeviceBanner inherits Rectangle {
                 ? MaterialPalette.primary
                 : MaterialPalette.error;
             y: (parent.height - 28px) / 2;
+
             Image {
                 source: @image-url("../icons/smartphone.svg");
                 width: 16px;
@@ -134,6 +140,7 @@ export component DeviceBanner inherits Rectangle {
 
         if device.connected: HorizontalLayout {
             spacing: 10px;
+
             Text {
                 text: device.name;
                 font-size: Typography.body-medium-size;
